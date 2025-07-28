@@ -1,11 +1,12 @@
 import { Inject, Injectable } from "@nestjs/common";
+import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { UserSession } from "src/auth/interfaces/user.session.interface";
 import { Logger } from "winston";
 import { BaseAssignmentResponseDto } from "../../dto/base.assignment.response.dto";
 import {
+  AssignmentResponseDto,
   GetAssignmentResponseDto,
   LearnerGetAssignmentResponseDto,
-  AssignmentResponseDto,
 } from "../../dto/get.assignment.response.dto";
 import { ReplaceAssignmentRequestDto } from "../../dto/replace.assignment.request.dto";
 import { UpdateAssignmentRequestDto } from "../../dto/update.assignment.request.dto";
@@ -15,11 +16,10 @@ import {
   UpdateAssignmentQuestionsDto,
   VariantDto,
 } from "../../dto/update.questions.request.dto";
-import { JobStatusServiceV2 } from "./job-status.service";
 import { AssignmentRepository } from "../repositories/assignment.repository";
+import { JobStatusServiceV2 } from "./job-status.service";
 import { QuestionService } from "./question.service";
 import { TranslationService } from "./translation.service";
-import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 
 /**
  * Service for managing assignment operations
@@ -45,7 +45,7 @@ export class AssignmentServiceV2 {
    * @param languageCode - Optional language code for translation
    * @returns Assignment data tailored to the user's role
    */
-  // This code block has been revised ✅
+
   async getAssignment(
     assignmentId: number,
     userSession: UserSession,
@@ -72,7 +72,7 @@ export class AssignmentServiceV2 {
    * @param userSession - The user session details
    * @returns Array of assignment summaries
    */
-  // This code block has been revised ✅
+
   async listAssignments(
     userSession: UserSession,
   ): Promise<AssignmentResponseDto[]> {
@@ -86,7 +86,6 @@ export class AssignmentServiceV2 {
    * @param updateDto - The data to update
    * @returns Success response with the updated assignment ID
    */
-  // This code block has been revised ✅
 
   async updateAssignment(
     id: number,
@@ -94,13 +93,11 @@ export class AssignmentServiceV2 {
   ): Promise<BaseAssignmentResponseDto> {
     const existingAssignment = await this.assignmentRepository.findById(id);
 
-    // Only translate if necessary fields have changed
     const shouldTranslate = this.shouldTranslateAssignment(
       existingAssignment,
       updateDto,
     );
 
-    // Update assignment
     const result = await this.assignmentRepository.update(id, updateDto);
 
     if (shouldTranslate) {
@@ -159,13 +156,11 @@ export class AssignmentServiceV2 {
     updateDto: UpdateAssignmentQuestionsDto,
     userId: string,
   ): Promise<{ jobId: number; message: string }> {
-    // Create a job for tracking the publishing process
     const job = await this.jobStatusService.createPublishJob(
       assignmentId,
       userId,
     );
 
-    // Start the publishing process asynchronously
     this.startPublishingProcess(job.id, assignmentId, updateDto).catch(
       (error: unknown) => {
         const errorMessage =
@@ -184,27 +179,28 @@ export class AssignmentServiceV2 {
       message: "Publishing started",
     };
   }
-  /**
-   * Enhanced startPublishingProcess method to skip unnecessary translations
-   */
   private async startPublishingProcess(
     jobId: number,
     assignmentId: number,
     updateDto: UpdateAssignmentQuestionsDto,
   ): Promise<void> {
     try {
-      // STEP 1: Update assignment settings
+      // Progress allocation:
+      // 0-10%: Initial setup
+      // 10-30%: Assignment update
+      // 30-80%: Questions processing (if needed)
+      // 80-90%: Translation (if needed)
+      // 90-100%: Finalization
+
       await this.jobStatusService.updateJobStatus(jobId, {
         status: "In Progress",
         progress: "Updating assignment settings",
-        percentage: 10,
+        percentage: 5,
       });
 
-      // Get the existing assignment data to check for changes
       const existingAssignment =
         await this.assignmentRepository.findById(assignmentId);
 
-      // Check if translatable assignment fields have changed
       const assignmentTranslatableFieldsChanged =
         this.haveTranslatableAssignmentFieldsChanged(
           existingAssignment,
@@ -226,12 +222,18 @@ export class AssignmentServiceV2 {
         showQuestionScore: updateDto.showQuestionScore,
         showSubmissionFeedback: updateDto.showSubmissionFeedback,
         timeEstimateMinutes: updateDto.timeEstimateMinutes,
+        showQuestions: updateDto.showQuestions,
+        numberOfQuestionsPerAttempt: updateDto.numberOfQuestionsPerAttempt,
       });
 
-      // Track if question content has changed
+      await this.jobStatusService.updateJobStatus(jobId, {
+        status: "In Progress",
+        progress: "Assignment settings updated",
+        percentage: 10,
+      });
+
       let questionContentChanged = false;
 
-      // STEP 2: Process questions if any
       if (updateDto.questions && updateDto.questions.length > 0) {
         await this.jobStatusService.updateJobStatus(jobId, {
           status: "In Progress",
@@ -239,63 +241,56 @@ export class AssignmentServiceV2 {
           percentage: 15,
         });
 
-        // Get existing questions to compare
         const existingQuestions =
           await this.questionService.getQuestionsForAssignment(assignmentId);
 
-        // Check if question content has changed
         questionContentChanged = this.haveQuestionContentsChanged(
           existingQuestions,
           updateDto.questions,
         );
 
-        if (questionContentChanged) {
-          await this.jobStatusService.updateJobStatus(jobId, {
-            status: "In Progress",
-            progress: `Processing ${updateDto.questions.length} questions with content changes`,
-            percentage: 20,
-          });
+        await this.jobStatusService.updateJobStatus(jobId, {
+          status: "In Progress",
+          progress: questionContentChanged
+            ? `Processing ${updateDto.questions.length} questions with content changes`
+            : "Processing questions (metadata only)",
+          percentage: 20,
+        });
 
-          await this.questionService.processQuestionsForPublishing(
-            assignmentId,
-            updateDto.questions,
-            jobId,
-          );
-        } else {
-          await this.jobStatusService.updateJobStatus(jobId, {
-            status: "In Progress",
-            progress: "Question structure unchanged, only updating metadata",
-            percentage: 30,
-          });
-
-          // Still process questions but skip translation by not passing jobId
-          await this.questionService.processQuestionsForPublishing(
-            assignmentId,
-            updateDto.questions,
-          );
-        }
+        await this.questionService.processQuestionsForPublishing(
+          assignmentId,
+          updateDto.questions,
+          jobId,
+          async (childProgress: number) => {
+            const mappedProgress = 30 + (childProgress * 50) / 100;
+            await this.jobStatusService.updateJobStatus(jobId, {
+              status: "In Progress",
+              progress: `Processing questions: ${childProgress}% complete`,
+              percentage: Math.floor(mappedProgress),
+            });
+          },
+        );
       }
 
-      // STEP 3: Translate assignment information only if needed
       if (assignmentTranslatableFieldsChanged || questionContentChanged) {
         await this.jobStatusService.updateJobStatus(jobId, {
           status: "In Progress",
-          progress:
-            "Content changes detected, translating assignment information",
-          percentage: 60,
+          progress: "Content changes detected, translating assignment",
+          percentage: 80,
         });
 
-        await this.translationService.translateAssignment(assignmentId, jobId);
+        await this.translationService.translateAssignment(assignmentId, jobId, {
+          start: 80,
+          end: 90,
+        });
       } else {
-        // Skip translation entirely
         await this.jobStatusService.updateJobStatus(jobId, {
           status: "In Progress",
           progress: "No content changes detected, skipping translation",
-          percentage: 80, // Jump ahead since we're skipping a big step
+          percentage: 85,
         });
       }
 
-      // STEP 4: Finalize publishing
       await this.jobStatusService.updateJobStatus(jobId, {
         status: "In Progress",
         progress: "Finalizing publishing",
@@ -304,7 +299,6 @@ export class AssignmentServiceV2 {
 
       const questionOrder = updateDto.questions?.map((q) => q.id) || [];
 
-      // Update grading context only if question content changed
       if (questionContentChanged || !existingAssignment.published) {
         await this.questionService.updateQuestionGradingContext(assignmentId);
       }
@@ -314,11 +308,15 @@ export class AssignmentServiceV2 {
         published: true,
       });
 
-      // STEP 5: Get the updated questions for the response
       const updatedQuestions =
         await this.questionService.getQuestionsForAssignment(assignmentId);
 
-      // STEP 6: Complete the job
+      updatedQuestions.sort((a, b) => {
+        const indexA = questionOrder.indexOf(a.id);
+        const indexB = questionOrder.indexOf(b.id);
+        return indexA - indexB;
+      });
+
       await this.jobStatusService.updateJobStatus(jobId, {
         status: "Completed",
         progress:
@@ -343,7 +341,7 @@ export class AssignmentServiceV2 {
       throw error;
     }
   }
-  // returns true if the strings are equal, false otherwise
+
   private safeStringCompare = (
     string1: string | null | undefined,
     string2: string | null | undefined,
@@ -364,7 +362,6 @@ export class AssignmentServiceV2 {
       | LearnerGetAssignmentResponseDto,
     updateDto: UpdateAssignmentRequestDto | UpdateAssignmentQuestionsDto,
   ): boolean {
-    // Special handling for graded field change - doesn't trigger translation
     if (existingAssignment.graded !== updateDto.graded) {
       this.logger.debug(
         "Graded status changed, but this doesn't trigger translation",
@@ -429,7 +426,6 @@ export class AssignmentServiceV2 {
     existingQuestions: QuestionDto[],
     updatedQuestions: QuestionDto[],
   ): boolean {
-    // If question count has changed, content has changed
     if (existingQuestions.length !== updatedQuestions.length) {
       this.logger.debug(
         `Question count changed: ${existingQuestions.length} → ${updatedQuestions.length}`,
@@ -441,32 +437,33 @@ export class AssignmentServiceV2 {
       `Comparing ${existingQuestions.length} questions for content changes`,
     );
 
-    // Create a map of existing questions by ID for quick lookup
     const existingQuestionsMap = new Map<number, QuestionDto>();
     for (const question of existingQuestions) {
       existingQuestionsMap.set(question.id, question);
     }
 
-    // Compare each updated question with its existing counterpart
     for (const updatedQuestion of updatedQuestions) {
       const existingQuestion = existingQuestionsMap.get(updatedQuestion.id);
 
-      // If question is new, content has changed
       if (!existingQuestion) {
         this.logger.debug(`New question detected: ID ${updatedQuestion.id}`);
         return true;
       }
 
-      // Log detailed comparison for debugging
       this.logger.debug(`Comparing question #${updatedQuestion.id}:
       Text: "${existingQuestion.question}" → "${updatedQuestion.question}"
       Type: "${existingQuestion.type}" → "${updatedQuestion.type}"
-      Total Points: ${existingQuestion.totalPoints} → ${updatedQuestion.totalPoints}
-      Choices Count: ${existingQuestion.choices?.length || 0} → ${updatedQuestion.choices?.length || 0}
-      Variants Count: ${existingQuestion.variants?.length || 0} → ${updatedQuestion.variants?.length || 0}
+      Total Points: ${existingQuestion.totalPoints} → ${
+        updatedQuestion.totalPoints
+      }
+      Choices Count: ${existingQuestion.choices?.length || 0} → ${
+        updatedQuestion.choices?.length || 0
+      }
+      Variants Count: ${existingQuestion.variants?.length || 0} → ${
+        updatedQuestion.variants?.length || 0
+      }
     `);
 
-      // Check if core question content has changed
       if (
         !this.safeStringCompare(
           updatedQuestion.question,
@@ -484,7 +481,6 @@ export class AssignmentServiceV2 {
         return true;
       }
 
-      // Check choices
       const choicesEqual = this.areChoicesEqual(
         updatedQuestion.choices,
         existingQuestion.choices,
@@ -494,7 +490,6 @@ export class AssignmentServiceV2 {
         return true;
       }
 
-      // Check variants with detailed logging
       const variantsChanged = this.haveVariantsChanged(
         existingQuestion.variants,
         updatedQuestion.variants,
@@ -506,7 +501,6 @@ export class AssignmentServiceV2 {
         return true;
       }
 
-      // Report non-content changes for debugging
       if (updatedQuestion.totalPoints !== existingQuestion.totalPoints) {
         this.logger.debug(
           `Question #${updatedQuestion.id} points changed: ${existingQuestion.totalPoints} → ${updatedQuestion.totalPoints} (non-translatable)`,
@@ -536,7 +530,6 @@ export class AssignmentServiceV2 {
       ? `Question #${questionId} variants: `
       : "Variants: ";
 
-    // If both are undefined or null, they're equal (no change)
     if (!variants1 && !variants2) {
       this.logger.debug(
         `${logPrefix}Both variant arrays are null/undefined (no change)`,
@@ -544,7 +537,6 @@ export class AssignmentServiceV2 {
       return false;
     }
 
-    // If only one is undefined or null, they're not equal (change detected)
     if (!variants1 || !variants2) {
       this.logger.debug(
         `${logPrefix}One variant array is null/undefined (change detected)`,
@@ -552,7 +544,6 @@ export class AssignmentServiceV2 {
       return true;
     }
 
-    // If lengths differ, they're not equal (change detected)
     if (variants1.length !== variants2.length) {
       this.logger.debug(
         `${logPrefix}Variant count changed: ${variants1.length} → ${variants2.length}`,
@@ -580,17 +571,18 @@ export class AssignmentServiceV2 {
       const v2 = sortedVariants2[index];
 
       this.logger.debug(`${logPrefix}Comparing variant #${index + 1}:
-      Content: "${v1.variantContent.slice(0, 30)}..." → "${v2.variantContent.slice(0, 30)}..."
+      Content: "${v1.variantContent.slice(
+        0,
+        30,
+      )}..." → "${v2.variantContent.slice(0, 30)}..."
       Choices Count: ${v1.choices?.length || 0} → ${v2.choices?.length || 0}
     `);
 
-      // Check if variant content has changed
       if (!this.safeStringCompare(v1.variantContent, v2.variantContent)) {
         this.logger.debug(`${logPrefix}Variant #${index + 1} content changed`);
         return true;
       }
 
-      // Check if choices have changed
       if (!this.areChoicesEqual(v1.choices, v2.choices)) {
         this.logger.debug(`${logPrefix}Variant #${index + 1} choices changed`);
         return true;
@@ -643,7 +635,6 @@ export class AssignmentServiceV2 {
       | LearnerGetAssignmentResponseDto,
     updateDto: UpdateAssignmentRequestDto,
   ): boolean {
-    // Check if any translatable fields have changed
     return (
       (updateDto.name && updateDto.name !== existingAssignment.name) ||
       (updateDto.instructions &&

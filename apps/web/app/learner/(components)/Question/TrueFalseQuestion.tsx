@@ -11,8 +11,6 @@ function TrueFalseQuestion(props: Props) {
   const [setAnswerChoice] = useLearnerStore((state) => [state.setAnswerChoice]);
   const learnerAnswerChoice = question.learnerAnswerChoice;
 
-  // Determine the user's preferred language.
-  // If no language is provided, default to English.
   const userPreferredLanguage =
     useLearnerStore((state) => state.userPreferedLanguage) || "en";
   const langTranslations =

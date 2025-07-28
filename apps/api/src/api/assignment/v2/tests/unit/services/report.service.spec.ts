@@ -23,7 +23,6 @@ describe("ReportService", () => {
   let prismaService: jest.Mocked<PrismaService>;
 
   beforeEach(async () => {
-    // Create a mock PrismaService
     const mockPrismaService = createMockPrismaService();
 
     const module: TestingModule = await Test.createTestingModule({
@@ -53,7 +52,6 @@ describe("ReportService", () => {
     };
 
     it("should create a report successfully", async () => {
-      // Setup mocks
       (prismaService.assignment.findUnique as jest.Mock).mockResolvedValueOnce(
         createMockAssignment(),
       );
@@ -61,7 +59,6 @@ describe("ReportService", () => {
 
       const createSpy = jest.spyOn(prismaService.report, "create");
 
-      // Call the method
       await service.createReport(
         reportParameters.assignmentId,
         reportParameters.issueType,
@@ -69,12 +66,10 @@ describe("ReportService", () => {
         reportParameters.userId,
       );
 
-      // Verify assignment was checked
       expect(prismaService.assignment.findUnique).toHaveBeenCalledWith({
         where: { id: reportParameters.assignmentId },
       });
 
-      // Verify rate limit check
       expect(prismaService.report.findMany).toHaveBeenCalledWith({
         where: {
           reporterId: reportParameters.userId,
@@ -84,7 +79,6 @@ describe("ReportService", () => {
         },
       });
 
-      // Verify report was created
       expect(createSpy).toHaveBeenCalledWith({
         data: {
           assignmentId: reportParameters.assignmentId,
@@ -97,12 +91,10 @@ describe("ReportService", () => {
     });
 
     it("should throw NotFoundException when assignment does not exist", async () => {
-      // Setup mock to return null for assignment
       (prismaService.assignment.findUnique as jest.Mock).mockResolvedValueOnce(
         null,
       );
 
-      // Call the method and expect it to throw
       await expect(
         service.createReport(
           reportParameters.assignmentId,
@@ -112,19 +104,16 @@ describe("ReportService", () => {
         ),
       ).rejects.toThrow(NotFoundException);
 
-      // Verify assignment was checked
       expect(prismaService.assignment.findUnique).toHaveBeenCalledWith({
         where: { id: reportParameters.assignmentId },
       });
     });
 
     it("should throw UnprocessableEntityException when rate limit is exceeded", async () => {
-      // Setup mocks
       (prismaService.assignment.findUnique as jest.Mock).mockResolvedValueOnce(
         createMockAssignment(),
       );
 
-      // Return 5 reports to trigger rate limit
       (prismaService.report.findMany as jest.Mock).mockResolvedValueOnce([
         createMockReport(),
         createMockReport(),
@@ -133,7 +122,6 @@ describe("ReportService", () => {
         createMockReport(),
       ]);
 
-      // Call the method and expect it to throw
       await expect(
         service.createReport(
           reportParameters.assignmentId,
@@ -143,7 +131,6 @@ describe("ReportService", () => {
         ),
       ).rejects.toThrow(UnprocessableEntityException);
 
-      // Verify rate limit was checked
       expect(prismaService.report.findMany).toHaveBeenCalledWith({
         where: {
           reporterId: reportParameters.userId,

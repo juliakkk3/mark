@@ -14,10 +14,11 @@ import { JobStatusServiceV1 } from "src/api/Job/job-status.service";
 import { AssignmentTypeEnum } from "src/api/llm/features/question-generation/services/question-generation.service";
 import { LlmFacadeService } from "src/api/llm/llm-facade.service";
 import {
-  UserSession,
   UserRole,
+  UserSession,
 } from "src/auth/interfaces/user.session.interface";
 import { PrismaService } from "src/prisma.service";
+import { Logger } from "winston";
 import {
   getAllLanguageCodes,
   getLanguageNameFromCode,
@@ -27,27 +28,26 @@ import {
   UpdateAssignmentQuestionsResponseDto,
 } from "../../dto/base.assignment.response.dto";
 import {
+  AssignmentResponseDto,
   GetAssignmentResponseDto,
   LearnerGetAssignmentResponseDto,
-  AssignmentResponseDto,
 } from "../../dto/get.assignment.response.dto";
 import { QuestionsToGenerate } from "../../dto/post.assignment.request.dto";
 import { ReplaceAssignmentRequestDto } from "../../dto/replace.assignment.request.dto";
 import { UpdateAssignmentRequestDto } from "../../dto/update.assignment.request.dto";
 import {
-  UpdateAssignmentQuestionsDto,
   Choice,
   GenerateQuestionVariantDto,
   QuestionDto,
+  UpdateAssignmentQuestionsDto,
   VariantDto,
+  VariantType,
 } from "../../dto/update.questions.request.dto";
 import {
-  LLMResponseQuestion,
   CreateUpdateQuestionRequestDto,
+  LLMResponseQuestion,
 } from "../../question/dto/create.update.question.request.dto";
-import { Logger } from "winston";
-import { VariantType } from "../../dto/update.questions.request.dto";
-// Assume these types are already defined:
+
 interface PublishingStep {
   name: string;
   targetPercentage: number;
@@ -102,7 +102,6 @@ export class AssignmentServiceV1 {
       backendData.introduction || "en",
     );
 
-    // If a language is provided and it's different from the original, try to fetch the translation.
     if (lang && lang !== originalLanguage) {
       const assignmentTranslation =
         await this.prisma.assignmentTranslation.findUnique({
@@ -114,7 +113,6 @@ export class AssignmentServiceV1 {
           },
         });
       if (assignmentTranslation) {
-        // Replace the original fields with the translated ones if available.
         backendData.name =
           assignmentTranslation.translatedName ?? backendData.name;
         backendData.introduction =
@@ -129,7 +127,6 @@ export class AssignmentServiceV1 {
       }
     }
 
-    // For learners, remove questions from the response.
     if (userSession.role === UserRole.LEARNER) {
       return {
         ...backendData,
@@ -182,8 +179,7 @@ export class AssignmentServiceV1 {
               variant.choices = JSON.parse(
                 variant.choices,
               ) as unknown as Prisma.JsonValue;
-            } catch (error) {
-              console.error("Error parsing choices:", error);
+            } catch {
               variant.choices = [];
             }
           }
@@ -263,7 +259,6 @@ export class AssignmentServiceV1 {
     files?: { filename: string; content: string }[],
     learningObjectives?: string,
   ): Promise<void> {
-    // Start the job processing asynchronously
     setImmediate(() => {
       this.processJob(
         assignmentId,
@@ -273,7 +268,9 @@ export class AssignmentServiceV1 {
         files,
         learningObjectives,
       ).catch((error) => {
-        console.error(`Error processing job ID ${jobId}:`, error);
+        this.logger.error(
+          `Error processing job ID ${jobId}: ${(error as Error).message}`,
+        );
       });
     });
   }
@@ -288,14 +285,13 @@ export class AssignmentServiceV1 {
     try {
       let content = "";
       if (files) {
-        // Update progress
         await this.prisma.job.update({
           where: { id: jobId },
           data: {
             progress: "Mark is organizing the notes merging file contents.",
           },
         });
-        // Merge all file contents into a single string
+
         const mergedContent = files.map((file) => file.content).join("\n");
 
         await this.prisma.job.update({
@@ -304,32 +300,10 @@ export class AssignmentServiceV1 {
             progress: "Mark is proofreading the content sanitizing material.",
           },
         });
-        // Sanitize the merged content
+
         content = this.llmFacadeService.sanitizeContent(mergedContent);
       }
-      // // Moderate the content
-      // const moderationResult = await this.llmFacadeService.moderateContent(
-      //   sanitizedContent,
-      // );
-      // if (moderationResult.flagged) {
-      //   await this.prisma.job.update({
-      //     where: { id: jobId },
-      //     data: {
-      //       status: 'Failed',
-      //       progress: 'Content contains prohibited material',
-      //     },
-      //   });
-      //   console.warn(`Job ID ${jobId} failed due to flagged content`);
-      //   return;
-      // }
 
-      // await this.prisma.job.update({
-      //   where: { id: jobId },
-      //   data: {
-      //     progress: 'Content passed moderation, processing with LLM',
-      //   },
-      // });
-      // Add message before LLM processing, which takes the longest
       await this.prisma.job.update({
         where: { id: jobId },
         data: {
@@ -344,7 +318,7 @@ export class AssignmentServiceV1 {
         content,
         learningObjectives,
       )) as LLMResponseQuestion[];
-      // Update job status and store the generated questions
+
       await this.prisma.job.update({
         where: { id: jobId },
         data: {
@@ -358,7 +332,7 @@ export class AssignmentServiceV1 {
       this.logger.error(
         `Error processing job ID ${jobId}: ${(error as Error).message}`,
       );
-      // Update job status to 'Failed'
+
       await this.prisma.job.update({
         where: { id: jobId },
         data: {
@@ -381,7 +355,7 @@ export class AssignmentServiceV1 {
 
     const assignmentTranslation =
       await this.prisma.assignmentTranslation.findFirst({
-        where: { assignmentId: id, languageCode: "en" }, // English here because all the authors are expected to write the assignment in english, this might need to change if the authors are allowed to write in other languages
+        where: { assignmentId: id, languageCode: "en" },
       });
     if (!existingAssignment) {
       throw new NotFoundException("Assignment not found.");
@@ -449,7 +423,6 @@ export class AssignmentServiceV1 {
     result?: unknown,
     percentage?: number,
   ): Promise<void> {
-    // Update database first
     await this.prisma.publishJob.update({
       where: { id: job.id },
       data: {
@@ -461,7 +434,6 @@ export class AssignmentServiceV1 {
       },
     });
 
-    // Emit real-time status update for SSE
     this.jobStatusService.updateJobStatus(
       job.id,
       progress,
@@ -533,12 +505,12 @@ export class AssignmentServiceV1 {
       showAssignmentScore,
       showQuestionScore,
       showSubmissionFeedback,
+      showQuestions,
     } = updateAssignmentQuestionsDto;
     const supportedLanguages = this.languageTranslation
       ? getAllLanguageCodes()
       : ["en"];
 
-    // Ensure questions is an array even if it's null.
     const safeQuestions = questions ?? [];
 
     if (!introduction) {
@@ -548,7 +520,6 @@ export class AssignmentServiceV1 {
       throw new UnprocessableEntityException("Introduction not provided.");
     }
 
-    // STEP 0: Retrieve the job entry.
     const job = await this.prisma.publishJob.findUnique({
       where: { id: jobId },
     });
@@ -557,10 +528,8 @@ export class AssignmentServiceV1 {
       throw new Error("Job not found");
     }
 
-    // Map to track backend IDs for questions.
     const frontendToBackendIdMap = new Map<number, number>();
 
-    // --- Translation Progress Tracking ---
     const totalQuestionTranslations = safeQuestions.reduce(
       (accumulator, question) => accumulator + supportedLanguages.length,
       0,
@@ -589,7 +558,6 @@ export class AssignmentServiceV1 {
       }
       return currentTranslationProgress;
     }
-    // -------------------------------------
 
     interface PublishingStep {
       name: string;
@@ -633,6 +601,7 @@ export class AssignmentServiceV1 {
               showSubmissionFeedback,
               languageCode,
               timeEstimateMinutes,
+              showQuestions,
             },
           });
         },
@@ -642,7 +611,6 @@ export class AssignmentServiceV1 {
         targetPercentage: 20,
         shouldRun: () => safeQuestions.length > 0,
         run: async () => {
-          // 1. Retrieve existing (non-deleted) questions.
           const existingQuestions = await this.prisma.question.findMany({
             where: { assignmentId },
             include: { variants: true },
@@ -656,7 +624,6 @@ export class AssignmentServiceV1 {
             existingQuestionsMap.set(q.id, q);
           }
 
-          // 2. Mark questions for deletion that are no longer present.
           const newQuestionIds = new Set<number>(
             safeQuestions.map((q) => q.id),
           );
@@ -670,10 +637,8 @@ export class AssignmentServiceV1 {
             });
           }
 
-          // 3. Process each question.
           await Promise.all(
             safeQuestions.map(async (questionDto) => {
-              // Use a stable backend id.
               const backendId =
                 frontendToBackendIdMap.get(questionDto.id) || questionDto.id;
               const existingQuestion = existingQuestionsMap.get(backendId);
@@ -736,7 +701,6 @@ export class AssignmentServiceV1 {
                 updateTranslationProgress,
               );
 
-              // 5. Process question variants.
               const existingVariants = existingQuestion?.variants || [];
               const existingVariantsMap = new Map<
                 string,
@@ -745,7 +709,7 @@ export class AssignmentServiceV1 {
               for (const v of existingVariants) {
                 existingVariantsMap.set(v.variantContent, v);
               }
-              // Mark variants for deletion.
+
               const newVariantContents = new Set(
                 questionDto.variants?.map((v) => v.variantContent) ?? [],
               );
@@ -758,7 +722,7 @@ export class AssignmentServiceV1 {
                   data: { isDeleted: true },
                 });
               }
-              // Upsert or recreate variants.
+
               if (questionDto.variants) {
                 await Promise.all(
                   questionDto.variants.map(async (variantDto) => {
@@ -785,7 +749,6 @@ export class AssignmentServiceV1 {
                       variantOf: { connect: { id: upsertedQuestion.id } },
                     };
                     if (existingVariant) {
-                      // Update the existing variant instead of deleting and recreating.
                       const updatedVariant =
                         await this.prisma.questionVariant.update({
                           where: { id: existingVariant.id },
@@ -868,7 +831,6 @@ export class AssignmentServiceV1 {
     ];
 
     try {
-      // Execute each step in sequence.
       for (const step of steps) {
         if (!step.shouldRun()) {
           await this.updateJobStatus(
@@ -1395,7 +1357,6 @@ export class AssignmentServiceV1 {
     });
     if (!question) throw new NotFoundException("Question not found.");
 
-    // If no variant, we expect variantId = null
     const translation = await this.prisma.translation.findFirst({
       where: {
         questionId: questionId,
@@ -1463,7 +1424,6 @@ export class AssignmentServiceV1 {
     description: string,
     userId: string,
   ): Promise<void> {
-    // Ensure the assignment exists
     const assignmentExists = await this.prisma.assignment.findUnique({
       where: { id: assignmentId },
     });
@@ -1471,7 +1431,7 @@ export class AssignmentServiceV1 {
     if (!assignmentExists) {
       throw new NotFoundException("Assignment not found");
     }
-    // if the user created more than 5 reports in the last 24 hours, throw an error
+
     const reports = await this.prisma.report.findMany({
       where: {
         reporterId: userId,
@@ -1486,7 +1446,6 @@ export class AssignmentServiceV1 {
       );
     }
 
-    // Create a new report
     await this.prisma.report.create({
       data: {
         assignmentId,
@@ -1519,7 +1478,7 @@ export class AssignmentServiceV1 {
           const numberOfRequiredVariants =
             questions.length > 1
               ? questionVariationNumber - (question.variants?.length || 0)
-              : questionVariationNumber; // if the size of the question array is 1, we need to generate the number of variants specified in the request, if its more then it means we need to generate the difference between the number of variants and the number of variants already present in the question
+              : questionVariationNumber;
 
           if (numberOfRequiredVariants <= 0) {
             return;
@@ -1598,8 +1557,7 @@ export class AssignmentServiceV1 {
         variantType: VariantType.REWORDED,
       }));
       return variantData;
-    } catch (error) {
-      console.error("Error generating and saving reworded variants:", error);
+    } catch {
       throw new HttpException(
         "Failed to generate and save reworded variants",
         HttpStatus.INTERNAL_SERVER_ERROR,
@@ -1607,7 +1565,6 @@ export class AssignmentServiceV1 {
     }
   }
 
-  // private methods
   private createEmptyDto(): Partial<ReplaceAssignmentRequestDto> {
     return {
       instructions: undefined,

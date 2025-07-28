@@ -1,65 +1,55 @@
 /* eslint-disable unicorn/no-array-push-push */
 /* eslint-disable unicorn/no-null */
 /* eslint-disable unicorn/no-useless-undefined */
-/* =========================================================
-   tests/unit/__mocks__/common-mocks.ts
-   ---------------------------------------------------------
-   One place to define:
-     • sample entities / DTOs
-     • factory helpers that return fresh jest.fn() mocks
-   ========================================================= */
 
 import {
   Assignment,
-  AssignmentType,
-  AssignmentQuestionDisplayOrder,
-  QuestionDisplay,
-  Question,
-  QuestionType,
-  ResponseType,
-  QuestionVariant,
-  VariantType,
   AssignmentAttempt,
-  QuestionResponse,
-  RegradingStatus,
-  ReportType,
-  Job,
-  Translation,
-  AssignmentTranslation,
   AssignmentFeedback,
-  RegradingRequest,
-  Report,
+  AssignmentQuestionDisplayOrder,
+  AssignmentTranslation,
+  AssignmentType,
   FeedbackTranslation,
+  Job,
   Prisma,
+  Question,
+  QuestionDisplay,
+  QuestionResponse,
+  QuestionType,
+  QuestionVariant,
+  RegradingRequest,
+  RegradingStatus,
+  Report,
+  ReportStatus,
+  ReportType,
+  ResponseType,
+  Translation,
+  VariantType,
 } from "@prisma/client";
-
+import { BaseAssignmentResponseDto } from "src/api/assignment/dto/base.assignment.response.dto";
+import {
+  AssignmentResponseDto,
+  GetAssignmentResponseDto,
+  LearnerGetAssignmentResponseDto,
+} from "src/api/assignment/dto/get.assignment.response.dto";
+import { QuestionGenerationPayload } from "src/api/assignment/dto/post.assignment.request.dto";
+import { ReplaceAssignmentRequestDto } from "src/api/assignment/dto/replace.assignment.request.dto";
 import { UpdateAssignmentRequestDto } from "src/api/assignment/dto/update.assignment.request.dto";
 import {
   Choice,
   QuestionDto,
-  VariantDto,
-  ScoringDto,
   RubricDto,
+  ScoringDto,
   UpdateAssignmentQuestionsDto,
+  VariantDto,
 } from "src/api/assignment/dto/update.questions.request.dto";
+import { ScoringType } from "src/api/assignment/question/dto/create.update.question.request.dto";
+import { AssignmentTypeEnum } from "src/api/llm/features/question-generation/services/question-generation.service";
 import {
   UserRole,
   UserSession,
 } from "src/auth/interfaces/user.session.interface";
-import { BaseAssignmentResponseDto } from "src/api/assignment/dto/base.assignment.response.dto";
-import {
-  GetAssignmentResponseDto,
-  LearnerGetAssignmentResponseDto,
-  AssignmentResponseDto,
-} from "src/api/assignment/dto/get.assignment.response.dto";
-import { ReplaceAssignmentRequestDto } from "src/api/assignment/dto/replace.assignment.request.dto";
-import { QuestionGenerationPayload } from "src/api/assignment/dto/post.assignment.request.dto";
-import { AssignmentTypeEnum } from "src/api/llm/features/question-generation/services/question-generation.service";
-import { ScoringType } from "src/api/assignment/question/dto/create.update.question.request.dto";
 
-// ====================================================================
-// Sample Question Data from Real Application
-// ====================================================================
 /**
  * Sample Choice objects for questions
  */
@@ -617,10 +607,6 @@ const toJsonValue = (value: unknown): Prisma.JsonValue => {
   return JSON.stringify(value) as Prisma.JsonValue;
 };
 
-// ====================================================================
-// Questions and Variants
-// ====================================================================
-
 /**
  * Create a sample Question object with sane defaults
  */
@@ -647,7 +633,6 @@ export const createMockQuestion = (
     liveRecordingConfig: null,
   };
 
-  // Adjust fields based on question type
   switch (questionType) {
     case QuestionType.MULTIPLE_CORRECT: {
       baseQuestion.question = "Which of these animals are mammals?";
@@ -675,7 +660,6 @@ export const createMockQuestion = (
 
       break;
     }
-    // No default
   }
 
   return {
@@ -710,7 +694,6 @@ export const createMockQuestionDto = (
     alreadyInBackend: true,
   };
 
-  // Adjust fields based on question type
   switch (questionType) {
     case QuestionType.MULTIPLE_CORRECT: {
       baseQuestionDto.question = "Which of these animals are mammals?";
@@ -738,7 +721,6 @@ export const createMockQuestionDto = (
 
       break;
     }
-    // No default
   }
 
   return {
@@ -953,10 +935,6 @@ export const createReactQuestionDto = (
   } as QuestionDto;
 };
 
-// ====================================================================
-// Assignments
-// ====================================================================
-
 /**
  * Returns a plain `Assignment` object with sane defaults.
  * Pass a partial object to override only the fields you care about.
@@ -964,7 +942,6 @@ export const createReactQuestionDto = (
 export const createMockAssignment = (
   overrides: Partial<Assignment> = {},
 ): Assignment => ({
-  /* ───────────── required / always-present columns ───────────── */
   id: 1,
   name: "Sample Assignment",
   introduction: "Intro text",
@@ -977,6 +954,7 @@ export const createMockAssignment = (
   allotedTimeMinutes: null,
   attemptsPerTimeRange: null,
   attemptsTimeRangeHours: null,
+  numberOfQuestionsPerAttempt: undefined,
   passingGrade: 50,
   displayOrder: AssignmentQuestionDisplayOrder.DEFINED,
   questionDisplay: QuestionDisplay.ONE_PER_PAGE,
@@ -985,9 +963,10 @@ export const createMockAssignment = (
   showAssignmentScore: true,
   showQuestionScore: true,
   showSubmissionFeedback: true,
+  showQuestions: true,
   updatedAt: new Date(),
   languageCode: "en",
-  /* ───────────── allow per-test overrides ─────────────────────── */
+
   ...overrides,
 });
 
@@ -1077,9 +1056,11 @@ export const createMockUpdateAssignmentDto = (
   questionDisplay: QuestionDisplay.ONE_PER_PAGE,
   published: true,
   questionOrder: [1, 2],
+  numberOfQuestionsPerAttempt: undefined,
   showAssignmentScore: true,
   showQuestionScore: true,
   showSubmissionFeedback: true,
+  showQuestions: true,
   ...overrides,
 });
 
@@ -1126,11 +1107,14 @@ export const createMockUpdateAssignmentQuestionsDto = (
     passingGrade: 60,
     displayOrder: AssignmentQuestionDisplayOrder.DEFINED,
     questionDisplay: QuestionDisplay.ONE_PER_PAGE,
+    numberOfQuestionsPerAttempt: undefined,
     published: true,
     questionOrder: [1, 2],
     showAssignmentScore: true,
     showQuestionScore: true,
     showSubmissionFeedback: true,
+    showQuestions: true,
+
     updatedAt: new Date(),
     questions: includeQuestions
       ? [
@@ -1146,10 +1130,6 @@ export const createMockUpdateAssignmentQuestionsDto = (
   };
 };
 
-// ====================================================================
-// Assignment Attempts and Responses
-// ====================================================================
-
 /**
  * Create a sample AssignmentAttempt with sane defaults
  */
@@ -1163,7 +1143,7 @@ export const createMockAssignmentAttempt = (
     userId: "learner-456",
     submitted: isCompleted,
     grade: isCompleted ? 80 : null,
-    expiresAt: new Date(Date.now() + 3_600_000), // 1 hour from now
+    expiresAt: new Date(Date.now() + 3_600_000),
     createdAt: new Date(),
     questionOrder: [1, 2],
     comments: null,
@@ -1206,10 +1186,6 @@ export const createMockQuestionResponse = (
     ...overrides,
   };
 };
-
-// ====================================================================
-// Jobs, Translations, and Reports
-// ====================================================================
 
 /**
  * Create a sample Job with sane defaults
@@ -1413,6 +1389,15 @@ export const createMockReport = (
     author: false,
     createdAt: new Date(),
     updatedAt: new Date(),
+    status: "OPEN" as ReportStatus,
+    issueNumber: 1,
+    statusMessage: "Report is open",
+    resolution: "",
+    comments: "",
+    duplicateOfReportId: null,
+    relatedToReportId: null,
+    similarityScore: 0,
+    closureReason: null,
   };
 
   return {
@@ -1420,10 +1405,6 @@ export const createMockReport = (
     ...overrides,
   };
 };
-
-// ====================================================================
-// Feedback and Regrading
-// ====================================================================
 
 /**
  * Create a sample AssignmentFeedback with sane defaults
@@ -1442,6 +1423,10 @@ export const createMockAssignmentFeedback = (
     aiFeedbackRating: 4,
     createdAt: new Date(),
     updatedAt: new Date(),
+    email: "learner-456@example.com",
+    firstName: "John",
+    lastName: "Doe",
+    allowContact: true,
   };
 
   return {
@@ -1473,10 +1458,6 @@ export const createMockRegradingRequest = (
     ...overrides,
   };
 };
-
-// ====================================================================
-// Question Generation
-// ====================================================================
 
 /**
  * Create a sample QuestionGenerationPayload with sane defaults
@@ -1514,10 +1495,6 @@ export const createMockQuestionGenerationPayload = (
     ...overrides,
   };
 };
-
-// ====================================================================
-// Mock Services - Factory Functions
-// ====================================================================
 
 /**
  * Create a mock logger

@@ -31,7 +31,6 @@ export class AttemptRegradingService {
     regradingRequestDto: RegradingRequestDto,
     userSession: UserSession,
   ): Promise<RequestRegradingResponseDto> {
-    // Validate the attempt exists
     const assignmentAttempt = await this.prisma.assignmentAttempt.findUnique({
       where: { id: attemptId },
     });
@@ -42,21 +41,18 @@ export class AttemptRegradingService {
       );
     }
 
-    // Ensure assignment ID matches
     if (assignmentAttempt.assignmentId !== assignmentId) {
       throw new BadRequestException(
         "Assignment ID does not match the attempt.",
       );
     }
 
-    // Ensure user has permission for this attempt
     if (assignmentAttempt.userId !== userSession.userId) {
       throw new ForbiddenException(
         "You do not have permission to request regrading for this attempt.",
       );
     }
 
-    // Check for existing regrading request
     const existingRegradingRequest =
       await this.prisma.regradingRequest.findFirst({
         where: {
@@ -67,7 +63,6 @@ export class AttemptRegradingService {
       });
 
     if (existingRegradingRequest) {
-      // Update the existing request
       const updatedRegradingRequest = await this.prisma.regradingRequest.update(
         {
           where: { id: existingRegradingRequest.id },
@@ -84,7 +79,6 @@ export class AttemptRegradingService {
         id: updatedRegradingRequest.id,
       };
     } else {
-      // Create a new regrading request
       const regradingRequest = await this.prisma.regradingRequest.create({
         data: {
           assignmentId: assignmentId,

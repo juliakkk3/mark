@@ -20,7 +20,6 @@ describe("AssignmentRepository", () => {
   let prismaService: PrismaService;
 
   beforeEach(async () => {
-    // Create a mock PrismaService
     const mockPrismaService = {
       assignment: {
         findUnique: jest.fn(),
@@ -48,7 +47,6 @@ describe("AssignmentRepository", () => {
 
   describe("findById", () => {
     it("should find and return an assignment for an author", async () => {
-      // Arrange
       const assignmentId = 1;
       const mockQuestions = [
         {
@@ -86,32 +84,27 @@ describe("AssignmentRepository", () => {
         .spyOn(prismaService.assignment, "findUnique")
         .mockResolvedValue(mockAssignment);
 
-      // Mock JSON.parse to handle our mock data properly
       const originalJsonParse = JSON.parse;
       global.JSON.parse = jest.fn().mockImplementation((text) => {
         if (typeof text === "string") {
           return originalJsonParse(text) as unknown;
         }
-        return text as unknown; // Return the input if it's not a string (for our mock data)
+        return text as unknown;
       });
 
-      // Act
       const result = await repository.findById(
         assignmentId,
         sampleAuthorSession,
       );
 
-      // Assert
       expect(result).toBeDefined();
       expect(result.id).toBe(assignmentId);
       expect(result.success).toBe(true);
       expect(result.questions).toBeDefined();
       expect(result.questions.length).toBe(1);
 
-      // Restore original JSON.parse
       global.JSON.parse = originalJsonParse;
 
-      // Verify Prisma was called correctly
       expect(prismaService.assignment.findUnique).toHaveBeenCalledWith({
         where: { id: assignmentId },
         include: {
@@ -123,7 +116,6 @@ describe("AssignmentRepository", () => {
     });
 
     it("should find and return an assignment for a learner (without questions)", async () => {
-      // Arrange
       const assignmentId = 1;
       const mockQuestions = [
         {
@@ -150,7 +142,6 @@ describe("AssignmentRepository", () => {
         .spyOn(prismaService.assignment, "findUnique")
         .mockResolvedValue(mockAssignment);
 
-      // Mock JSON.parse to handle our mock data properly
       const originalJsonParse = JSON.parse;
       global.JSON.parse = jest.fn().mockImplementation((text) => {
         if (typeof text === "string") {
@@ -159,30 +150,25 @@ describe("AssignmentRepository", () => {
         return text as unknown;
       });
 
-      // Act
       const result = await repository.findById(
         assignmentId,
         sampleLearnerSession,
       );
 
-      // Assert
       expect(result).toBeDefined();
       expect(result.id).toBe(assignmentId);
       expect(result.success).toBe(true);
-      expect(result.questions).toBeUndefined(); // Learners don't get questions
+      expect(result.questions).toBeUndefined();
 
-      // Restore original JSON.parse
       global.JSON.parse = originalJsonParse;
     });
 
     it("should throw NotFoundException if assignment is not found", async () => {
-      // Arrange
       const assignmentId = 999;
       jest
         .spyOn(prismaService.assignment, "findUnique")
         .mockResolvedValue(null);
 
-      // Act & Assert
       await expect(repository.findById(assignmentId)).rejects.toThrow(
         NotFoundException,
       );
@@ -197,10 +183,8 @@ describe("AssignmentRepository", () => {
     });
 
     it("should filter out deleted questions and variants", async () => {
-      // Arrange
       const assignmentId = 1;
       const mockQuestions = [
-        // Non-deleted question with variants
         {
           id: 1,
           question: "What is the capital of France?",
@@ -223,13 +207,13 @@ describe("AssignmentRepository", () => {
               id: 102,
               questionId: 1,
               variantContent: "Paris is the capital of which country?",
-              isDeleted: true, // This variant should be filtered out
+              isDeleted: true,
               choices: JSON.stringify([]),
             },
           ],
           assignmentId: 1,
         },
-        // Deleted question (should be filtered out)
+
         {
           id: 2,
           question: "What is the capital of Germany?",
@@ -251,7 +235,6 @@ describe("AssignmentRepository", () => {
         .spyOn(prismaService.assignment, "findUnique")
         .mockResolvedValue(mockAssignment);
 
-      // Mock JSON.parse for our test data
       const originalJsonParse = JSON.parse;
       global.JSON.parse = jest.fn().mockImplementation((text) => {
         if (typeof text === "string") {
@@ -260,23 +243,19 @@ describe("AssignmentRepository", () => {
         return text as unknown;
       });
 
-      // Act
       const result = (await repository.findById(
         assignmentId,
         sampleAuthorSession,
       )) as GetAssignmentResponseDto;
 
-      // Assert
       expect(result.questions).toBeDefined();
-      expect(result.questions.length).toBe(1); // Only one non-deleted question
+      expect(result.questions.length).toBe(1);
       expect(result.questions[0].id).toBe(1);
 
-      // Restore original JSON.parse
       global.JSON.parse = originalJsonParse;
     });
 
     it("should sort questions based on questionOrder if available", async () => {
-      // Arrange
       const assignmentId = 1;
       const mockQuestions = [
         {
@@ -311,14 +290,13 @@ describe("AssignmentRepository", () => {
       const mockAssignment = {
         ...createMockAssignment({ id: assignmentId }),
         questions: mockQuestions,
-        questionOrder: [2, 1, 3], // Custom order: Q2, Q1, Q3
+        questionOrder: [2, 1, 3],
       };
 
       jest
         .spyOn(prismaService.assignment, "findUnique")
         .mockResolvedValue(mockAssignment);
 
-      // Mock JSON.parse for our test data
       const originalJsonParse = JSON.parse;
       global.JSON.parse = jest.fn().mockImplementation((text) => {
         if (typeof text === "string") {
@@ -327,28 +305,24 @@ describe("AssignmentRepository", () => {
         return text as unknown;
       });
 
-      // Act
       const result = (await repository.findById(
         assignmentId,
         sampleAuthorSession,
       )) as GetAssignmentResponseDto;
 
-      // Assert
       expect(result.questions).toBeDefined();
       expect(result.questions.length).toBe(3);
-      // Questions should be sorted according to questionOrder
-      expect(result.questions[0].id).toBe(2); // First question should be id 2
-      expect(result.questions[1].id).toBe(1); // Second question should be id 1
-      expect(result.questions[2].id).toBe(3); // Third question should be id 3
 
-      // Restore original JSON.parse
+      expect(result.questions[0].id).toBe(2);
+      expect(result.questions[1].id).toBe(1);
+      expect(result.questions[2].id).toBe(3);
+
       global.JSON.parse = originalJsonParse;
     });
   });
 
   describe("findAllForUser", () => {
     it("should return all assignments for a user", async () => {
-      // Arrange
       const mockAssignmentGroups = [
         {
           groupId: "group1",
@@ -366,10 +340,8 @@ describe("AssignmentRepository", () => {
         .spyOn(prismaService.assignmentGroup, "findMany")
         .mockResolvedValue(mockAssignmentGroups);
 
-      // Act
       const result = await repository.findAllForUser(sampleLearnerSession);
 
-      // Assert
       expect(result).toBeDefined();
       expect(result.length).toBe(2);
       expect(result[0].id).toBe(1);
@@ -377,7 +349,6 @@ describe("AssignmentRepository", () => {
       expect(result[1].id).toBe(2);
       expect(result[1].name).toBe("Assignment 2");
 
-      // Verify Prisma was called correctly
       expect(prismaService.assignmentGroup.findMany).toHaveBeenCalledWith({
         where: { groupId: sampleLearnerSession.groupId },
         include: { assignment: true },
@@ -385,15 +356,12 @@ describe("AssignmentRepository", () => {
     });
 
     it("should return an empty array if no assignments are found", async () => {
-      // Arrange
       jest
         .spyOn(prismaService.assignmentGroup, "findMany")
         .mockResolvedValue([]);
 
-      // Act
       const result = await repository.findAllForUser(sampleLearnerSession);
 
-      // Assert
       expect(result).toBeDefined();
       expect(result).toEqual([]);
     });
@@ -401,7 +369,6 @@ describe("AssignmentRepository", () => {
 
   describe("update", () => {
     it("should update an assignment successfully", async () => {
-      // Arrange
       const assignmentId = 1;
       const updateData = {
         name: "Updated Assignment Name",
@@ -417,16 +384,13 @@ describe("AssignmentRepository", () => {
         .spyOn(prismaService.assignment, "update")
         .mockResolvedValue(updatedAssignment);
 
-      // Act
       const result = await repository.update(assignmentId, updateData);
 
-      // Assert
       expect(result).toBeDefined();
       expect(result.id).toBe(assignmentId);
       expect(result.name).toBe(updateData.name);
       expect(result.introduction).toBe(updateData.introduction);
 
-      // Verify Prisma was called correctly
       expect(prismaService.assignment.update).toHaveBeenCalledWith({
         where: { id: assignmentId },
         data: updateData,
@@ -434,7 +398,6 @@ describe("AssignmentRepository", () => {
     });
 
     it("should throw and log errors during update", async () => {
-      // Arrange
       const assignmentId = 1;
       const updateData = { name: "Updated Assignment" };
       const mockError = new Error("Database error");
@@ -444,7 +407,6 @@ describe("AssignmentRepository", () => {
         .mockRejectedValue(mockError);
       jest.spyOn(repository["logger"], "error").mockImplementation(jest.fn());
 
-      // Act & Assert
       await expect(repository.update(assignmentId, updateData)).rejects.toThrow(
         mockError,
       );
@@ -454,7 +416,6 @@ describe("AssignmentRepository", () => {
 
   describe("replace", () => {
     it("should replace an assignment with new data", async () => {
-      // Arrange
       const assignmentId = 1;
       const replaceData = {
         name: "Completely New Assignment",
@@ -462,7 +423,6 @@ describe("AssignmentRepository", () => {
         instructions: "New instructions",
       };
 
-      // Expected data to be passed to Prisma (empty DTO + new data)
       const expectedData: Record<string, unknown> = {
         ...repository["createEmptyDto"](),
         ...replaceData,
@@ -485,17 +445,14 @@ describe("AssignmentRepository", () => {
         displayOrder: undefined,
       });
 
-      // Act
       const result = await repository.replace(assignmentId, replaceData);
 
-      // Assert
       expect(result).toBeDefined();
       expect(result.id).toBe(assignmentId);
       expect(result.name).toBe(replaceData.name);
       expect(result.introduction).toBe(replaceData.introduction);
       expect(result.instructions).toBe(replaceData.instructions);
 
-      // Verify Prisma was called correctly with the combined data
       expect(prismaService.assignment.update).toHaveBeenCalledWith({
         where: { id: assignmentId },
         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
@@ -504,7 +461,6 @@ describe("AssignmentRepository", () => {
     });
 
     it("should throw and log errors during replace", async () => {
-      // Arrange
       const assignmentId = 1;
       const replaceData = { name: "Completely New Assignment" };
       const mockError = new Error("Database error");
@@ -514,7 +470,6 @@ describe("AssignmentRepository", () => {
         .mockRejectedValue(mockError);
       jest.spyOn(repository["logger"], "error").mockImplementation(jest.fn());
 
-      // Act & Assert
       await expect(
         repository.replace(assignmentId, replaceData),
       ).rejects.toThrow(mockError);
@@ -524,13 +479,10 @@ describe("AssignmentRepository", () => {
 
   describe("parseJsonField", () => {
     it("should parse a JSON string to the correct type", () => {
-      // Arrange
       const jsonString = '{"type":"AUTO","rubrics":[]}';
 
-      // Act
       const result = repository["parseJsonField"]<ScoringDto>(jsonString);
 
-      // Assert
       expect(result).toBeDefined();
       expect(result).toEqual({
         type: "AUTO",
@@ -539,33 +491,25 @@ describe("AssignmentRepository", () => {
     });
 
     it("should return undefined for null input", () => {
-      // Act
       const result = repository["parseJsonField"](null);
 
-      // Assert
       expect(result).toBeUndefined();
     });
 
     it("should return the input as-is if not a string", () => {
-      // Arrange
       const jsonObject = { type: "AUTO", rubrics: [] };
 
-      // Act
       const result = repository["parseJsonField"](jsonObject);
 
-      // Assert
       expect(result).toBe(jsonObject);
     });
 
     it("should handle invalid JSON and return undefined", () => {
-      // Arrange
       const invalidJson = '{"type":"AUTO", invalid json}';
       jest.spyOn(repository["logger"], "error").mockImplementation(jest.fn());
 
-      // Act
       const result = repository["parseJsonField"](invalidJson);
 
-      // Assert
       expect(result).toBeUndefined();
       expect(repository["logger"].error).toHaveBeenCalled();
     });
@@ -573,10 +517,8 @@ describe("AssignmentRepository", () => {
 
   describe("createEmptyDto", () => {
     it("should return an empty assignment DTO with undefined values", () => {
-      // Act
       const result = repository["createEmptyDto"]();
 
-      // Assert
       expect(result).toBeDefined();
       expect(result.instructions).toBeUndefined();
       expect(result.numAttempts).toBeUndefined();
@@ -589,7 +531,6 @@ describe("AssignmentRepository", () => {
 
   describe("processAssignmentData", () => {
     it("should process raw assignment data with questions and variants", () => {
-      // Arrange
       const rawAssignment = {
         ...createMockAssignment({ id: 1 }),
         questions: [
@@ -620,7 +561,6 @@ describe("AssignmentRepository", () => {
         ],
       };
 
-      // Spy on methods used by processAssignmentData
       jest
         .spyOn(repository as any, "parseJsonField")
         .mockImplementation((jsonValue) => {
@@ -634,7 +574,6 @@ describe("AssignmentRepository", () => {
           return jsonValue;
         });
 
-      // Mock JSON.parse for our test
       const originalJsonParse = JSON.parse;
       global.JSON.parse = jest.fn().mockImplementation((text) => {
         if (typeof text === "string") {
@@ -643,39 +582,32 @@ describe("AssignmentRepository", () => {
         return text as unknown;
       });
 
-      // Act
       const result = repository["processAssignmentData"](rawAssignment as any);
 
-      // Assert
       expect(result).toBeDefined();
       expect(result.questions).toBeDefined();
       expect(result.questions.length).toBe(1);
 
-      // Check that question was processed correctly
       const processedQuestion = result.questions[0];
       expect(processedQuestion.id).toBe(1);
       expect(processedQuestion.scoring).toEqual({ type: "AUTO" });
       expect(Array.isArray(processedQuestion.choices)).toBe(true);
       expect(processedQuestion.choices.length).toBe(2);
 
-      // Check that variant was processed correctly
       expect(processedQuestion.variants).toBeDefined();
       expect(processedQuestion.variants.length).toBe(1);
       expect(processedQuestion.variants[0].id).toBe(101);
       expect(Array.isArray(processedQuestion.variants[0].choices)).toBe(true);
 
-      // Restore original JSON.parse
       global.JSON.parse = originalJsonParse;
     });
 
     it("should handle missing or empty questions array", () => {
-      // Arrange
       const rawAssignment = {
         ...createMockAssignment({ id: 1 }),
         questions: undefined,
       };
 
-      // Mock JSON.parse for our test
       const originalJsonParse = JSON.parse;
       global.JSON.parse = jest.fn().mockImplementation((text) => {
         if (typeof text === "string") {
@@ -684,14 +616,11 @@ describe("AssignmentRepository", () => {
         return text as unknown;
       });
 
-      // Act
       const result = repository["processAssignmentData"](rawAssignment as any);
 
-      // Assert
       expect(result).toBeDefined();
       expect(result.questions).toEqual([]);
 
-      // Restore original JSON.parse
       global.JSON.parse = originalJsonParse;
     });
   });

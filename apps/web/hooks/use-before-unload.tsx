@@ -16,7 +16,7 @@ const useBeforeUnload = (message?: string): BeforeUnloadHook => {
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       e.returnValue = message || "Are you sure you want to leave this page?";
-      return message; // For some older browsers
+      return message;
     };
 
     window.addEventListener("beforeunload", handleBeforeUnload);

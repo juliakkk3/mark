@@ -1,4 +1,3 @@
-// src/llm/core/services/openai-llm.service.ts
 import { Injectable, Inject } from "@nestjs/common";
 import { ChatOpenAI } from "@langchain/openai";
 import { HumanMessage } from "@langchain/core/messages";
@@ -45,7 +44,6 @@ export class OpenAiLlmService implements ILlmProvider {
   ): Promise<LlmResponse> {
     const model = this.createChatModel(options);
 
-    // Get input tokens
     const inputText = messages
       .map((m) =>
         typeof m.content === "string" ? m.content : JSON.stringify(m.content),
@@ -55,7 +53,6 @@ export class OpenAiLlmService implements ILlmProvider {
 
     this.logger.debug(`Invoking LLM with ${inputTokens} input tokens`);
 
-    // Call the LLM
     const result = await model.invoke(messages);
     const responseContent = result.content.toString();
     const outputTokens = this.tokenCounter.countTokens(responseContent);
@@ -83,7 +80,7 @@ export class OpenAiLlmService implements ILlmProvider {
 
     const processedImageData = this.normalizeImageData(imageData);
     const inputTokens = this.tokenCounter.countTokens(textContent);
-    // Estimate image tokens (a rough estimate as this varies by model and image)
+
     const estimatedImageTokens = 150;
 
     this.logger.debug(
@@ -130,12 +127,10 @@ export class OpenAiLlmService implements ILlmProvider {
       throw new Error("Image data is empty or null");
     }
 
-    // Check if it's already in data URL format
     if (imageData.startsWith("data:")) {
       return imageData;
     }
 
-    // Try to determine mime type from data or use generic type
     let mimeType = "image/jpeg";
     if (imageData.startsWith("/9j/")) {
       mimeType = "image/jpeg";

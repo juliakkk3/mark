@@ -5,7 +5,7 @@ import { MessagingService } from "../messaging/messaging.service";
 
 @Injectable()
 export class ApiService {
-  private logger;
+  private logger: Logger;
   constructor(
     private readonly messagingService: MessagingService,
     @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger,

@@ -15,21 +15,16 @@ import {
 import { getLiveRecordingFeedback } from "@/lib/talkToBackend";
 import { useLearnerStore, useVideoRecorderStore } from "@/stores/learner";
 
-// --------------------------------------------------------------------
-//  GLOBAL FFmpeg INSTANCE
-// --------------------------------------------------------------------
 const ffmpeg = new FFmpeg();
 
 /** ------------------------------------------------------------------
  * HOOK #1: Manage camera stream, recording, and a manual timer
  * ------------------------------------------------------------------ */
 const useVideoRecorder = (onRecordingComplete: (blob: Blob) => void) => {
-  // Keep local state only for values not (or not yet) stored in Zustand.
   const [recordingStartTime, setRecordingStartTimeLocal] = useState<
     number | null
   >(null);
 
-  // Get values and actions from the store.
   const {
     recording,
     videoBlob,
@@ -46,14 +41,12 @@ const useVideoRecorder = (onRecordingComplete: (blob: Blob) => void) => {
     setCountdown,
   } = useVideoRecorderStore();
 
-  // Use the store’s videoRef.
   const videoRef = useRef<HTMLVideoElement>(null);
   const setVideoRef = useVideoRecorderStore((state) => state.setVideoRef);
   useEffect(() => {
     setVideoRef(videoRef.current);
   }, [setVideoRef]);
 
-  // Instead of using a local streamRef, use the store’s.
   useEffect(() => {
     const initPreview = async () => {
       try {
@@ -61,18 +54,20 @@ const useVideoRecorder = (onRecordingComplete: (blob: Blob) => void) => {
           video: true,
           audio: true,
         });
-        // Set stream into the store.
+
         useVideoRecorderStore.getState().setStreamRef(stream);
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
           try {
             await videoRef.current.play();
           } catch (err) {
-            console.log("video play interrupted:", err);
+            console.error("Error playing video:", err);
+            setCameraError(
+              "Error playing video. Please check your browser settings.",
+            );
           }
         }
       } catch (err: any) {
-        console.error("Error initializing camera:", err);
         setCameraError(
           "Error accessing camera. Please check your camera settings.",
         );
@@ -91,7 +86,6 @@ const useVideoRecorder = (onRecordingComplete: (blob: Blob) => void) => {
     };
   }, []);
 
-  // Local countdown effect: when countdown reaches zero, trigger startRecordingImpl from the store.
   useEffect(() => {
     if (countdown === null) return;
     if (countdown > 0) {
@@ -103,12 +97,11 @@ const useVideoRecorder = (onRecordingComplete: (blob: Blob) => void) => {
     }
   }, [countdown, setCountdown, onRecordingComplete]);
 
-  // Optionally, if you need to sync local recordingStartTime with the store:
   useEffect(() => {
     setRecordingStartTimeLocal(
       useVideoRecorderStore.getState().recordingStartTime,
     );
-  }, [recording]); // update when recording changes
+  }, [recording]);
 
   return {
     recording,
@@ -132,10 +125,8 @@ const useVideoProcessor = () => {
 
   const extractAudio = async (videoBlob: Blob) => {
     try {
-      // Store input as input.webm
       await ffmpeg.writeFile("input.webm", await fetchFile(videoBlob));
 
-      // Convert to WAV (mono, 16kHz)
       await ffmpeg.exec([
         "-i",
         "input.webm",
@@ -154,12 +145,11 @@ const useVideoProcessor = () => {
       const audioData = await ffmpeg.readFile("output.wav");
       return new Blob([audioData], { type: "audio/wav" });
     } finally {
-      // Clean up
       try {
         await ffmpeg.deleteFile("input.webm");
         await ffmpeg.deleteFile("output.wav");
       } catch {
-        // ignore
+        console.error("Error deleting temporary files");
       }
     }
   };
@@ -211,7 +201,6 @@ const evaluateBodyLanguageMultipleFrames = async (
   videoElement: HTMLVideoElement,
   frameCount?: number,
 ): Promise<{ score: number; explanation: string }> => {
-  // Wait for metadata
   while (
     !videoElement.duration ||
     videoElement.duration === Infinity ||
@@ -368,7 +357,7 @@ const analyzeSpeechReport = (text: string): string => {
 const analyzeContentReport = (text: string): string => {
   const sentences = text.split(/[.!?]+/).filter(Boolean);
   const doc = nlp(text);
-  // Using .topics() for named entities. Adjust if you prefer doc.nouns() or doc.ner() instead
+
   const namedEntities: string[] = doc.topics().out("array") as string[];
   const hasStrongEntities = namedEntities.length > 3;
 
@@ -395,21 +384,18 @@ export default function PresentationGrader({
   question,
   assignmentId,
 }: PresentationGraderProps) {
-  // 1) State for showing AI feedback (only used if realTimeAiCoachEnabled)
   const [aiFeedback, setAiFeedback] = useState("");
   const [feedbackLoading, setFeedbackLoading] = useState(false);
-  // 2) Store intermediate analysis if desired
+
   const [lastTranscript, setLastTranscript] = useState("");
   const [lastSpeechReport, setLastSpeechReport] = useState("");
   const [lastContentReport, setLastContentReport] = useState("");
   const [lastBodyLanguageExplanation, setLastBodyLanguageExplanation] =
     useState("");
 
-  // 3) Keep a cached evaluation so we don't re-run if user replays the same blob
   const [cachedEvaluation, setCachedEvaluation] =
     useState<LiveRecordingData | null>(null);
 
-  // Extract config from the question
   const liveConfig: LiveRecordingConfig = question.liveRecordingConfig ?? {
     evaluateBodyLanguage: false,
     realTimeAiCoach: false,
@@ -420,7 +406,6 @@ export default function PresentationGrader({
   const realTimeAiCoachEnabled = liveConfig.realTimeAiCoach ?? false;
   const maxDuration = liveConfig.targetTime ?? 60;
 
-  // We may store results in your global app state
   const questionId = question.id;
   const setPresentationResponse = useLearnerStore(
     (state) => state.setPresentationResponse,
@@ -441,19 +426,16 @@ export default function PresentationGrader({
 
   const { processing, processVideo } = useVideoProcessor();
 
-  // 5) Evaluate everything (transcribe, analyze speech/body) and store results
   const evaluatePresentation = async (
     rawBlob: Blob,
     videoEl: HTMLVideoElement,
   ): Promise<LiveRecordingData> => {
-    // If we have it cached, skip re-analysis
     if (cachedEvaluation) {
       return cachedEvaluation;
     }
 
-    // 1) Transcribe audio from the blob
     const transcription = await processVideo(rawBlob);
-    // If time management is enabled, build a timestamped transcript
+
     let rawText = transcription.text || "";
     if (
       liveConfig.evaluateTimeManagement &&
@@ -462,11 +444,9 @@ export default function PresentationGrader({
       rawText = buildTimestampedTranscript(transcription.segments);
     }
 
-    // 2) Basic speech & content
     const speechAnalysis = analyzeSpeechReport(rawText);
     const contentAnalysis = analyzeContentReport(rawText);
 
-    // 3) Body language if enabled
     let bodyGrade = 0;
     let bodyExplanation = "";
     if (evaluateBodyLanguageEnabled) {
@@ -476,7 +456,6 @@ export default function PresentationGrader({
       bodyExplanation = explanation;
     }
 
-    // 4) Build evaluation object
     const evaluation: LiveRecordingData = {
       transcript: rawText,
       speechReport: speechAnalysis,
@@ -486,14 +465,12 @@ export default function PresentationGrader({
       question,
     };
 
-    // 5) Save to local state for reference
     setCachedEvaluation(evaluation);
     setLastTranscript(rawText);
     setLastSpeechReport(speechAnalysis);
     setLastContentReport(contentAnalysis);
     setLastBodyLanguageExplanation(bodyExplanation);
 
-    // 6) Also store in your global store (Zustand)
     const minimalReport = {
       transcript: rawText,
       speechReport: speechAnalysis,
@@ -508,7 +485,6 @@ export default function PresentationGrader({
     return evaluation;
   };
 
-  // 6) Once we have an evaluation, get AI feedback from your server IF realTimeAiCoachEnabled
   const getFeedbackForRecording = async (
     evaluation: LiveRecordingData,
   ): Promise<string> => {
@@ -521,24 +497,19 @@ export default function PresentationGrader({
       : "No feedback received from server.";
   };
 
-  // 7) This callback is passed to our hook so that as soon as the recording stops
-  //    (and we have the final Blob), we run everything automatically.
   const handleRecordingComplete = async (finalBlob: Blob) => {
     if (!videoRef.current) return;
     try {
       setFeedbackLoading(true);
       const evalData = await evaluatePresentation(finalBlob, videoRef.current);
 
-      // Only request server-side AI feedback if realTimeAiCoachEnabled is true
       if (realTimeAiCoachEnabled) {
         const feedback = await getFeedbackForRecording(evalData);
         setAiFeedback(feedback);
       } else {
-        // If coaching is disabled, we simply won't set any AI feedback
         setAiFeedback("");
       }
     } catch (err) {
-      console.error("Error processing video:", err);
       setAiFeedback("Error processing video. Please try again.");
     } finally {
       setFeedbackLoading(false);
@@ -558,15 +529,12 @@ export default function PresentationGrader({
     recordingStartTime,
   } = useVideoRecorder(handleRecordingComplete);
 
-  // 9) Show the "X seconds" timer
   const [currentRecordingTime, setCurrentRecordingTime] = useState(0);
 
-  // Loading FFmpeg when the component mounts (e.g., in useEffect)
   useEffect(() => {
     const loadFFmpeg = async () => {
       if (!ffmpeg.loaded) {
         await ffmpeg.load({
-          // Use self-hosted files from the public folder
           coreURL: await toBlobURL(
             "/ffmpeg-core/ffmpeg-core.js",
             "text/javascript",
@@ -581,7 +549,6 @@ export default function PresentationGrader({
     void loadFFmpeg();
   }, []);
 
-  // If user re-records a new video, reset the cached evaluation & AI feedback
   useEffect(() => {
     setCachedEvaluation(null);
     setAiFeedback("");
@@ -591,7 +558,6 @@ export default function PresentationGrader({
     setLastBodyLanguageExplanation("");
   }, [videoBlob]);
 
-  // Manual timer effect
   useEffect(() => {
     let timer: ReturnType<typeof setInterval>;
     if (recording && recordingStartTime !== null) {
@@ -599,7 +565,6 @@ export default function PresentationGrader({
         const elapsed = (Date.now() - recordingStartTime) / 1000;
         setCurrentRecordingTime(elapsed);
 
-        // Stop automatically if we've reached maxDuration
         if (elapsed >= maxDuration) {
           stopRecording();
         }
@@ -612,10 +577,8 @@ export default function PresentationGrader({
     };
   }, [recording, recordingStartTime, maxDuration, stopRecording]);
 
-  // RENDER
   return (
     <div className="bg-white rounded-lg overflow-hidden w-full max-w-lg mx-auto border relative">
-      {/* VIDEO AREA */}
       <div className="relative">
         <video
           ref={videoRef}
@@ -624,20 +587,20 @@ export default function PresentationGrader({
           playsInline
           className="w-full aspect-video object-contain bg-black"
         />
-        {/* Countdown overlay */}
+
         {countdown !== null && (
           <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 text-white text-6xl font-bold">
             {countdown > 0 ? countdown : "Go!"}
           </div>
         )}
-        {/* Recording indicator */}
+
         {recording && (
           <div className="absolute top-4 left-4 flex items-center space-x-2">
             <span className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></span>
             <span className="text-white font-semibold">Recording</span>
           </div>
         )}
-        {/* Timer */}
+
         {recording && (
           <div className="absolute bottom-2 right-2 bg-black bg-opacity-50 text-white text-xs px-2 py-1 rounded">
             {currentRecordingTime.toFixed(1)}s / {maxDuration}s
@@ -645,7 +608,6 @@ export default function PresentationGrader({
         )}
       </div>
 
-      {/* CONTROLS */}
       <div className="p-6">
         {cameraError && (
           <div className="text-red-600 text-center mb-4 flex flex-col items-center">
@@ -668,9 +630,8 @@ export default function PresentationGrader({
                 void startRecording();
               }}
               disabled={feedbackLoading || processing}
-              className="flex items-center space-x-2 px-5 py-3 bg-blue-600 text-white rounded hover:bg-blue-700 transition disabled:bg-blue-300"
+              className="flex items-center space-x-2 px-5 py-3 bg-purple-600 text-white rounded hover:bg-purple-700 transition disabled:bg-purple-300"
             >
-              {/* Record icon */}
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 className="h-6 w-6"
@@ -686,7 +647,6 @@ export default function PresentationGrader({
               onClick={stopRecording}
               className="flex items-center space-x-2 px-5 py-3 bg-red-600 text-white rounded hover:bg-red-700 transition"
             >
-              {/* Stop icon */}
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 className="h-6 w-6"
@@ -716,14 +676,12 @@ export default function PresentationGrader({
           </p>
         )}
 
-        {/* LOADING STATE */}
         {(processing || feedbackLoading) && (
           <div className="mt-4 p-4 border rounded bg-gray-100 text-gray-800 text-sm">
             <div className="animate-pulse">Processing video… please wait.</div>
           </div>
         )}
 
-        {/* AFTER FINISHED: Show local analysis and (optionally) AI feedback */}
         {videoBlob && !recording && !processing && (
           <div className="mt-4 p-4 border rounded bg-gray-50 text-gray-800">
             {feedbackLoading ? (
@@ -747,21 +705,6 @@ export default function PresentationGrader({
                   <strong>What The Ai heard:</strong>{" "}
                   {lastTranscript || "(not available)"}
                 </p>
-
-                {/* 
-                <p className="text-sm whitespace-pre-line mt-2">
-                  <strong>Speech Report:</strong> {lastSpeechReport}
-                </p>
-                <p className="text-sm whitespace-pre-line mt-2">
-                  <strong>Content Report:</strong> {lastContentReport}
-                </p>
-
-                {evaluateBodyLanguageEnabled && lastBodyLanguageExplanation && (
-                  <p className="text-sm whitespace-pre-line mt-2">
-                    <strong>Body Language Analysis:</strong>{" "}
-                    {lastBodyLanguageExplanation}
-                  </p>
-                )} */}
               </>
             )}
           </div>

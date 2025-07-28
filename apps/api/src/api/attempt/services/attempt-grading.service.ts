@@ -13,21 +13,19 @@ export class AttemptGradingService {
    */
   calculateGradeForAuthor(
     successfulQuestionResponses: CreateQuestionResponseAttemptResponseDto[],
-    authorQuestions: QuestionDto[],
-  ): { grade: number; totalPointsEarned: number; totalPossiblePoints: number } {
+    totalPossiblePoints: number,
+  ): { grade: number; totalPointsEarned: number } {
     if (successfulQuestionResponses.length === 0) {
-      return { grade: 0, totalPointsEarned: 0, totalPossiblePoints: 0 };
+      return { grade: 0, totalPointsEarned: 0 };
     }
 
     const totalPointsEarned = this.calculateTotalPointsEarned(
       successfulQuestionResponses,
     );
-    const totalPossiblePoints =
-      this.calculateTotalPossiblePoints(authorQuestions);
     const grade =
       totalPossiblePoints > 0 ? totalPointsEarned / totalPossiblePoints : 0;
 
-    return { grade, totalPointsEarned, totalPossiblePoints };
+    return { grade, totalPointsEarned };
   }
 
   /**
@@ -38,17 +36,14 @@ export class AttemptGradingService {
    */
   calculateGradeForLearner(
     successfulQuestionResponses: CreateQuestionResponseAttemptResponseDto[],
-    assignment: Assignment & { questions: { totalPoints: number }[] },
+    totalPossiblePoints: number,
   ): { grade: number; totalPointsEarned: number; totalPossiblePoints: number } {
     if (successfulQuestionResponses.length === 0) {
       return { grade: 0, totalPointsEarned: 0, totalPossiblePoints: 0 };
     }
-
     const totalPointsEarned = this.calculateTotalPointsEarned(
       successfulQuestionResponses,
     );
-    const totalPossiblePoints =
-      this.calculateTotalPossiblePointsFromAssignment(assignment);
     const grade =
       totalPossiblePoints > 0 ? totalPointsEarned / totalPossiblePoints : 0;
 
@@ -85,34 +80,6 @@ export class AttemptGradingService {
   ): number {
     return responses.reduce(
       (accumulator, response) => accumulator + response.totalPoints,
-      0,
-    );
-  }
-
-  /**
-   * Calculates total possible points from author questions.
-   * @param questions Array of author questions
-   * @returns Total possible points
-   */
-  private calculateTotalPossiblePoints(questions: QuestionDto[]): number {
-    return questions.reduce(
-      (accumulator: number, question: QuestionDto) =>
-        accumulator + question.totalPoints,
-      0,
-    );
-  }
-
-  /**
-   * Calculates total possible points from assignment questions.
-   * @param assignment The assignment object
-   * @returns Total possible points
-   */
-  private calculateTotalPossiblePointsFromAssignment(
-    assignment: Assignment & { questions: { totalPoints: number }[] },
-  ): number {
-    return assignment.questions.reduce(
-      (accumulator: number, question: { totalPoints: number }) =>
-        accumulator + question.totalPoints,
       0,
     );
   }

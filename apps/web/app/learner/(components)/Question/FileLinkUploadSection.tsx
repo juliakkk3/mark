@@ -23,7 +23,7 @@ const FileLinkUploadSection = ({
   question,
   onModeChange,
 }: FileLinkUploadSectionProps) => {
-  const [isFileUpload, setIsFileUpload] = useState(true); // Toggle state
+  const [isFileUpload, setIsFileUpload] = useState(true);
   const [files, setFiles] = useState<learnerFileResponse[]>([]);
   const [url, setUrl] = useState<string>("");
   const removeFileUpload = useLearnerStore((state) => state.removeFileUpload);
@@ -45,7 +45,6 @@ const FileLinkUploadSection = ({
 
   return (
     <div className="relative overflow-y-auto max-h-[80vh] w-full px-6 py-2">
-      {/* Toggle Button */}
       <div className="flex justify-end items-center gap-x-4">
         <div className="flex items-center  bg-violet-600 m-2 border-2 border-violet-600 rounded-lg text-white ">
           <button
@@ -72,7 +71,7 @@ const FileLinkUploadSection = ({
           </button>
         </div>
       </div>
-      {/* Conditionally Render Components */}
+
       {isFileUpload ? (
         <FileUploadSection
           question={question}

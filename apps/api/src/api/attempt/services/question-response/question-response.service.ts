@@ -4,14 +4,15 @@
 /* eslint-disable @typescript-eslint/restrict-template-expressions */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import {
-  Injectable,
-  NotFoundException,
   BadRequestException,
+  Injectable,
   InternalServerErrorException,
+  NotFoundException,
 } from "@nestjs/common";
-import { PrismaService } from "../../../../prisma.service";
-import { UserRole } from "../../../../auth/interfaces/user.session.interface";
 import { QuestionType } from "@prisma/client";
+import axios from "axios";
+import * as cheerio from "cheerio";
+import { authorAssignmentDetailsDTO } from "src/api/assignment/attempt/dto/assignment-attempt/create.update.assignment.attempt.request.dto";
 import { CreateQuestionResponseAttemptRequestDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.request.dto";
 import {
   CreateQuestionResponseAttemptResponseDto,
@@ -19,12 +20,11 @@ import {
 } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.response.dto";
 import { QuestionDto } from "src/api/assignment/dto/update.questions.request.dto";
 import { QuestionService } from "src/api/assignment/question/question.service";
-import axios from "axios";
-import * as cheerio from "cheerio";
-import { authorAssignmentDetailsDTO } from "src/api/assignment/attempt/dto/assignment-attempt/create.update.assignment.attempt.request.dto";
-import { LocalizationService } from "../../common/utils/localization.service";
 import { QuestionAnswerContext } from "src/api/llm/model/base.question.evaluate.model";
+import { UserRole } from "../../../../auth/interfaces/user.session.interface";
+import { PrismaService } from "../../../../prisma.service";
 import { GradingContext } from "../../common/interfaces/grading-context.interface";
+import { LocalizationService } from "../../common/utils/localization.service";
 import { GradingFactoryService } from "../grading-factory.service";
 
 @Injectable()
@@ -49,7 +49,6 @@ export class QuestionResponseService {
     assignmentDetails?: authorAssignmentDetailsDTO,
     preTranslatedQuestions?: Map<number, QuestionDto>,
   ): Promise<CreateQuestionResponseAttemptResponseDto[]> {
-    // Create array of promises for parallel processing
     const questionResponsesPromise = responsesForQuestions.map(
       async (questionResponse) => {
         return await this.createQuestionResponse(
@@ -65,17 +64,14 @@ export class QuestionResponseService {
       },
     );
 
-    // Wait for all questions to be processed
     const questionResponses = await Promise.allSettled(
       questionResponsesPromise,
     );
 
-    // Extract successful responses
     const successfulResponses = questionResponses
       .filter((response) => response.status === "fulfilled")
       .map((response) => response.value);
 
-    // Extract failed responses
     const failedResponses = questionResponses
       .filter(
         (response): response is PromiseRejectedResult =>
@@ -91,10 +87,11 @@ export class QuestionResponseService {
         }
       });
 
-    // Throw error if any responses failed
     if (failedResponses.length > 0) {
-      throw new InternalServerErrorException(
-        `Failed to submit questions: ${failedResponses.join(", ")}`,
+      throw new BadRequestException(
+        `Failed to process some question responses: ${failedResponses.join(
+          ", ",
+        )}`,
       );
     }
 
@@ -116,7 +113,6 @@ export class QuestionResponseService {
   ): Promise<CreateQuestionResponseAttemptResponseDto> {
     const questionId = createQuestionResponseAttemptRequestDto.id;
 
-    // Add the language to the request DTO for use in validation messages
     createQuestionResponseAttemptRequestDto.language = language;
 
     let question: QuestionDto;
@@ -125,7 +121,6 @@ export class QuestionResponseService {
       questionAnswerContext: QuestionAnswerContext[];
     };
 
-    // Get question data based on user role
     if (role === UserRole.LEARNER) {
       ({ question, assignmentContext } = await this.getLearnerQuestion(
         questionId,
@@ -143,17 +138,20 @@ export class QuestionResponseService {
       throw new BadRequestException(`Unsupported user role: ${role}`);
     }
 
-    // Check if the response is empty
     if (this.isEmptyResponse(createQuestionResponseAttemptRequestDto)) {
       const { responseDto, learnerResponse } =
         this.handleEmptyResponse(language);
-      await this.saveResponseToDatabase(
-        assignmentAttemptId,
-        questionId,
-        learnerResponse,
-        responseDto,
-        role,
-      );
+
+      // Only save to database if not an author
+      if (role !== UserRole.AUTHOR) {
+        await this.saveResponseToDatabase(
+          assignmentAttemptId,
+          questionId,
+          learnerResponse,
+          responseDto,
+          role,
+        );
+      }
 
       responseDto.questionId = questionId;
       responseDto.question = question.question;
@@ -161,7 +159,6 @@ export class QuestionResponseService {
       return responseDto;
     }
 
-    // Create grading context
     const gradingContext: GradingContext = {
       assignmentInstructions: assignmentContext.assignmentInstructions,
       questionAnswerContext: assignmentContext.questionAnswerContext,
@@ -175,12 +172,10 @@ export class QuestionResponseService {
       },
     };
 
-    // Process the question response based on question type
     let responseDto: CreateQuestionResponseAttemptResponseDto;
     let learnerResponse;
 
     try {
-      // Handle special case for LINK_FILE type which can be either URL or File
       if (question.type === QuestionType.LINK_FILE) {
         ({ responseDto, learnerResponse } = await this.handleLinkFileQuestion(
           question,
@@ -188,7 +183,6 @@ export class QuestionResponseService {
           gradingContext,
         ));
       } else {
-        // Get the appropriate grading strategy for this question type
         const gradingStrategy = this.gradingFactoryService.getStrategy(
           question.type,
           question.responseType,
@@ -200,7 +194,6 @@ export class QuestionResponseService {
           );
         }
 
-        // Use the strategy to process the response
         const isValid = await gradingStrategy.validateResponse(
           question,
           createQuestionResponseAttemptRequestDto,
@@ -225,25 +218,25 @@ export class QuestionResponseService {
         }
       }
     } catch (error: unknown) {
-      // Log the error and throw a user-friendly message
       const errorMessage =
         error instanceof Error ? error.message : String(error);
-      console.error(`Error processing question response:`, error);
+
       throw new BadRequestException(
         `Failed to process question response: ${errorMessage}`,
       );
     }
 
-    // Save the response to the database
-    await this.saveResponseToDatabase(
-      assignmentAttemptId,
-      questionId,
-      learnerResponse,
-      responseDto,
-      role,
-    );
+    // Only save to database if not an author
+    if (role !== UserRole.AUTHOR) {
+      await this.saveResponseToDatabase(
+        assignmentAttemptId,
+        questionId,
+        learnerResponse,
+        responseDto,
+        role,
+      );
+    }
 
-    // Populate the responseDto with additional data
     responseDto.questionId = questionId;
     responseDto.question = question.question;
 
@@ -262,7 +255,6 @@ export class QuestionResponseService {
     learnerResponse: any;
   }> {
     if (requestDto.learnerUrlResponse) {
-      // Use URL grading strategy
       const urlGradingStrategy = this.gradingFactoryService.getStrategy(
         QuestionType.URL,
       );
@@ -289,7 +281,6 @@ export class QuestionResponseService {
       );
       return { responseDto, learnerResponse };
     } else if (requestDto.learnerFileResponse) {
-      // Use File grading strategy
       const fileGradingStrategy = this.gradingFactoryService.getStrategy(
         QuestionType.UPLOAD,
       );
@@ -334,7 +325,7 @@ export class QuestionResponseService {
             role === UserRole.LEARNER ? assignmentAttemptId : 1,
           questionId: questionId,
           learnerResponse: JSON.stringify(learnerResponse ?? ""),
-          points: responseDto.totalPoints,
+          points: responseDto.totalPoints ?? 0,
           feedback: JSON.parse(JSON.stringify(responseDto.feedback)) as object,
           metadata: responseDto.metadata
             ? JSON.stringify(responseDto.metadata)
@@ -343,7 +334,6 @@ export class QuestionResponseService {
         },
       });
 
-      // Set the ID in the response DTO
       responseDto.id = result.id;
     } catch (error: unknown) {
       const errorMessage =
@@ -369,7 +359,6 @@ export class QuestionResponseService {
       questionAnswerContext: QuestionAnswerContext[];
     };
   }> {
-    // Try to get the pre-translated question if available
     if (preTranslatedQuestions && preTranslatedQuestions.has(questionId)) {
       const question = preTranslatedQuestions.get(questionId);
       const assignmentContext = await this.getAssignmentContext(
@@ -380,7 +369,6 @@ export class QuestionResponseService {
       return { question, assignmentContext };
     }
 
-    // Otherwise, get the question from the database
     const assignmentAttempt = await this.prisma.assignmentAttempt.findUnique({
       where: { id: assignmentAttemptId },
       include: {
@@ -399,7 +387,6 @@ export class QuestionResponseService {
       );
     }
 
-    // Check if this question has a variant for this attempt
     const variantMapping = assignmentAttempt.questionVariants.find(
       (qv) => qv.questionId === questionId,
     );
@@ -407,7 +394,6 @@ export class QuestionResponseService {
     let question: QuestionDto;
 
     if (variantMapping && variantMapping.questionVariant !== null) {
-      // Use the variant
       const variant = variantMapping.questionVariant;
       const baseQuestion = variant.variantOf;
 
@@ -434,7 +420,6 @@ export class QuestionResponseService {
           : null,
       };
     } else {
-      // Use the original question
       question = await this.questionService.findOne(questionId);
     }
 
@@ -508,7 +493,6 @@ export class QuestionResponseService {
       throw new NotFoundException(`Question with ID ${questionId} not found.`);
     }
 
-    // If no context questions are specified, return just the assignment instructions
     if (
       !question.gradingContextQuestionIds ||
       question.gradingContextQuestionIds.length === 0
@@ -540,7 +524,6 @@ export class QuestionResponseService {
       },
     });
 
-    // Get the most recent response for each question
     const responsesByQuestionId: Record<number, any> = {};
     for (const response of questionResponses) {
       if (!responsesByQuestionId[response.questionId]) {
@@ -548,16 +531,13 @@ export class QuestionResponseService {
       }
     }
 
-    // Build the question-answer context array
     const questionAnswerContext = await Promise.all(
       contextQuestions.map(async (contextQuestion) => {
         const response = responsesByQuestionId[contextQuestion.id];
         let learnerResponse = response?.learnerResponse || "";
 
-        // For URL responses, fetch the content if needed
         if (contextQuestion.type === QuestionType.URL && learnerResponse) {
           try {
-            // Parse learnerResponse in case it's JSON string
             let urlValue: string | { url: string };
             if (typeof learnerResponse === "string") {
               urlValue = this.isJsonString(learnerResponse)
@@ -567,14 +547,11 @@ export class QuestionResponseService {
               urlValue = learnerResponse as { url: string };
             }
 
-            // Get the URL string
             const url =
               typeof urlValue === "object" ? urlValue.url : String(urlValue);
 
-            // Fetch content from URL
             const content = await this.fetchUrlContent(String(url));
 
-            // Create a structured response with URL and content
             learnerResponse = JSON.stringify({
               url,
               content: content.body,
@@ -583,7 +560,6 @@ export class QuestionResponseService {
           } catch (error: unknown) {
             const errorMessage =
               error instanceof Error ? error.message : String(error);
-            console.error(`Error fetching URL content: ${errorMessage}`);
           }
         }
 
@@ -668,7 +644,7 @@ export class QuestionResponseService {
       } catch (error: unknown) {
         const errorMessage =
           error instanceof Error ? error.message : String(error);
-        console.error(`Error parsing JSON field: ${errorMessage}`);
+
         return null;
       }
     }
@@ -699,9 +675,7 @@ export class QuestionResponseService {
     const MAX_CONTENT_SIZE = 100_000;
     try {
       if (url.includes("github.com")) {
-        // Handle GitHub repository root URLs
         if (url.includes("/blob/")) {
-          // Handle regular GitHub file URLs
           const rawUrl = this.convertGitHubUrlToRaw(url);
           if (!rawUrl) {
             return { body: "", isFunctional: false };
@@ -716,16 +690,13 @@ export class QuestionResponseService {
             return { body, isFunctional: true };
           }
         } else {
-          // For repository root URLs, fetch the repository metadata or README if available
           try {
-            // Extract user and repo from the URL
             const repoMatch = url.match(
               /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/?$/,
             );
             if (repoMatch) {
               const [, user, repo] = repoMatch;
 
-              // Try to fetch the README.md first (most common case)
               const readmeUrl = `https://raw.githubusercontent.com/${user}/${repo}/main/README.md`;
               try {
                 const readmeResponse = await axios.get<string>(readmeUrl);
@@ -737,7 +708,6 @@ export class QuestionResponseService {
                   return { body, isFunctional: true };
                 }
               } catch {
-                // README.md might not exist or be on a different branch, try master branch
                 try {
                   const masterReadmeUrl = `https://raw.githubusercontent.com/${user}/${repo}/master/README.md`;
                   const masterReadmeResponse =
@@ -750,7 +720,6 @@ export class QuestionResponseService {
                     return { body, isFunctional: true };
                   }
                 } catch {
-                  // If README fetching failed, get repository info from GitHub API
                   const apiUrl = `https://api.github.com/repos/${user}/${repo}`;
                   try {
                     const apiResponse = await axios.get(apiUrl);
@@ -767,39 +736,34 @@ export class QuestionResponseService {
                       }\nLast Updated: ${repoInfo.updated_at}`;
                       return { body, isFunctional: true };
                     }
-                  } catch (apiError) {
-                    console.error("Error fetching repository info:", apiError);
+                  } catch {
+                    return { body: "", isFunctional: false };
                   }
                 }
               }
             }
-          } catch (repoError) {
-            console.error("Error processing GitHub repository URL:", repoError);
+          } catch {
+            return { body: "", isFunctional: false };
           }
 
-          // If all attempts to get content failed, scrape the GitHub page itself
           try {
             const response = await axios.get<string>(url);
             const $ = cheerio.load(response.data);
 
-            // Remove script tags and other potentially irrelevant elements
             $(
               "script, style, noscript, iframe, noembed, embed, object",
             ).remove();
 
-            // Try to extract the README content if displayed on the page
             let content = "";
             const readmeElement = $("article.markdown-body");
             if (readmeElement.length > 0) {
               content = readmeElement.text().trim();
             } else {
-              // Get repository description and other info
               const aboutSection = $(".Box-body");
               if (aboutSection.length > 0) {
                 content += aboutSection.text().trim() + "\n\n";
               }
 
-              // Get file listing
               const fileList = $(
                 "div.js-details-container div.js-navigation-container tr.js-navigation-item",
               );
@@ -823,8 +787,10 @@ export class QuestionResponseService {
                 isFunctional: true,
               };
             }
-          } catch (pageError) {
-            console.error("Error scraping GitHub page:", pageError);
+          } catch (error: unknown) {
+            const errorMessage =
+              error instanceof Error ? error.message : String(error);
+            console.error("Error fetching URL content:", errorMessage);
           }
         }
 
@@ -833,18 +799,13 @@ export class QuestionResponseService {
         const response = await axios.get<string>(url);
         const $ = cheerio.load(response.data);
 
-        // Remove script tags and other potentially irrelevant elements
         $("script, style, noscript, iframe, noembed, embed, object").remove();
 
-        const plainText = $("body")
-          .text()
-          .trim() // remove spaces from start and end
-          .replaceAll(/\s+/g, " "); // replace multiple spaces with a single space
+        const plainText = $("body").text().trim().replaceAll(/\s+/g, " ");
 
         return { body: plainText, isFunctional: true };
       }
-    } catch (error) {
-      console.error("Error fetching content from URL:", error);
+    } catch {
       return { body: "", isFunctional: false };
     }
   }

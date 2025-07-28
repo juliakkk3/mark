@@ -47,6 +47,7 @@ const ReportModal: FC<{
       }
     } catch (error) {
       console.error("Error submitting report:", error);
+      toast.error("Failed to submit the report. Please try again.");
     }
   };
   return (
@@ -93,7 +94,7 @@ const ReportModal: FC<{
                   Issue Type
                 </label>
                 <select
-                  className="w-full p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                   value={issueType}
                   onChange={(e) =>
                     setReportIssueType(e.target.value as REPORT_TYPE)
@@ -118,7 +119,7 @@ const ReportModal: FC<{
                   Description of the issue
                 </label>
                 <textarea
-                  className="w-full p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                   rows={5}
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}

@@ -70,7 +70,6 @@ export class MessagingClient {
   constructor(options: NatsConnectionOptions) {
     this.options = options;
 
-    // In a real implementation, we would establish a NATS connection here
     this.connect();
   }
 
@@ -79,28 +78,17 @@ export class MessagingClient {
    */
   private async connect(): Promise<void> {
     try {
-      // In a real implementation, this would connect to NATS
-      // For this example, we'll just simulate a successful connection
-      console.log(`[NATS] Connecting to ${this.options.servers.join(", ")}`);
-
-      // Simulate connection delay
       await new Promise((resolve) => setTimeout(resolve, 100));
 
       this.connected = true;
       this.reconnectAttempts = 0;
-      console.log(`[NATS] Connected successfully`);
     } catch (error) {
-      console.error(`[NATS] Connection error:`, error);
       this.connected = false;
       this.reconnectAttempts++;
 
       if (this.reconnectAttempts < this.maxReconnectAttempts) {
-        console.log(
-          `[NATS] Reconnect attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts}`,
-        );
         await this.connect();
       } else {
-        console.error(`[NATS] Max reconnect attempts reached`);
         throw new Error(
           `Failed to connect to NATS after ${this.maxReconnectAttempts} attempts`,
         );
@@ -120,18 +108,8 @@ export class MessagingClient {
       const { action, data } = params;
       const subject = `${this.options.organization}.${this.options.program}.${this.options.project}.service.${action}`;
 
-      // In a real implementation, this would publish to NATS
-      console.log(
-        `[NATS] Publishing to ${subject}:`,
-        JSON.stringify(data, null, 2),
-      );
-
-      // Simulate successful publish
       await new Promise((resolve) => setTimeout(resolve, 50));
-
-      console.log(`[NATS] Published successfully to ${subject}`);
     } catch (error) {
-      console.error(`[NATS] Publish error:`, error);
       throw error;
     }
   }
@@ -148,18 +126,8 @@ export class MessagingClient {
       const { organization, program, project, action, username, data } = params;
       const subject = `${organization}.${program}.${project}.user.${action}`;
 
-      // In a real implementation, this would publish to NATS
-      console.log(
-        `[NATS] Publishing user message to ${subject}:`,
-        JSON.stringify(data, null, 2),
-      );
-
-      // Simulate successful publish
       await new Promise((resolve) => setTimeout(resolve, 50));
-
-      console.log(`[NATS] Published user message successfully to ${subject}`);
     } catch (error) {
-      console.error(`[NATS] Publish user message error:`, error);
       throw error;
     }
   }
@@ -169,16 +137,10 @@ export class MessagingClient {
    */
   async close(): Promise<void> {
     try {
-      // In a real implementation, this would close the NATS connection
-      console.log(`[NATS] Closing connection`);
-
-      // Simulate closing delay
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       this.connected = false;
-      console.log(`[NATS] Connection closed successfully`);
     } catch (error) {
-      console.error(`[NATS] Close error:`, error);
       throw error;
     }
   }

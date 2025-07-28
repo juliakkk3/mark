@@ -45,7 +45,7 @@ export class Choice {
   feedback: string;
   id?: number;
 }
-class CriteriaDto {
+export class CriteriaDto {
   @ApiProperty({ description: "Description of the criteria", type: String })
   @IsString()
   description: string;
@@ -57,7 +57,6 @@ class CriteriaDto {
   @IsInt()
   points: number;
 
-  // id
   @ApiProperty({ description: "ID of the criteria", type: Number })
   @IsInt()
   @IsOptional()
@@ -95,6 +94,7 @@ export class ScoringDto {
   @ValidateNested({ each: true })
   @Type(() => RubricDto)
   rubrics: RubricDto[];
+
   @ApiProperty({
     description: "Show rubric to the learner",
     type: Boolean,
@@ -102,6 +102,14 @@ export class ScoringDto {
   @IsBoolean()
   @IsOptional()
   showRubricsToLearner?: boolean;
+
+  @ApiProperty({
+    description: "Show points to the learner",
+    type: Boolean,
+  })
+  @IsBoolean()
+  @IsOptional()
+  showPoints?: boolean;
 }
 export class VariantDto {
   @ApiProperty({ description: "Variant content of the question", type: String })
@@ -126,7 +134,6 @@ export class VariantDto {
   @Type(() => Choice)
   choices?: Choice[];
 
-  //scoring
   @ApiPropertyOptional({
     description: "Scoring configuration",
     type: ScoringDto,
@@ -158,7 +165,6 @@ export class VariantDto {
   @IsString()
   variantType: VariantType;
 
-  //randomizedChoices for the variant
   @ApiPropertyOptional({
     description: "Flag indicating if variant choices are randomized",
     type: Boolean,
@@ -181,8 +187,6 @@ export class QuestionDto {
     type: Number,
     required: false,
   })
-
-  //isDeleted
   @ApiProperty({
     description: "Flag indicating if question is deleted",
     type: Boolean,
@@ -272,7 +276,7 @@ export class QuestionDto {
   @ApiPropertyOptional({
     description:
       'The choices for the question (if the Question Type is "SINGLE_CORRECT" or "MULTIPLE_CORRECT").',
-    type: [Choice], // Use an array of Choice
+    type: [Choice],
   })
   @IsOptional()
   @IsArray()
@@ -468,6 +472,16 @@ export class UpdateAssignmentQuestionsDto {
   questionDisplay: QuestionDisplay | null;
 
   @ApiProperty({
+    description:
+      "The number of questions to be answered per attempt. (null means unlimited questions)",
+    type: Number,
+    required: false,
+  })
+  @IsOptional()
+  @IsInt()
+  numberOfQuestionsPerAttempt: number | null;
+
+  @ApiProperty({
     description: "Is the assignment published or not.",
     type: Boolean,
     required: false,
@@ -485,7 +499,7 @@ export class UpdateAssignmentQuestionsDto {
   @IsArray()
   @ArrayNotEmpty()
   @IsNumber({}, { each: true })
-  questionOrder: number[];
+  questionOrder?: number[];
 
   @ApiProperty({
     description:
@@ -517,6 +531,14 @@ export class UpdateAssignmentQuestionsDto {
   @IsOptional()
   @IsBoolean()
   showSubmissionFeedback: boolean;
+  @ApiProperty({
+    description: "show questions to the learner after its submission",
+    type: Boolean,
+    required: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  showQuestions: boolean;
 
   @ApiProperty({
     description: "updatedAt",
@@ -606,7 +628,6 @@ export class AttemptQuestionResponseDto {
   @IsInt()
   questionId: number;
 
-  // Example: storing the answer, correctness, partialScore, etc.
   @ApiPropertyOptional({
     description: "Learner's answer (if textual)",
     type: String,
@@ -673,7 +694,7 @@ export class AttemptQuestionDto {
 
   @ApiPropertyOptional({
     description: "Dictionary of translations keyed by language code",
-    // You may want `additionalProperties: { type: AttemptTranslationDto }` in Swagger if you prefer
+
     type: Object,
   })
   @IsOptional()

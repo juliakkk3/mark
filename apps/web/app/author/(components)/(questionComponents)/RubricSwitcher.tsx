@@ -3,11 +3,7 @@
 import { QuestionAuthorStore, Rubric } from "@/config/types";
 import { useAuthorStore } from "@/stores/author";
 import { TrashIcon } from "@heroicons/react/24/outline";
-import {
-  PencilIcon,
-  PlusIcon,
-  SparklesIcon,
-} from "@heroicons/react/24/solid";
+import { PencilIcon, PlusIcon, SparklesIcon } from "@heroicons/react/24/solid";
 import React, { useState } from "react";
 import CriteriaTable from "./CriteriaTable";
 
@@ -37,7 +33,7 @@ interface RubricSwitcherProps {
   onShiftCriteria: (rubricIndex: number) => void;
   onAiClick: (rubricIndex?: number) => void;
   maxPointsEver: number;
-  questionFromParent: QuestionAuthorStore; // Replace with a more specific type if available
+  questionFromParent: QuestionAuthorStore;
   questionId: number;
   variantId?: number;
   rowsRef: React.MutableRefObject<HTMLTableRowElement[]>;
@@ -119,7 +115,6 @@ const RubricItem: React.FC<RubricItemProps> = ({
     setRubricQuestionText(questionId, variantId, index, localRubricQuestion);
   };
 
-  // Build the questionCriteria object from the rubric's criteria
   const questionCriteria: QuestionCriteria = {
     points: [],
     criteriaDesc: [],
@@ -160,7 +155,7 @@ const RubricItem: React.FC<RubricItemProps> = ({
         )}
         <CriteriaTable
           preview={preview}
-          loading={loading && inProgressRubricIndex === index} // Show loading state only for the rubric being edited
+          loading={loading && inProgressRubricIndex === index}
           criteriaMode={criteriaMode}
           maxPointsEver={maxPointsEver}
           onAiClick={() => {
@@ -222,7 +217,7 @@ const RubricSwitcher: React.FC<RubricSwitcherProps> = ({
   swappingIndices,
   inProgressRubricIndex,
 }) => {
-  const rubric = questionFromParent.scoring.rubrics || [];
+  const rubric = questionFromParent?.scoring?.rubrics || [];
   const setRubricCriteriaDescription = useAuthorStore(
     (state) => state.setRubricCriteriaDescription,
   );

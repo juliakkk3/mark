@@ -2,7 +2,6 @@ import { ReplaceAssignmentRequest } from "@/config/types";
 import { useAssignmentConfig } from "@/stores/assignmentConfig";
 import { useAuthorStore } from "@/stores/author";
 
-// Create a custom hook that can be used inside React components
 export const useFilteredAssignmentConfig = (): ReplaceAssignmentRequest => {
   const {
     questionDisplay,

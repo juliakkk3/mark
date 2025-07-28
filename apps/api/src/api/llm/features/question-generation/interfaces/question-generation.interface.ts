@@ -1,4 +1,3 @@
-// src/llm/features/question-generation/interfaces/question-generation.interface.ts
 import { QuestionType } from "@prisma/client";
 import { QuestionsToGenerate } from "../../../../assignment/dto/post.assignment.request.dto";
 import {

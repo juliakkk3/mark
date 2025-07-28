@@ -31,9 +31,8 @@ export class AssignmentAttemptAccessControlGuard implements CanActivate {
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const queries: any[] = [
-      // Query to check if the assignment itself exists
       this.prisma.assignment.findUnique({ where: { id: assignmentId } }),
-      // Query to check if the user's groupId is associated with the assignment
+
       this.prisma.assignmentGroup.findFirst({
         where: {
           assignmentId: assignmentId,
@@ -58,10 +57,8 @@ export class AssignmentAttemptAccessControlGuard implements CanActivate {
       }
 
       if (userSession.role === UserRole.LEARNER) {
-        // check if attempt belongs to user
         const suspeciousUserId = userSession.userId;
 
-        // grab userId using attemptId
         const userId = await this.prisma.assignmentAttempt.findUnique({
           where: {
             id: Number(attemptIdString),
@@ -76,7 +73,7 @@ export class AssignmentAttemptAccessControlGuard implements CanActivate {
           );
         }
       }
-      // Query to check if the attempt belongs to the assignment and is owned by the user (if they're a learner)
+
       queries.push(
         this.prisma.assignmentAttempt.findFirst({ where: whereClause }),
       );
@@ -84,7 +81,7 @@ export class AssignmentAttemptAccessControlGuard implements CanActivate {
 
     if (questionIdString) {
       const questionId = Number(questionIdString);
-      // Query to check if the question belongs to the assignment
+
       queries.push(
         this.prisma.question.findFirst({
           where: {
@@ -95,17 +92,14 @@ export class AssignmentAttemptAccessControlGuard implements CanActivate {
       );
     }
 
-    // Execute all queries in a transaction
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     const [assignment, assignmentGroup, attempt, questionInAssignment] =
       await this.prisma.$transaction(queries);
 
-    // Check if the assignment exists
     if (!assignment) {
       throw new NotFoundException("Assignment not found");
     }
 
-    // Check if the user's groupId is associated with it
     if (!assignmentGroup) {
       return false;
     }

@@ -8,6 +8,7 @@ import {
   Criteria,
   QuestionAuthorStore,
   QuestionGenerationPayload,
+  ResponseType,
 } from "@/config/types";
 import { getJobStatus, uploadFiles } from "@/lib/talkToBackend";
 import { generateTempQuestionId } from "@/lib/utils";
@@ -18,16 +19,16 @@ import {
   IconInfoCircle,
   IconTrash,
 } from "@tabler/icons-react";
-import { AnimatePresence, motion } from "framer-motion"; // For animations
-import { ResponseType } from "@/config/types";
+import { AnimatePresence, motion } from "framer-motion";
 import Lottie from "lottie-react";
 import { useEffect, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { toast } from "sonner";
 import Modal from "./Modal";
 import Tooltip from "./Tooltip";
+import { processQuestions } from "@/app/Helpers/processQuestionsBeforePublish";
 
-const MAX_CHAR_LIMIT = 40000;
+const MAX_CHAR_LIMIT = 20000;
 
 interface FileUploadModalProps {
   onClose: () => void;
@@ -67,7 +68,7 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
   };
 
   const countTokens = (content: string): number => {
-    return content.split(/\s+/).length; // Example: tokenizes by spaces
+    return content.split(/\s+/).length;
   };
   const onDrop = async (acceptedFiles: File[]) => {
     const fileContents = await Promise.all(
@@ -81,7 +82,23 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
         };
       }),
     );
-    // append to existing files
+    if (fileContents.length === 0) {
+      toast.error("No valid files uploaded. Please try again.");
+      return;
+    }
+    if (
+      fileContents.some(
+        (file) =>
+          file.tokenCount > MAX_CHAR_LIMIT ||
+          file.content.length > MAX_CHAR_LIMIT,
+      )
+    ) {
+      toast.error(
+        `One or more files exceed the maximum character limit of ${MAX_CHAR_LIMIT}. Please shorten the content.`,
+      );
+      return;
+    }
+
     setFileUploaded(fileUploaded.concat(fileContents));
   };
 
@@ -188,7 +205,6 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
         setError("Failed to upload files");
       }
     } catch (error) {
-      console.error("Error reading files or uploading:", error);
       setError("An error occurred while uploading files.");
     }
   };
@@ -255,10 +271,11 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
                   );
                 }
               });
+              const processedQuestions = processQuestions(questionsGenerated);
               if (replaceExistingQuestions) {
-                setQuestions(questionsGenerated);
+                setQuestions(processedQuestions);
               } else {
-                setQuestions(questions.concat(questionsGenerated));
+                setQuestions(questions.concat(processedQuestions));
               }
             }
             setTimeout(() => onClose(), 2000);
@@ -270,7 +287,6 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
             }, 5000);
           }
         } catch (error: unknown) {
-          console.error("Error fetching job status:", error);
           clearInterval(intervalId);
           setError("An error occurred while fetching job status.");
         }
@@ -292,18 +308,16 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
         animate={{ y: 0, opacity: 1 }}
         exit={{ y: 50, opacity: 0 }}
       >
-        {/* Instruction */}
         <p className="text-gray-700 mb-2 bg-gray-100 p-4 rounded-md">
           Generate Questions by providing information. Information can be
           written and/or uploaded.
         </p>
-        {/* Learning Objectives Input */}
+
         <div className="my-6">
           <h2 className="text-md text-gray-600 mb-2">
             What are the learning objectives?
           </h2>
 
-          {/* Single text box to display all objectives */}
           <textarea
             value={learningObjectives}
             onChange={(e) => setLearningObjectives(e.target.value)}
@@ -312,7 +326,6 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
           />
         </div>
 
-        {/* File Upload Area */}
         <div className="mb-6">
           <h2 className="text-lg text-gray-600 mb-2">
             Upload additional resources (optional)
@@ -321,13 +334,15 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
             <motion.div
               whileHover={{ scale: 1.02 }}
               className={`flex flex-col items-center justify-center border-2 border-dashed p-6 rounded-md cursor-pointer transition-colors ${
-                isDragActive ? "border-blue-500 bg-blue-50" : "border-gray-300"
+                isDragActive
+                  ? "border-purple-500 bg-purple-50"
+                  : "border-gray-300"
               }`}
             >
               <input {...getInputProps()} />
               <IconCloudUpload size={50} className="text-gray-500 mb-4" />
               {isDragActive ? (
-                <p className="text-blue-500">Drop the files here...</p>
+                <p className="text-purple-500">Drop the files here...</p>
               ) : (
                 <>
                   <p className="text-gray-500">
@@ -355,7 +370,6 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
                       transition={{ duration: 0.3 }}
                     >
                       <div className="flex items-center justify-between space-x-3 px-4">
-                        {/* File Icon and Details */}
                         <button
                           className="flex items-center space-x-3"
                           onClick={() => {
@@ -382,7 +396,6 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
                           </div>
                         </button>
 
-                        {/* Action Buttons */}
                         <button
                           className="text-red-500 hover:text-red-600"
                           onClick={() =>
@@ -397,7 +410,7 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
                           <IconTrash size={20} />
                         </button>
                       </div>
-                      {/* Progress Bar and Status */}
+
                       <div className="flex-1 mx-4">
                         <p className="text-right text-sm  mb-2">SUCCESS</p>
                         <div className="relative h-1 w-full bg-gray-200 rounded">
@@ -427,18 +440,6 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
         <form onSubmit={handleSend} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="grid grid-row-2 gap-4">
-              {/* incase we want to add variations */}
-              {/* <div>
-                <label className="text-sm font-medium text-gray-700">
-                  Add Variations
-                </label>
-                <Dropdown
-                  selectedItem={selectedVariation}
-                  setSelectedItem={setSelectedVariation}
-                  items={variationOptions}
-                />
-              </div> */}
-
               <div>
                 <h1 className="text-lg font-medium text-gray-800">Styles</h1>
                 <div className="mt-2 space-y-4">
@@ -479,7 +480,7 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
                   >
                     <IconInfoCircle
                       size={16}
-                      className="text-gray-500 cursor-pointer ml-1" // Added slight margin for spacing
+                      className="text-gray-500 cursor-pointer ml-1"
                     />
                   </Tooltip>
                 </div>
@@ -511,7 +512,6 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
                 </p>
               </div>
 
-              {/* Existing question types */}
               <div className="flex items-center space-x-2">
                 <input
                   type="number"
@@ -584,7 +584,6 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
                 </label>
               </div>
 
-              {/* New question types */}
               <div className="flex items-center space-x-2 mt-4">
                 <input
                   type="number"
@@ -683,7 +682,7 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
           </button>
         </form>
       </motion.div>
-      {/* Loading Screen Overlay */}
+
       <AnimatePresence>
         {progress !== null && (
           <motion.div
@@ -720,7 +719,7 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
                 ) : null}
                 <motion.span
                   className="text-xl font-medium text-gray-800 transition-all duration-200"
-                  key={progressMessage} // Trigger motion on progress change
+                  key={progressMessage}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
@@ -757,7 +756,7 @@ const FileUploadModal = ({ onClose, questionId }: FileUploadModalProps) => {
             </pre>
             <button
               onClick={() => setFileInspectorModalOpen(false)}
-              className="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+              className="mt-4 px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600"
             >
               Close
             </button>

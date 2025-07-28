@@ -20,10 +20,8 @@ export class ReportService {
     description: string,
     userId: string,
   ): Promise<void> {
-    // Validate inputs
     this.validateReportInputs(issueType, description, userId);
 
-    // Ensure assignment exists
     const assignmentExists = await this.prisma.assignment.findUnique({
       where: { id: assignmentId },
     });
@@ -32,10 +30,8 @@ export class ReportService {
       throw new NotFoundException("Assignment not found");
     }
 
-    // Check for rate limiting
     await this.checkRateLimit(userId);
 
-    // Create the report
     await this.prisma.report.create({
       data: {
         assignmentId,
@@ -52,30 +48,26 @@ export class ReportService {
     description: string,
     userId: string,
   ): void {
-    // Check required fields
     if (!issueType || !description) {
       throw new BadRequestException("Issue type and description are required");
     }
 
-    // Validate issue type
     const validIssueTypes = Object.values(ReportType);
     if (!validIssueTypes.includes(issueType)) {
       throw new BadRequestException("Invalid issue type");
     }
 
-    // Validate user ID
     if (!userId || userId.trim() === "") {
       throw new BadRequestException("Invalid user ID");
     }
   }
 
   private async checkRateLimit(userId: string): Promise<void> {
-    // Check if user has submitted too many reports in the last 24 hours
     const recentReports = await this.prisma.report.findMany({
       where: {
         reporterId: userId,
         createdAt: {
-          gte: new Date(Date.now() - 24 * 60 * 60 * 1000), // Last 24 hours
+          gte: new Date(Date.now() - 24 * 60 * 60 * 1000),
         },
       },
     });

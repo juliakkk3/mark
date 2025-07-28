@@ -68,25 +68,6 @@ export class PresentationGradingStrategy extends AbstractGradingStrategy<Learner
       );
     }
 
-    // // Validate specific to response type
-    // if (question.responseType === 'LIVE_RECORDING') {
-    //   if (!this.validateLiveRecordingResponse(requestDto.learnerPresentationResponse)) {
-    //     throw new BadRequestException(
-    //       this.localizationService.getLocalizedString(
-    //         "invalidLiveRecordingResponse",
-    //         requestDto.language
-    //       )
-    //     );
-    //   }
-    // } else if (question.responseType === 'PRESENTATION' && !this.validatePresentationResponse(requestDto.learnerPresentationResponse)) {
-    //     throw new BadRequestException(
-    //       this.localizationService.getLocalizedString(
-    //         "invalidPresentationResponse",
-    //         requestDto.language
-    //       )
-    //     );
-    //   }
-
     return true;
   }
 
@@ -129,13 +110,10 @@ export class PresentationGradingStrategy extends AbstractGradingStrategy<Learner
     responseDto: CreateQuestionResponseAttemptResponseDto;
     learnerResponse: LearnerPresentationResponse;
   }> {
-    // Validate the response
     await this.validateResponse(question, requestDto);
 
-    // Extract the learner response
     const learnerResponse = await this.extractLearnerResponse(requestDto);
 
-    // Grade the response
     const responseDto = await this.gradeLiveRecording(
       question,
       learnerResponse,
@@ -156,13 +134,10 @@ export class PresentationGradingStrategy extends AbstractGradingStrategy<Learner
     responseDto: CreateQuestionResponseAttemptResponseDto;
     learnerResponse: LearnerPresentationResponse;
   }> {
-    // Validate the response
     await this.validateResponse(question, requestDto);
 
-    // Extract the learner response
     const learnerResponse = await this.extractLearnerResponse(requestDto);
 
-    // Grade the response
     const responseDto = await this.gradePresentation(
       question,
       learnerResponse,
@@ -180,7 +155,6 @@ export class PresentationGradingStrategy extends AbstractGradingStrategy<Learner
     learnerResponse: LearnerPresentationResponse,
     context: GradingContext,
   ): Promise<CreateQuestionResponseAttemptResponseDto> {
-    // Create evaluation model for the LLM
     const presentationQuestionEvaluateModel =
       new PresentationQuestionEvaluateModel(
         question.question,
@@ -194,17 +168,14 @@ export class PresentationGradingStrategy extends AbstractGradingStrategy<Learner
         question.responseType ?? "OTHER",
       );
 
-    // Use LLM to grade the response
     const gradingModel = await this.llmFacadeService.gradePresentationQuestion(
       presentationQuestionEvaluateModel,
       context.assignmentId,
     );
 
-    // Create and populate response DTO
     const responseDto = new CreateQuestionResponseAttemptResponseDto();
     AttemptHelper.assignFeedbackToResponse(gradingModel, responseDto);
 
-    // Add presentation-specific metadata
     if (learnerResponse && Array.isArray(learnerResponse)) {
       responseDto.metadata = {
         ...responseDto.metadata,
@@ -225,7 +196,6 @@ export class PresentationGradingStrategy extends AbstractGradingStrategy<Learner
     learnerResponse: LearnerPresentationResponse,
     context: GradingContext,
   ): Promise<CreateQuestionResponseAttemptResponseDto> {
-    // Create evaluation model for the LLM
     const videoPresentationQuestionEvaluateModel =
       new VideoPresentationQuestionEvaluateModel(
         question.question,
@@ -240,18 +210,15 @@ export class PresentationGradingStrategy extends AbstractGradingStrategy<Learner
         question.videoPresentationConfig,
       );
 
-    // Use LLM to grade the response
     const gradingModel =
       await this.llmFacadeService.gradeVideoPresentationQuestion(
         videoPresentationQuestionEvaluateModel,
         context.assignmentId,
       );
 
-    // Create and populate response DTO
     const responseDto = new CreateQuestionResponseAttemptResponseDto();
     AttemptHelper.assignFeedbackToResponse(gradingModel, responseDto);
 
-    // Add presentation-specific metadata
     if (learnerResponse && Array.isArray(learnerResponse)) {
       responseDto.metadata = {
         ...responseDto.metadata,
@@ -287,7 +254,6 @@ export class PresentationGradingStrategy extends AbstractGradingStrategy<Learner
     response: LearnerPresentationResponse,
   ): boolean {
     if (!response) {
-      console.log("Invalid presentation response HEREEEEEEE");
       return false;
     }
   }

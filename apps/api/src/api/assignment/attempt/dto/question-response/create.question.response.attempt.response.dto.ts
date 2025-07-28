@@ -50,13 +50,12 @@ export class CreateQuestionResponseAttemptResponseDto {
   })
   id: number;
 
-  // metadata
   @ApiProperty({
     description: "The metadata for the question response.",
     type: Object,
     required: false,
   })
-  metadata?: object;
+  metadata?: Record<string, unknown>;
 
   @ApiProperty({
     description: "The total points earned.",

@@ -4,6 +4,7 @@ import {
   IsString,
   Max,
   Min,
+  IsEmail,
 } from "class-validator";
 
 export class AssignmentFeedbackDto {
@@ -22,6 +23,22 @@ export class AssignmentFeedbackDto {
   @Min(1)
   @Max(5)
   assignmentRating?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  allowContact?: boolean;
+
+  @IsOptional()
+  @IsString()
+  firstName?: string;
+
+  @IsOptional()
+  @IsString()
+  lastName?: string;
+
+  @IsOptional()
+  @IsEmail()
+  email?: string;
 }
 export class RequestRegradingResponseDto {
   success: boolean;

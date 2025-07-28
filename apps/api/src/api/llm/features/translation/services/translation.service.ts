@@ -1,4 +1,3 @@
-// src/llm/features/translation/services/translation.service.ts
 import { Injectable, Inject, HttpException, HttpStatus } from "@nestjs/common";
 import { AIUsageType } from "@prisma/client";
 import { PromptTemplate } from "@langchain/core/prompts";
@@ -29,14 +28,12 @@ export class TranslationService implements ITranslationService {
   /**
    * Detect the language of text using cld library
    */
-  // This code block has been revised ✅
+
   async getLanguageCode(text: string): Promise<string> {
     if (!text) return "unknown";
 
-    // Check if the text is encoded in Base64 and decode if necessary
     const decodedText = decodeIfBase64(text) || text;
 
-    // Use cld to detect the language
     try {
       const response = await cld.detect(decodedText);
       return response.languages[0].code;
@@ -56,13 +53,10 @@ export class TranslationService implements ITranslationService {
     questionText: string,
     targetLanguage: string,
   ): Promise<string> {
-    // Check if the text is encoded in Base64 and decode if necessary
     const decodedQuestionText = decodeIfBase64(questionText) || questionText;
 
-    // Remove any HTML tags from the question text
     const cleanedText = decodedQuestionText.replaceAll(/<[^>]*>?/gm, "");
 
-    // Define the output schema
     const parser = StructuredOutputParser.fromZodSchema(
       z.object({
         translatedText: z.string().nonempty("Translated text cannot be empty"),
@@ -71,7 +65,6 @@ export class TranslationService implements ITranslationService {
 
     const formatInstructions = parser.getFormatInstructions();
 
-    // Create prompt template
     const prompt = new PromptTemplate({
       template: this.getQuestionTranslationTemplate(),
       inputVariables: [],
@@ -83,7 +76,6 @@ export class TranslationService implements ITranslationService {
     });
 
     try {
-      // Process the prompt through the LLM
       const response = await this.promptProcessor.processPrompt(
         prompt,
         assignmentId,
@@ -91,7 +83,6 @@ export class TranslationService implements ITranslationService {
         "gpt-4o-mini",
       );
 
-      // Parse the response into the expected output format
       const parsedResponse = await parser.parse(response);
       return parsedResponse.translatedText;
     } catch (error) {
@@ -161,7 +152,6 @@ export class TranslationService implements ITranslationService {
         `Error translating choice text: ${error instanceof Error ? error.message : String(error)}`,
       );
 
-      // Return the original choices if there's an error
       return choices;
     }
   }

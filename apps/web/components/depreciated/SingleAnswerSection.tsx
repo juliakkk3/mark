@@ -1,7 +1,5 @@
 "use client";
 
-// COMMENT: this is the component where we show single answer question section for the author
-// this contains "points", and the "add options"
 import { useState } from "react";
 
 interface SingleAnswerSectionProps {
@@ -25,14 +23,10 @@ function SingleAnswerSection(props: SingleAnswerSectionProps) {
     Array(choicesSingleCorrect.length).fill(0),
   );
 
-  // Add a new function to handle changes to the points input
   const handlePointsChange = (index, value) => {
-    // Parse the value as an integer
     const intValue = ~~value;
 
-    // Check if the value is a positive integer
     if (Number.isInteger(intValue) && intValue >= 0) {
-      // Update the points for the specified choice
       const updatedPoints = [...points];
       updatedPoints[index] = intValue;
       setPoints(updatedPoints);
@@ -67,21 +61,17 @@ function SingleAnswerSection(props: SingleAnswerSectionProps) {
             onChange={() => handleChoiceToggleSingleCorrect(index)}
             className="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"
           />
-          <div className="ml-2">
-            {" "}
-            {/* Add margin to create space */}
-            {String.fromCharCode(65 + index)}.
-          </div>
+          <div className="ml-2"> {String.fromCharCode(65 + index)}.</div>
 
           <textarea
-            className="w-[800px] p-2 border-transparent mb-[10px] rounded-md text-black bg-transparent outline-none" // Removed 'border ml-2' and added 'w-full'
+            className="w-[800px] p-2 border-transparent mb-[10px] rounded-md text-black bg-transparent outline-none"
             placeholder={`Choice ${index + 1}`}
             value={choice}
             onChange={(event) =>
               handleChoiceChangeSingleCorrect(index, event.target.value)
             }
             style={{
-              height: "2.0rem", // Changed 'height' to 'minHeight'
+              height: "2.0rem",
               maxWidth: "100%",
               overflow: "hidden",
               resize: "vertical",
@@ -152,8 +142,8 @@ function SingleAnswerSection(props: SingleAnswerSectionProps) {
             style={{
               fontSize: "0.8rem",
               marginLeft: "0.5rem",
-              whiteSpace: "nowrap", // Prevent text from wrapping
-              display: "inline-block", // Ensure it stays on one line
+              whiteSpace: "nowrap",
+              display: "inline-block",
             }}
           >
             Add Option

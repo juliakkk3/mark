@@ -18,9 +18,9 @@ export const useAppConfig = createWithEqualityFn<
     devtools(
       withUpdatedAt((set, get) => ({
         DEBUG_MODE: false,
-        tips: true, // Whether to show tips
-        tipsVersion: "v1.0", // Current version of tips content
-        persistTips: false, // Whether user wants their choice to persist
+        tips: true,
+        tipsVersion: "v1.0",
+        persistTips: false,
         setPersistTips: (persistTips: boolean) => set({ persistTips }),
         setTips: (tips: boolean) => set({ tips }),
         SET_DEBUG_MODE: (debugMode: boolean) => set({ DEBUG_MODE: debugMode }),
@@ -44,7 +44,7 @@ export const useAppConfig = createWithEqualityFn<
           : undefined,
       partialize(state) {
         const { DEBUG_MODE, tips, tipsVersion, persistTips } = state;
-        // if persistTips is true, persist the tips value, else reset to true
+
         if (persistTips) {
           return { DEBUG_MODE, tips, tipsVersion, persistTips };
         }

@@ -10,8 +10,8 @@ const SyntaxHighlighter =
 interface FileViewerProps {
   file: {
     filename: string;
-    content: string; // Directly passed content (for images, expected to be a Data URL)
-    blob: Blob; // Unused for now (but could be used if needed)
+    content: string;
+    blob: Blob;
   };
   onClose: () => void;
 }
@@ -20,7 +20,6 @@ const FileViewer = ({ file, onClose }: FileViewerProps) => {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Simulate loading delay
     const timer = setTimeout(() => {
       setIsLoading(false);
     }, 500);
@@ -30,7 +29,6 @@ const FileViewer = ({ file, onClose }: FileViewerProps) => {
 
   const extension: string =
     file.filename.split(".").pop()?.toLowerCase().toString() || "";
-
   const renderContent = () => {
     switch (extension) {
       case "txt":
@@ -39,6 +37,7 @@ const FileViewer = ({ file, onClose }: FileViewerProps) => {
       case "ipynb":
       case "docx":
       case "pptx":
+      case "pdf":
         return (
           <FeedbackFormatter className="text-sm whitespace-pre-wrap bg-gray-100 p-4 rounded-md text-gray-600">
             {file.content}
@@ -96,7 +95,6 @@ const FileViewer = ({ file, onClose }: FileViewerProps) => {
           </button>
         </div>
         {isLoading ? (
-          // Loading spinner
           <div className="flex justify-center items-center h-40">
             <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-violet-600"></div>
           </div>

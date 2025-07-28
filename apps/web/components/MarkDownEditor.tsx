@@ -7,8 +7,8 @@ import {
   useState,
   type ComponentPropsWithoutRef,
 } from "react";
-import "quill/dist/quill.snow.css"; // Ensure correct CSS import
-import "highlight.js/styles/vs2015.css"; // Import a Highlight.js theme
+import "quill/dist/quill.snow.css";
+import "highlight.js/styles/vs2015.css";
 
 import { cn } from "@/lib/strings";
 import hljs from "highlight.js";
@@ -51,8 +51,6 @@ const MarkdownEditor: React.FC<Props> = ({
           if (index > 0) toolbar.remove();
         });
 
-        // Ensure hljs is available globally
-        // @ts-ignore
         window.hljs = hljs;
 
         const QuillModule = await import("quill");
@@ -90,9 +88,10 @@ const MarkdownEditor: React.FC<Props> = ({
               setCharCount(charCount);
               setValue(quill.root.innerHTML);
             } else {
-              quill.deleteText(charCount - 1, charCount); // Prevent typing beyond the character limit
+              quill.deleteText(charCount - 1, charCount);
             }
-          } else if (maxWords && maxWords > 0) {
+          }
+          if (maxWords && maxWords > 0) {
             const wordsArray = text.split(/\s+/).filter(Boolean);
             const wordCount = wordsArray.length;
 
@@ -100,7 +99,7 @@ const MarkdownEditor: React.FC<Props> = ({
               setWordCount(wordCount);
               setValue(quill.root.innerHTML);
             } else {
-              quill.deleteText(text.length - 1, text.length); // Prevent typing beyond the word limit
+              quill.deleteText(text.length - 1, text.length);
             }
           } else {
             setValue(quill.root.innerHTML);
@@ -124,12 +123,10 @@ const MarkdownEditor: React.FC<Props> = ({
     };
   }, [quillInstance]);
 
-  // Keep the value in sync with the editor
   useEffect(() => {
     if (quillInstance) {
-      // Get the current content of the editor
       const currentHTML = quillInstance.root.innerHTML;
-      // Only update if the external value is different and the editor is not focused.
+
       if (currentHTML !== value && !quillInstance.hasFocus()) {
         quillInstance.root.innerHTML = value;
       }

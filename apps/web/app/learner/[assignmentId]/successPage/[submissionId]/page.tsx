@@ -10,7 +10,6 @@ import {
   RegradingRequest,
 } from "@/config/types";
 import {
-  getAttempt,
   getCompletedAttempt,
   getFeedback,
   getUser,
@@ -25,7 +24,6 @@ import Particles from "@tsparticles/react";
 import { AnimatePresence, motion } from "framer-motion";
 import dynamic from "next/dynamic";
 import Image, { StaticImageData } from "next/image";
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
@@ -33,7 +31,7 @@ import {
   CircularProgressbarWithChildren,
 } from "react-circular-progressbar";
 import Question from "../Question";
-import "@smastrom/react-rating/style.css"; // Import rating component styles
+import "@smastrom/react-rating/style.css";
 
 import Button from "@/components/Button";
 import ReportModal from "@/components/ReportModal";
@@ -49,29 +47,32 @@ function SuccessPage() {
   const pathname: string = usePathname();
   const attemptId = parseInt(pathname.split("/")?.[4], 10);
   const assignmentId = parseInt(pathname.split("/")?.[2], 10);
-  // if the camera is on, we need to stop it
 
-  // Local state variables
   const [questions, setQuestions] = useState([]);
   const [grade, setGrade] = useState(0);
   const [totalPointsEarned, setTotalPointsEarned] = useState(0);
   const [totalPoints, setTotalPoints] = useState(0);
   const [assignmentDetails, setAssignmentDetails] =
     useState<AssignmentDetails>();
+  const [showSubmissionFeedback, setShowSubmissionFeedback] =
+    useState<boolean>(false);
+  const [zustandShowSubmissionFeedback, zustandShowQuestions] =
+    useAssignmentDetails((state) => [
+      state.assignmentDetails?.showSubmissionFeedback ?? true,
+      state.assignmentDetails?.showQuestions ?? true,
+    ]);
 
-  // Zustand state variables
   const [zustandQuestions, zustandTotalPointsEarned, zustandTotalPoints] =
     useLearnerStore((state) => [
       state.questions,
       state.totalPointsEarned,
       state.totalPointsPossible,
     ]);
-  const setShowSubmissionFeedback = useLearnerStore(
-    (state) => state.setShowSubmissionFeedback,
-  );
   const [zustandAssignmentDetails, zustandGrade] = useAssignmentDetails(
     (state) => [state.assignmentDetails, state.grade],
   );
+
+  const [showQuestions, setShowQuestions] = useState<boolean>(false);
 
   const [pageHeight, setPageHeight] = useState<number>(0);
   const [loading, setLoading] = useState(true);
@@ -81,15 +82,18 @@ function SuccessPage() {
   const [init, setInit] = useState(false);
   const [playAnimations, setPlayAnimations] = useState(true);
 
-  // New state variables for feedback modal
   const [comments, setComments] = useState("");
   const [aiGradingRating, setAiGradingRating] = useState(0);
   const [assignmentRating, setAssignmentRating] = useState(0);
   const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState(false);
+  const [allowContact, setAllowContact] = useState(false);
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [email, setEmail] = useState("");
   useEffect(() => {
     window.dispatchEvent(new Event("resize"));
   }, [isFeedbackModalOpen]);
-  // State variables for regrading request modal
+
   const [regradingRequest, setRegradingRequest] = useState(false);
   const [regradingReason, setRegradingReason] = useState("");
   const [isRegradingModalOpen, setIsRegradingModalOpen] = useState(false);
@@ -108,7 +112,6 @@ function SuccessPage() {
       setRole(user.role);
       setUserId(user.userId);
       if (user.role === "learner") {
-        // Fetch data from backend for learners
         try {
           const submissionDetails: AssignmentAttemptWithQuestions =
             await getCompletedAttempt(assignmentId, attemptId);
@@ -117,6 +120,7 @@ function SuccessPage() {
           setShowSubmissionFeedback(
             submissionDetails.showSubmissionFeedback || false,
           );
+          setShowQuestions(submissionDetails.showQuestions);
           setUserPreferredLanguage(submissionDetails.preferredLanguage);
           setGrade(submissionDetails.grade * 100);
           if (submissionDetails.totalPointsEarned) {
@@ -148,17 +152,16 @@ function SuccessPage() {
           setLoading(false);
         }
       } else if (user.role === "author") {
-        // Use Zustand state for authors
+        setShowSubmissionFeedback(zustandShowSubmissionFeedback);
         setQuestions(zustandQuestions);
+        setShowQuestions(zustandShowQuestions);
         setGrade(zustandGrade);
         setTotalPointsEarned(zustandTotalPointsEarned);
         setTotalPoints(zustandTotalPoints);
         setAssignmentDetails(zustandAssignmentDetails);
         setLoading(false);
       } else {
-        // Handle other roles or errors
         setLoading(false);
-        // Optionally, show an error message or redirect
       }
     };
     void fetchData();
@@ -172,28 +175,25 @@ function SuccessPage() {
     zustandAssignmentDetails,
   ]);
 
-  // Use Effect to Play Animations Once
   useEffect(() => {
-    setPlayAnimations(true); // Trigger animations only once
-    const timeout = setTimeout(() => setPlayAnimations(false), 5000); // Stop animations after 5 seconds
-    return () => clearTimeout(timeout); // Cleanup timeout on unmount
-  }, [grade]); // Trigger only when `grade` changes
+    setPlayAnimations(true);
+    const timeout = setTimeout(() => setPlayAnimations(false), 5000);
+    return () => clearTimeout(timeout);
+  }, [grade]);
 
-  // Animation for the crown falling effect
   const crownAnimation = {
     initial: { y: -250, x: 0, opacity: 0 },
     animate: { y: 0, opacity: 1 },
     transition: { type: "spring", stiffness: 50, damping: 10, duration: 1 },
   };
 
-  // Custom animations based on grade
   const fireworksOptions = {
     fullScreen: {
       zIndex: 1,
     },
     particles: {
       number: {
-        value: 50, // Initial fireworks burst
+        value: 50,
       },
       color: {
         value: ["#ff0000", "#ffcc00", "#00ff00", "#00aaff"],
@@ -202,13 +202,13 @@ function SuccessPage() {
         type: ["circle"],
       },
       opacity: {
-        value: 1, // Full opacity for fireworks
+        value: 1,
       },
       size: {
-        value: { min: 3, max: 7 }, // Small particles for fireworks
+        value: { min: 3, max: 7 },
       },
       emitters: {
-        direction: "bottom", // Emit particles from the top
+        direction: "bottom",
         position: {
           x: 50,
           y: 0,
@@ -220,25 +220,25 @@ function SuccessPage() {
       },
       move: {
         enable: true,
-        speed: 60, // Fast speed for fireworks
-        direction: "none" as const, // Spread in all directions
+        speed: 60,
+        direction: "none" as const,
         random: true,
         straight: false,
         outModes: {
-          default: "destroy" as const, // Disappear after leaving the screen
+          default: "destroy" as const,
         },
       },
       life: {
         duration: {
           sync: true,
-          value: 2, // Short lifespan
+          value: 2,
         },
       },
       explode: {
-        enable: true, // Fireworks explode effect
+        enable: true,
       },
       gravity: {
-        enable: false, // No gravity for fireworks
+        enable: false,
       },
     },
   };
@@ -251,10 +251,8 @@ function SuccessPage() {
       setPageHeight(window.innerHeight);
     };
 
-    // Set initial height
     updatePageHeight();
 
-    // Update height on resize
     window.addEventListener("resize", updatePageHeight);
     return () => {
       window.removeEventListener("resize", updatePageHeight);
@@ -268,34 +266,34 @@ function SuccessPage() {
     frameRate: 30,
     particles: {
       number: {
-        value: 20, // Initial set of sparkles
+        value: 20,
       },
       color: {
-        value: ["#FFD700"], // only gold
+        value: ["#FFD700"],
       },
       shape: {
-        type: ["star"], // Star-shaped sparkles
+        type: ["star"],
       },
       opacity: {
-        value: 1, // Full opacity for bright sparkles
+        value: 1,
       },
       size: {
-        value: { min: 3, max: 8 }, // Small sparkles
+        value: { min: 3, max: 8 },
       },
       move: {
         enable: true,
-        speed: { min: 20, max: 30 }, // Fast movement for sparkles
-        direction: "none" as const, // Random movement
+        speed: { min: 20, max: 30 },
+        direction: "none" as const,
         random: true,
         straight: false,
         outModes: {
-          default: "destroy" as const, // Disappear after leaving the screen
+          default: "destroy" as const,
         },
       },
       life: {
         duration: {
           sync: true,
-          value: 2, // Short lifespan
+          value: 2,
         },
       },
       rotate: {
@@ -307,7 +305,7 @@ function SuccessPage() {
         },
       },
       gravity: {
-        enable: false, // No gravity for sparkles
+        enable: false,
       },
     },
   };
@@ -333,7 +331,6 @@ function SuccessPage() {
 
   const handleSubmitFeedback = async () => {
     if (assignmentId === null || attemptId === null) {
-      console.error("Missing assignmentId or attemptId");
       return;
     }
     if (comments === "") {
@@ -344,17 +341,25 @@ function SuccessPage() {
       toast.error("Please rate the assignment and AI grading.");
       return;
     }
-    // Construct feedback object
+
+    if (allowContact && (!firstName || !lastName || !email)) {
+      toast.error("Please provide your contact information.");
+      return;
+    }
+
     const feedbackData: AssignmentFeedback = {
       assignmentId: assignmentDetails?.id || assignmentId,
       userId: userId,
       comments,
       aiGradingRating,
       assignmentRating,
+      allowContact,
+      firstName: allowContact ? firstName : undefined,
+      lastName: allowContact ? lastName : undefined,
+      email: allowContact ? email : undefined,
     };
 
     try {
-      // Submit feedback to backend
       const response = await submitFeedback(
         assignmentId,
         attemptId,
@@ -367,12 +372,10 @@ function SuccessPage() {
         toast.error("Failed to submit feedback. Please try again.");
       }
     } catch (error) {
-      console.error("Error submitting feedback:", error);
       toast.error("Failed to submit feedback. Please try again.");
     }
   };
   const handleSubmitRegradingRequest = async () => {
-    // Construct regrading request object
     const regradingData: RegradingRequest = {
       assignmentId: assignmentId,
       userId: userId,
@@ -384,19 +387,15 @@ function SuccessPage() {
       return;
     }
     if (assignmentDetails?.id === null) {
-      console.error("Missing assignmentId");
       return;
     }
     if (userId === null) {
-      console.error("Missing userId");
       return;
     }
     if (attemptId === null) {
-      console.error("Missing attemptId");
       return;
     }
     try {
-      // Submit regrading request to backend
       const response = await submitRegradingRequest(regradingData);
       if (response === true) {
         toast.success("Regrading request submitted successfully!");
@@ -405,14 +404,12 @@ function SuccessPage() {
         toast.error("Failed to submit regrading request. Please try again.");
       }
     } catch (error) {
-      console.error("Error submitting regrading request:", error);
       toast.error("Failed to submit regrading request. Please try again.");
     }
   };
 
   return (
     <div className="relative pt-12 md:pt-16 flex flex-col items-center justify-start w-full min-h-screen gap-y-6 bg-gradient-to-b overflow-y-auto">
-      {/* Fireworks Animation for Perfect Score */}
       {init && grade >= 90 && playAnimations && (
         <Particles
           id="fireworks"
@@ -421,7 +418,6 @@ function SuccessPage() {
         />
       )}
 
-      {/* Sparkles Animation for Medium Grade */}
       {init && grade >= 60 && grade < 90 && playAnimations && (
         <Particles
           id="sparkles"
@@ -429,7 +425,7 @@ function SuccessPage() {
           className="absolute inset-0 z-0"
         />
       )}
-      {/* Confetti Animation */}
+
       {grade >= passingGrade && (
         <DynamicConfetti
           recycle={false}
@@ -440,8 +436,6 @@ function SuccessPage() {
       )}
       <div className="w-full max-w-4xl z-10 px-4 sm:px-6 md:px-8">
         <div className="flex flex-col items-center text-center gap-y-6">
-          {/* Achievement Badge */}
-
           {!Number.isNaN(grade) ? (
             <>
               <div className="w-full flex flex-col md:flex-row md:items-center justify-center gap-6 md:gap-16 bg-white p-6 rounded-lg shadow-md">
@@ -496,7 +490,6 @@ function SuccessPage() {
                     )}
                   </motion.p>
 
-                  {/* required passing grade  */}
                   <motion.p
                     className="text-xl text-black"
                     initial={{ opacity: 0, y: 30 }}
@@ -504,7 +497,7 @@ function SuccessPage() {
                   >
                     Required passing grade: {passingGrade}%
                   </motion.p>
-                  {/* status */}
+
                   <motion.p
                     className="text-xl "
                     initial={{ opacity: 0, y: 30 }}
@@ -593,32 +586,38 @@ function SuccessPage() {
             </button>
           </div>
         )}
-        {/* Questions Summary */}
-        <div className="mt-4">
-          {questions.map((question: QuestionStore, index: number) => (
-            <motion.div
-              className="p-4 sm:p-6  bg-white rounded-lg shadow-lg w-full max-w-4xl mx-auto mb-6"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              key={question.id}
-            >
-              <Question
-                number={index + 1}
-                question={question}
-                language={userPreferredLanguage}
-              />
-            </motion.div>
-          ))}
-        </div>
-        {/* Action Buttons */}
+
+        {(role === "learner" && showQuestions) ||
+        (role === "author" && showQuestions) ? (
+          <div className="mt-4">
+            {questions.map((question: QuestionStore, index: number) => (
+              <motion.div
+                className="p-4 sm:p-6  bg-white rounded-lg shadow-lg w-full max-w-4xl mx-auto mb-6"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                key={question.id}
+              >
+                <Question
+                  number={index + 1}
+                  question={question}
+                  language={userPreferredLanguage}
+                  showSubmissionFeedback={showSubmissionFeedback}
+                />
+              </motion.div>
+            ))}
+          </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center mt-4 sm:p-6  bg-white rounded-lg shadow-lg w-full max-w-4xl mx-auto mb-6">
+            <h2 className="text-2xl font-bold text-gray-800 mb-4">
+              Questions are hidden
+            </h2>
+            <p className="text-gray-600">
+              The author has chosen to hide the questions for this assignment.
+            </p>
+          </div>
+        )}
+
         <div className="flex flex-wrap justify-between mb-10 px-5">
-          {/* This should stay commented until the author new interface is ready */}
-          {/* <button
-            onClick={() => setIsRegradingModalOpen(true)}
-            className="px-6 py-3 bg-violet-100 hover:bg-violet-200 text-violet-800 rounded-md transition "
-          >
-            <div className="flex items-center gap-x-2">Report a Mark Error</div>
-          </button> */}
           {role === "learner" && (
             <div className="flex items-center gap-x-4 justify-center">
               <button
@@ -639,7 +638,6 @@ function SuccessPage() {
             }
             className="px-6 py-3 bg-violet-600 hover:bg-violet-500 text-white rounded-md transition flex items-center gap-2 shadow-lg mt-2"
           >
-            {/* SVG Icon */}
             <svg
               className="w-5 h-5"
               fill="none"
@@ -652,7 +650,7 @@ function SuccessPage() {
           </Button>
         </div>
       </div>
-      {/* Feedback Modal */}
+
       <AnimatePresence>
         {isFeedbackModalOpen && (
           <Dialog
@@ -666,7 +664,6 @@ function SuccessPage() {
             exit={{ opacity: 0 }}
           >
             <div className="min-h-screen px-4 text-center">
-              {/* Centering Modal Content */}
               <span
                 className="inline-block h-screen align-middle"
                 aria-hidden="true"
@@ -694,7 +691,6 @@ function SuccessPage() {
                   </DialogTitle>
 
                   <div className="flex flex-col items-center gap-4 mb-4">
-                    {/* Assignment Rating */}
                     <div className="text-center">
                       <label className="block text-gray-700 font-semibold mb-2">
                         Rate the Assignment
@@ -713,7 +709,7 @@ function SuccessPage() {
                         }}
                       />
                     </div>
-                    {/* AI Grading Rating */}
+
                     <div className="text-center">
                       <label className="block text-gray-700 font-semibold mb-2">
                         Rate the AI Grading
@@ -734,24 +730,77 @@ function SuccessPage() {
                     </div>
                   </div>
 
-                  {/* Comments */}
                   <div>
                     <label className="block text-gray-700 font-semibold mb-2">
                       Your Comments:
                     </label>
                     <textarea
-                      className="w-full p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                       rows={3}
                       value={comments}
                       onChange={(e) => setComments(e.target.value)}
                       placeholder="Share your thoughts or suggestions..."
                     ></textarea>
                   </div>
-                  {/* Submit Button */}
+
+                  <div className="flex items-center mt-4">
+                    <input
+                      type="checkbox"
+                      id="allowContact"
+                      checked={allowContact}
+                      onChange={(e) => setAllowContact(e.target.checked)}
+                      className="mr-2 h-4 w-4 text-violet-600 focus:ring-violet-500 border-gray-300 rounded"
+                    />
+                    <label htmlFor="allowContact" className="text-gray-700">
+                      I would like to be contacted regarding my feedback
+                    </label>
+                  </div>
+
+                  {allowContact && (
+                    <div className="mt-4 space-y-3">
+                      <div>
+                        <label className="block text-gray-700 font-semibold mb-2">
+                          First Name:
+                        </label>
+                        <input
+                          type="text"
+                          className="w-full p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                          value={firstName}
+                          onChange={(e) => setFirstName(e.target.value)}
+                          placeholder="Enter your first name"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-gray-700 font-semibold mb-2">
+                          Last Name:
+                        </label>
+                        <input
+                          type="text"
+                          className="w-full p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                          value={lastName}
+                          onChange={(e) => setLastName(e.target.value)}
+                          placeholder="Enter your last name"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-gray-700 font-semibold mb-2">
+                          Email:
+                        </label>
+                        <input
+                          type="email"
+                          className="w-full p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          placeholder="Enter your email address"
+                        />
+                      </div>
+                    </div>
+                  )}
+
                   <div className="text-center">
                     <button
                       onClick={handleSubmitFeedback}
-                      className="px-6 py-2 mt-2 bg-violet-600 hover:bg-violet-500 text-white rounded-md transition shadow-lg"
+                      className="px-6 py-2 mt-4 bg-violet-600 hover:bg-violet-500 text-white rounded-md transition shadow-lg"
                     >
                       Submit Feedback
                     </button>
@@ -773,78 +822,6 @@ function SuccessPage() {
           />
         )}
       </AnimatePresence>
-
-      {/* Regrading Request Modal */}
-      {/* This should stay commented until the author new interface is ready */}
-      {/* <AnimatePresence>
-        {isRegradingModalOpen && (
-          <Dialog
-            as={motion.div}
-            static
-            className="fixed inset-0 z-50 overflow-y-auto bg-black bg-opacity-50"
-            open={isRegradingModalOpen}
-            onClose={() => setIsRegradingModalOpen(false)}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-          >
-            <div className="min-h-screen px-4 text-center">
-              <span
-                className="inline-block h-screen align-middle"
-                aria-hidden="true"
-              >
-                &#8203;
-              </span>
-              <motion.div
-                className="inline-block w-full max-w-md p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-lg"
-                initial={{ scale: 0.9 }}
-                animate={{ scale: 1 }}
-                exit={{ scale: 0.9 }}
-              >
-                <DialogPanel>
-                  <DialogTitle
-                    as="h3"
-                    className="text-lg font-medium leading-6 text-gray-900 mb-4"
-                  >
-                    <div className="flex justify-between items-center">
-                      Regrading Form Request
-                      <XMarkIcon
-                        className="w-6 h-6 text-gray-500 hover:cursor-pointer"
-                        onClick={() => setIsRegradingModalOpen(false)}
-                      />
-                    </div>
-                  </DialogTitle>
-                  <div className="space-y-4">
-                    <div className="text-gray-600">
-                      Regraded will be sent to and completed an instructor.
-                    </div>
-                    <div>
-                      <label className="block text-gray-700 font-semibold mb-2">
-                        Reason for Regrading:
-                      </label>
-                      <textarea
-                        className="w-full p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        rows={5}
-                        value={regradingReason}
-                        onChange={(e) => setRegradingReason(e.target.value)}
-                        placeholder="Provide details for your regrading request..."
-                      ></textarea>
-                    </div>
-                    <div className="text-center">
-                      <button
-                        onClick={handleSubmitRegradingRequest}
-                        className="px-6 py-2 bg-violet-600 hover:bg-violet-500 text-white rounded-md transition shadow-lg"
-                      >
-                        Submit Regrading Request
-                      </button>
-                    </div>
-                  </div>
-                </DialogPanel>
-              </motion.div>
-            </div>
-          </Dialog>
-        )}
-      </AnimatePresence> */}
     </div>
   );
 }

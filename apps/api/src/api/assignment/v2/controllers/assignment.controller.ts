@@ -26,6 +26,7 @@ import {
   ApiTags,
   refs,
 } from "@nestjs/swagger";
+import { Request } from "express";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Observable } from "rxjs";
 import {
@@ -33,28 +34,29 @@ import {
   UserSessionRequest,
 } from "src/auth/interfaces/user.session.interface";
 import { Roles } from "src/auth/role/roles.global.guard";
+import { PrismaService } from "src/prisma.service";
 import { Logger } from "winston";
 import { ReportRequestDTO } from "../../attempt/dto/assignment-attempt/post.assignment.report.dto";
 import { ASSIGNMENT_SCHEMA_URL } from "../../constants";
 import { BaseAssignmentResponseDto } from "../../dto/base.assignment.response.dto";
 import {
+  AssignmentResponseDto,
   GetAssignmentResponseDto,
   LearnerGetAssignmentResponseDto,
-  AssignmentResponseDto,
 } from "../../dto/get.assignment.response.dto";
 import { QuestionGenerationPayload } from "../../dto/post.assignment.request.dto";
 import { ReplaceAssignmentRequestDto } from "../../dto/replace.assignment.request.dto";
 import { UpdateAssignmentRequestDto } from "../../dto/update.assignment.request.dto";
 import {
-  UpdateAssignmentQuestionsDto,
   GenerateQuestionVariantDto,
   QuestionDto,
+  UpdateAssignmentQuestionsDto,
 } from "../../dto/update.questions.request.dto";
 import { AssignmentAccessControlGuard } from "../../guards/assignment.access.control.guard";
-import { ReportService } from "../services/report.repository";
+import { AssignmentServiceV2 } from "../services/assignment.service";
 import { JobStatusServiceV2 } from "../services/job-status.service";
 import { QuestionService } from "../services/question.service";
-import { AssignmentServiceV2 } from "../services/assignment.service";
+import { ReportService } from "../services/report.repository";
 
 /**
  * Controller that handles assignment-related API endpoints
@@ -74,6 +76,7 @@ export class AssignmentControllerV2 {
     private readonly questionService: QuestionService,
     private readonly reportService: ReportService,
     private readonly jobStatusService: JobStatusServiceV2,
+    private readonly prisma: PrismaService,
   ) {
     this.logger = parentLogger.child({ context: AssignmentControllerV2.name });
   }
@@ -81,7 +84,6 @@ export class AssignmentControllerV2 {
   /**
    * Get assignment by ID - different response format based on user role
    */
-  // This code block has been revised ✅
   @Get(":id")
   @Roles(UserRole.AUTHOR, UserRole.LEARNER)
   @UseGuards(AssignmentAccessControlGuard)
@@ -157,12 +159,24 @@ export class AssignmentControllerV2 {
   @ApiOperation({ summary: "Stream publish job status" })
   @ApiParam({ name: "jobId", required: true, description: "Job ID" })
   @Sse()
-  sendPublishJobStatus(
+  async sendPublishJobStatus(
     @Param("jobId", ParseIntPipe) jobId: number,
-  ): Observable<MessageEvent> {
+    @Req() request: Request,
+  ): Promise<Observable<MessageEvent>> {
+    const job = await this.prisma.publishJob.findUnique({
+      where: { id: jobId },
+    });
+
+    if (!job) {
+      throw new NotFoundException(`Publish job with ID ${jobId} not found`);
+    }
+    request.on("close", () => {
+      this.logger.info(`Client disconnected from job ${jobId} stream`);
+      void this.jobStatusService.cleanupJobStream(jobId);
+    });
+
     return this.jobStatusService.getPublishJobStatusStream(jobId);
   }
-
   /**
    * Publish an assignment with updated questions
    */

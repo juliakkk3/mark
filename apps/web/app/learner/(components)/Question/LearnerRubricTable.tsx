@@ -12,9 +12,10 @@ interface SingleRubric {
 
 interface LearnerRubricTableProps {
   rubrics: SingleRubric[];
+  showPoints: boolean;
 }
 
-function LearnerRubricTable({ rubrics }: LearnerRubricTableProps) {
+function LearnerRubricTable({ rubrics, showPoints }: LearnerRubricTableProps) {
   if (!rubrics || rubrics.length === 0) return null;
 
   return (
@@ -31,9 +32,11 @@ function LearnerRubricTable({ rubrics }: LearnerRubricTableProps) {
                   <th className="p-2 text-gray-700 font-semibold">
                     Description
                   </th>
-                  <th className="p-2 text-gray-700 font-semibold text-center">
-                    Points
-                  </th>
+                  {showPoints && (
+                    <th className="p-2 text-gray-700 font-semibold text-center">
+                      Points
+                    </th>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -45,9 +48,11 @@ function LearnerRubricTable({ rubrics }: LearnerRubricTableProps) {
                     <td className="p-2 text-gray-600 max-w-sm text-wrap overflow-hidden">
                       {criterion.description}
                     </td>
-                    <td className="p-2 text-gray-600 text-center">
-                      {criterion.points}
-                    </td>
+                    {showPoints && (
+                      <td className="p-2 text-gray-600 text-center">
+                        {criterion.points}
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>

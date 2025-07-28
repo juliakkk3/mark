@@ -1,9 +1,11 @@
 /* eslint-disable unicorn/no-null */
 import { Injectable } from "@nestjs/common";
 import { QuestionType } from "@prisma/client";
+import { ImageGradingService } from "src/api/llm/features/grading/services/image-grading.service";
 import { IGradingStrategy } from "../common/interfaces/grading-strategy.interface";
 import { ChoiceGradingStrategy } from "../common/strategies/choice-grading.strategy";
 import { FileGradingStrategy } from "../common/strategies/file-grading.strategy";
+import { ImageGradingStrategy } from "../common/strategies/image-grading.strategy";
 import { PresentationGradingStrategy } from "../common/strategies/presentation-grading.strategy";
 import { TextGradingStrategy } from "../common/strategies/text-grading.strategy";
 import { TrueFalseGradingStrategy } from "../common/strategies/true-false-grading.strategy";
@@ -21,6 +23,7 @@ export class GradingFactoryService {
     private readonly presentationGradingStrategy: PresentationGradingStrategy,
     private readonly choiceGradingStrategy: ChoiceGradingStrategy,
     private readonly trueFalseGradingStrategy: TrueFalseGradingStrategy,
+    private readonly imageGradingStrategy: ImageGradingStrategy,
   ) {}
 
   /**
@@ -49,6 +52,8 @@ export class GradingFactoryService {
           responseType === "PRESENTATION"
         ) {
           return this.presentationGradingStrategy;
+        } else if (responseType === "IMAGES") {
+          return this.imageGradingStrategy;
         }
         return this.fileGradingStrategy;
       }
@@ -58,8 +63,6 @@ export class GradingFactoryService {
       }
 
       case QuestionType.LINK_FILE: {
-        // Handle the mixed type based on the response that will be provided
-        // We'll let the QuestionResponseService decide which one to use
         return null;
       }
 

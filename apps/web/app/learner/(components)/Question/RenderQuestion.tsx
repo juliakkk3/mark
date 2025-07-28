@@ -45,7 +45,6 @@ const RenderQuestion: FC<Props> = (props) => {
           removeFileUpload={removeFileUpload}
         />
       );
-    case "IMAGES":
     case "CODE":
       return (
         <FileCodeUploadSection

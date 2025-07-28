@@ -56,9 +56,11 @@ const SettingsContainer: React.FC = () => {
     toggleShowAssignmentScore,
     toggleShowSubmissionFeedback,
     toggleShowQuestionScore,
+    toggleShowQuestions,
     showAssignmentScore,
     showSubmissionFeedback,
     showQuestionScore,
+    showQuestions,
   } = useAssignmentFeedbackConfig();
 
   const settingsData = [
@@ -80,6 +82,13 @@ const SettingsContainer: React.FC = () => {
         "A detailed answer explanation and/or related topics and labs will be given.",
       value: showSubmissionFeedback,
       toggleValue: toggleShowSubmissionFeedback,
+    },
+    {
+      title: "Show Questions",
+      description:
+        "The questions will be visible to the learner after submission",
+      value: showQuestions,
+      toggleValue: toggleShowQuestions,
     },
   ] as const;
   return (

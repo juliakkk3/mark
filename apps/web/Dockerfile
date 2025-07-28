@@ -1,17 +1,15 @@
+# local-test/ui.Dockerfile
 # Using a consistent base for all stages
-ARG BASE_IMAGE=icr.io/skills-network/node:20
+ARG BASE_IMAGE=node:22-alpine
 FROM ${BASE_IMAGE} AS builder
 
 ARG SN_GITHUB_NPM_TOKEN
-ARG SN_GITHUB_NPM_REGISTRY=https://npm.pkg.github.com
 ARG DIR=/usr/src/app
 
 # Pruning using turbo for the Next.js app
 WORKDIR $DIR
 COPY . .
 RUN yarn global add turbo@^2.0.3
-# pragma: allowlist secret
-RUN echo "@ibm-skills-network:registry=$SN_GITHUB_NPM_REGISTRY" >> .npmrc && echo "//npm.pkg.github.com/:_authToken=$SN_GITHUB_NPM_TOKEN" >> .npmrc
 RUN turbo prune web --docker && rm -f .npmrc
 
 # Installing the isolated workspace for the Next.js app
@@ -33,7 +31,7 @@ FROM ${BASE_IMAGE} AS production
 ARG DIR=/usr/src/app
 ENV NODE_ENV production
 WORKDIR $DIR
-RUN apk add --no-cache dumb-init~=1
+RUN apk add --no-cache dumb-init
 COPY --chown=node:node --from=sourcer $DIR/apps/web/.next ./.next
 COPY --chown=node:node --from=sourcer $DIR/package.json $DIR/package.json
 COPY --chown=node:node --from=sourcer $DIR/node_modules $DIR/node_modules

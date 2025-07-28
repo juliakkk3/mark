@@ -79,6 +79,12 @@ We follow **semantic conventions** for branches, versions, and PRs:
 Before contributing to this project, ensure the following tools and dependencies are installed:
 Thought for 4 seconds
 
+ **IBM's detect-secrets fork**:
+
+   ```bash
+   pip install --upgrade "git+https://github.com/ibm/detect-secrets.git@master#egg=detect-secrets"
+   ```
+
 ### 📦 Install `pip` (and Python) on macOS / Linux & Windows
 
 ---
@@ -191,16 +197,16 @@ Run the following commands:
 
 ```bash
 # Root environment file
-cp ./.env.template .env
+cp ./.env.template dev.env
 
 # Web environment file
-cp /apps/web/.env.template /apps/web/.env.local
+cp apps/web/.env.template apps/web/.env.local
 
 # API environment file
-cp /apps/api/.env.template /apps/api/dev.env
+cp apps/api/.env.template apps/api/dev.env
 
 # API Gateway environment file
-cp /apps/api-gateway/.env.template /apps/api-gateway/dev.env
+cp apps/api-gateway/.env.template apps/api-gateway/dev.env
 ```
 
 ---

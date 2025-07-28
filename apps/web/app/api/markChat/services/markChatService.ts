@@ -4,9 +4,102 @@ import { executeAuthorStoreOperation } from "@/app/chatbot/store/authorStoreUtil
 import { searchKnowledgeBase } from "@/app/chatbot/knowledgebase";
 import { ReportingService } from "./reportingService";
 import { IssueSeverity } from "@/config/types";
+import { getBaseApiPath } from "@/config/constants";
 
+/**
+ * Get or create a chat session for today
+ */
+export async function getOrCreateTodayChat(
+  userId: string,
+  assignmentId?: number,
+): Promise<any> {
+  try {
+    const url = `${getBaseApiPath("v1")}/chats/today`;
+
+    const userSessionHeader = getUserSessionHeader();
+
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "user-session": userSessionHeader || "",
+      },
+      body: JSON.stringify({
+        userId,
+        assignmentId,
+      }),
+    });
+
+    if (!res.ok) {
+      const errorBody = (await res.json()) as { message: string };
+      throw new Error(errorBody.message || "Failed to get or create chat");
+    }
+
+    return await res.json();
+  } catch (err) {
+    throw err;
+  }
+}
+
+/**
+ * Add a message to a chat
+ */
+export async function addMessageToChat(
+  chatId: string,
+  role: "USER" | "ASSISTANT" | "SYSTEM",
+  content: string,
+  toolCalls?: any,
+): Promise<any> {
+  try {
+    const url = `${getBaseApiPath("v1")}/chats/${chatId}/messages`;
+
+    const userSessionHeader = getUserSessionHeader();
+
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "user-session": userSessionHeader || "",
+      },
+      body: JSON.stringify({
+        role,
+        content,
+        toolCalls,
+      }),
+    });
+
+    if (!res.ok) {
+      const errorBody = (await res.json()) as { message: string };
+      throw new Error(errorBody.message || "Failed to add message to chat");
+    }
+
+    return await res.json();
+  } catch (err) {
+    throw err;
+  }
+}
+
+function getUserSessionHeader() {
+  try {
+    if (typeof window !== "undefined") {
+      const sessionStr = localStorage.getItem("userSession");
+      if (sessionStr) return sessionStr;
+
+      const cookies = document.cookie.split(";");
+      const userSessionCookie = cookies.find((c) =>
+        c.trim().startsWith("userSession="),
+      );
+      if (userSessionCookie) {
+        return userSessionCookie.split("=")[1];
+      }
+    }
+
+    return null;
+  } catch (e) {
+    return null;
+  }
+}
 export class MarkChatService {
-  // GitHub issue reporting
   static async reportIssue(
     issueType: string,
     description: string,
@@ -18,29 +111,35 @@ export class MarkChatService {
       category?: string;
       [key: string]: any;
     } = {},
+    cookieHeader?: string,
   ): Promise<string> {
     try {
-      // Format title for better readability
       const title = `[${details.userRole?.toUpperCase() || "USER"}] ${issueType.charAt(0).toUpperCase() + issueType.slice(1)} Issue Report`;
 
-      // Report issue using the reporting service
-      const result = await ReportingService.reportIssue(title, description, {
-        issueType,
-        assignmentId: details.assignmentId,
-        attemptId: details.attemptId,
-        userRole: details.userRole,
-        severity: details.severity || determineIssueSeverity(issueType),
-        category: details.category || "Chat Report",
-        ...details,
-      });
+      const result = await ReportingService.reportIssue(
+        title,
+        description,
+        {
+          issueType,
+          assignmentId: details.assignmentId,
+          attemptId: details.attemptId,
+          userRole: details.userRole,
+          severity: details.severity || determineIssueSeverity(issueType),
+          category: details.category || "Chat Report",
+          ...details,
+        },
+        cookieHeader,
+      );
 
-      return result.content;
+      return (
+        result.content ||
+        `Thank you for your report. Our team will review it shortly.`
+      );
     } catch (error) {
-      console.error("Error reporting issue:", error);
       return `There was an error submitting your issue report. Please try again later. (Error: ${error.message})`;
     }
   }
-  // Author actions
+
   static async executeAuthorAction(action: string, params: any): Promise<any> {
     switch (action) {
       case "createQuestion":
@@ -95,7 +194,6 @@ export class MarkChatService {
     }
   }
 
-  // Suggestion generation based on context
   static generateSuggestions(
     userRole: "author" | "learner",
     context: any,
@@ -107,7 +205,6 @@ export class MarkChatService {
         : null;
 
       if (focusedQuestionId) {
-        // Question-focused suggestions
         if (
           questionType === "MULTIPLE_CORRECT" ||
           questionType === "SINGLE_CORRECT"
@@ -137,7 +234,6 @@ export class MarkChatService {
           ];
         }
 
-        // Generic question-focused suggestions
         return [
           "Improve this question",
           "Create a variant of this question",
@@ -147,7 +243,6 @@ export class MarkChatService {
         ];
       }
 
-      // General author suggestions
       return [
         "Generate multiple-choice questions about...",
         "Create a mix of question types for...",
@@ -156,7 +251,6 @@ export class MarkChatService {
         "Generate questions based on these learning outcomes...",
       ];
     } else {
-      // Learner suggestions
       if (context.isFeedbackMode) {
         return [
           "Explain why I lost points on this question",
@@ -176,7 +270,6 @@ export class MarkChatService {
           "What approach should I take for this type of question?",
         ];
       } else {
-        // Practice mode
         return [
           "Can you give me a hint for this problem?",
           "What concepts does this question test?",
@@ -188,12 +281,10 @@ export class MarkChatService {
     }
   }
 
-  // Knowledge base search
   static async searchKnowledgeBase(query: string): Promise<any> {
     return await searchKnowledgeBase(query);
   }
 
-  // Feedback assistance
   static generateFeedbackResponse(
     questionData: any,
     feedbackData: any,

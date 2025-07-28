@@ -1,5 +1,3 @@
-// src/llm/llm.constants.ts
-// Core service providers
 export const OPENAI_LLM_PROVIDER_4o = "OPENAI_LLM_PROVIDER_4o";
 export const OPENAI_LLM_PROVIDER_mini = "OPENAI_LLM_PROVIDER_mini";
 export const PROMPT_PROCESSOR = "PROMPT_PROCESSOR";
@@ -8,7 +6,6 @@ export const TOKEN_COUNTER = "TOKEN_COUNTER";
 export const USAGE_TRACKER = "USAGE_TRACKER";
 export const ALL_LLM_PROVIDERS = Symbol("ALL_LLM_PROVIDERS");
 
-// Feature-specific service providers
 export const TEXT_GRADING_SERVICE = "TEXT_GRADING_SERVICE";
 export const FILE_GRADING_SERVICE = "FILE_GRADING_SERVICE";
 export const IMAGE_GRADING_SERVICE = "IMAGE_GRADING_SERVICE";
@@ -21,10 +18,8 @@ export const RUBRIC_SERVICE = "RUBRIC_SERVICE";
 export const TRANSLATION_SERVICE = "TRANSLATION_SERVICE";
 export const VALIDATOR_SERVICE = "VALIDATOR_SERVICE";
 
-// Default values
 export const DEFAULT_LLM_MODEL = "gpt-4o";
 
-// Mapping of response types to specific instructions
 export const RESPONSE_TYPE_SPECIFIC_INSTRUCTIONS = {
   CODE: `
     **Feedback Structure:**

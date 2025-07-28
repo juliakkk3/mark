@@ -4,8 +4,8 @@ import {
   Logger,
   NotFoundException,
 } from "@nestjs/common";
-
 import { ResponseType } from "@prisma/client";
+import { AssignmentTypeEnum } from "src/api/llm/features/question-generation/services/question-generation.service";
 import { LlmFacadeService } from "src/api/llm/llm-facade.service";
 import { PrismaService } from "src/prisma.service";
 import { BaseAssignmentResponseDto } from "../../dto/base.assignment.response.dto";
@@ -14,21 +14,21 @@ import {
   QuestionGenerationPayload,
 } from "../../dto/post.assignment.request.dto";
 import {
-  QuestionDto,
+  Choice,
   GenerateQuestionVariantDto,
+  QuestionDto,
   VariantDto,
   VariantType,
-  Choice,
 } from "../../dto/update.questions.request.dto";
 import { QuestionRepository } from "../repositories/question.repository";
 import { VariantRepository } from "../repositories/variant.repository";
 import { JobStatusServiceV2 } from "./job-status.service";
 import { TranslationService } from "./translation.service";
-import { AssignmentTypeEnum } from "src/api/llm/features/question-generation/services/question-generation.service";
+
 @Injectable()
 export class QuestionService {
   private readonly logger = new Logger(QuestionService.name);
-
+  private questionCache = new Map<number, QuestionDto[]>();
   constructor(
     private readonly prisma: PrismaService,
     private readonly questionRepository: QuestionRepository,
@@ -40,8 +40,18 @@ export class QuestionService {
 
   async getQuestionsForAssignment(
     assignmentId: number,
+    useCache = false,
   ): Promise<QuestionDto[]> {
-    return this.questionRepository.findByAssignmentId(assignmentId);
+    if (useCache && this.questionCache.has(assignmentId)) {
+      const cachedQuestions = this.questionCache.get(assignmentId);
+      if (cachedQuestions) return cachedQuestions;
+      return [];
+    }
+
+    const questions =
+      await this.questionRepository.findByAssignmentId(assignmentId);
+    this.questionCache.set(assignmentId, questions);
+    return questions;
   }
 
   async generateQuestionVariants(
@@ -50,15 +60,12 @@ export class QuestionService {
   ): Promise<BaseAssignmentResponseDto & { questions?: QuestionDto[] }> {
     const { questions, questionVariationNumber } = generateVariantDto;
 
-    // Process all questions in parallel
     await Promise.all(
       questions.map(async (question) => {
-        // Initialize variants array if it doesn't exist
         if (question.variants === undefined) {
           question.variants = [];
         }
 
-        // Determine how many variants we need to generate
         const requiredVariants = this.calculateRequiredVariants(
           questions.length,
           question.variants.length,
@@ -67,13 +74,11 @@ export class QuestionService {
 
         if (requiredVariants <= 0) return;
 
-        // Generate the variants
         const newVariants = await this.generateVariantsFromQuestion(
           question,
           requiredVariants,
         );
 
-        // Add the variants to the question
         this.addVariantsToQuestion(question, newVariants);
       }),
     );
@@ -86,7 +91,7 @@ export class QuestionService {
   }
 
   /**
-   * Process questions for publishing with detailed progress tracking
+   * Process questions for publishing with detailed progress tracking, this is where the main logic for saving and updating assignments is
    *
    * @param assignmentId - The assignment ID
    * @param questions - Array of questions to process
@@ -96,199 +101,201 @@ export class QuestionService {
     assignmentId: number,
     questions: QuestionDto[],
     jobId?: number,
+    progressCallback?: (progress: number) => Promise<void>,
     forceTranslation = false,
   ): Promise<void> {
-    // Report progress if we have a job ID
-    if (jobId) {
-      await this.jobStatusService.updateJobStatus(jobId, {
-        status: "In Progress",
-        progress: "Retrieving existing questions",
-        percentage: 21,
-      });
-    }
+    const INITIAL_SETUP_RANGE = { start: 0, end: 10 };
+    const QUESTION_PROCESSING_RANGE = { start: 10, end: 90 };
+    const FINAL_CLEANUP_RANGE = { start: 90, end: 100 };
 
-    // 1. Get existing questions to compare and determine what to delete
-    const existingQuestions =
-      await this.questionRepository.findByAssignmentId(assignmentId);
+    let currentProgress = INITIAL_SETUP_RANGE.start;
 
-    if (jobId) {
-      await this.jobStatusService.updateJobStatus(jobId, {
-        status: "In Progress",
-        progress: "Analyzing question changes",
-        percentage: 22,
-      });
-    }
+    const updateProgress = async (percentage: number, message: string) => {
+      currentProgress = Math.max(currentProgress, Math.min(percentage, 100));
 
-    // 2. Map of frontend IDs to backend IDs for tracking
-    const frontendToBackendIdMap = new Map<number, number>();
-
-    // 3. Identify questions to delete (existingQuestions not in new questions)
-    const newQuestionIds = new Set(questions.map((q) => q.id));
-    const questionsToDelete = existingQuestions.filter(
-      (q) => !newQuestionIds.has(q.id),
-    );
-
-    // 4. Mark questions for deletion
-    if (questionsToDelete.length > 0) {
-      if (jobId) {
+      if (progressCallback) {
+        await progressCallback(Math.floor(currentProgress));
+      } else if (jobId) {
         await this.jobStatusService.updateJobStatus(jobId, {
           status: "In Progress",
-          progress: `Removing ${questionsToDelete.length} questions`,
-          percentage: 24,
+          progress: message,
+          percentage: Math.floor(currentProgress),
         });
       }
+    };
 
-      await this.questionRepository.markAsDeleted(
-        questionsToDelete.map((q) => q.id),
+    try {
+      await updateProgress(
+        INITIAL_SETUP_RANGE.start,
+        "Retrieving existing questions",
       );
-    }
 
-    // 5. Calculate progress increments for questions
-    const totalQuestions = questions.length;
-    const progressPerQuestion = totalQuestions > 0 ? 35 / totalQuestions : 0; // Progress range from 25% to 60%
-    let currentProgress = 25;
+      const existingQuestions =
+        await this.questionRepository.findByAssignmentId(assignmentId);
 
-    if (jobId) {
-      await this.jobStatusService.updateJobStatus(jobId, {
-        status: "In Progress",
-        progress: `Processing ${totalQuestions} questions`,
-        percentage: currentProgress,
-      });
-    }
+      await updateProgress(5, "Analyzing question changes");
 
-    // 6. Process each question (create, update, handle variants)
-    for (const [index, questionDto] of questions.entries()) {
-      // Create a map to track questions that need translation
-      const contentChanged = new Map<number, boolean>();
+      const frontendToBackendIdMap = new Map<number, number>();
+      const newQuestionIds = new Set(questions.map((q) => q.id));
+      const questionsToDelete = existingQuestions.filter(
+        (q) => !newQuestionIds.has(q.id),
+      );
 
-      if (jobId) {
+      if (questionsToDelete.length > 0) {
+        await updateProgress(
+          8,
+          `Removing ${questionsToDelete.length} deleted questions`,
+        );
+
+        await this.questionRepository.markAsDeleted(
+          questionsToDelete.map((q) => q.id),
+        );
+      }
+
+      await updateProgress(
+        INITIAL_SETUP_RANGE.end,
+        "Setup completed, processing questions",
+      );
+
+      const totalQuestions = questions.length;
+      const progressPerQuestion =
+        totalQuestions > 0
+          ? (QUESTION_PROCESSING_RANGE.end - QUESTION_PROCESSING_RANGE.start) /
+            totalQuestions
+          : 0;
+
+      for (const [index, questionDto] of questions.entries()) {
+        const questionStartProgress =
+          QUESTION_PROCESSING_RANGE.start + index * progressPerQuestion;
+        const questionEndProgress = questionStartProgress + progressPerQuestion;
+
+        await updateProgress(
+          questionStartProgress + progressPerQuestion * 0.1,
+          `Processing question ${index + 1} of ${totalQuestions}`,
+        );
+
+        const backendId =
+          frontendToBackendIdMap.get(questionDto.id) || questionDto.id;
+        const existingQuestion = existingQuestions.find(
+          (q) => q.id === backendId,
+        );
+
+        const questionContentChanged =
+          forceTranslation ||
+          !existingQuestion ||
+          existingQuestion.question !== questionDto.question ||
+          !this.areChoicesEqual(existingQuestion.choices, questionDto.choices);
+
+        if (
+          existingQuestion &&
+          existingQuestion.question !== questionDto.question
+        ) {
+          await updateProgress(
+            questionStartProgress + progressPerQuestion * 0.2,
+            `Validating question ${index + 1} content`,
+          );
+
+          await this.applyGuardRails(questionDto);
+        }
+
+        await updateProgress(
+          questionStartProgress + progressPerQuestion * 0.3,
+          `Updating question ${index + 1} in database`,
+        );
+
+        const upsertedQuestion = await this.questionRepository.upsert({
+          id: existingQuestion ? existingQuestion.id : questionDto.id,
+          assignmentId,
+          question: questionDto.question,
+          type: questionDto.type,
+          answer: questionDto.answer ?? false,
+          totalPoints: questionDto.totalPoints ?? 0,
+          choices: questionDto.choices,
+          scoring: questionDto.scoring,
+          maxWords: questionDto.maxWords,
+          maxCharacters: questionDto.maxCharacters,
+          responseType: questionDto.responseType,
+          randomizedChoices: questionDto.randomizedChoices,
+          liveRecordingConfig: questionDto.liveRecordingConfig,
+          videoPresentationConfig: questionDto.videoPresentationConfig,
+          gradingContextQuestionIds: questionDto.gradingContextQuestionIds,
+        });
+
+        if (!existingQuestion) {
+          frontendToBackendIdMap.set(questionDto.id, upsertedQuestion.id);
+        }
+
+        if (questionContentChanged || forceTranslation) {
+          await updateProgress(
+            questionStartProgress + progressPerQuestion * 0.5,
+            `Translating question ${index + 1}`,
+          );
+
+          const translationJob = await this.jobStatusService.createJob(
+            assignmentId,
+            "system",
+          );
+
+          await this.translationService.translateQuestion(
+            assignmentId,
+            upsertedQuestion.id,
+            questionDto,
+            translationJob.id,
+          );
+        }
+
+        const variantCount = questionDto.variants?.length || 0;
+        if (variantCount > 0) {
+          await updateProgress(
+            questionStartProgress + progressPerQuestion * 0.8,
+            `Processing ${variantCount} variants for question ${index + 1}`,
+          );
+
+          const checkVariantsChanged = this.checkVariantsForChanges(
+            existingQuestion?.variants || [],
+            questionDto.variants || [],
+          );
+
+          await this.processVariantsForQuestion(
+            assignmentId,
+            upsertedQuestion.id,
+            questionDto.variants || [],
+            existingQuestion?.variants || [],
+            undefined,
+            checkVariantsChanged || forceTranslation,
+          );
+        }
+
+        await updateProgress(
+          questionEndProgress,
+          `Question ${index + 1} completed`,
+        );
+      }
+
+      // Final cleanup
+      await updateProgress(
+        FINAL_CLEANUP_RANGE.start,
+        "Finalizing question processing",
+      );
+
+      await updateProgress(
+        FINAL_CLEANUP_RANGE.end,
+        "Question processing completed successfully",
+      );
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
+
+      if (jobId && !progressCallback) {
         await this.jobStatusService.updateJobStatus(jobId, {
-          status: "In Progress",
-          progress: `Processing question ${index + 1} of ${totalQuestions}`,
+          status: "Failed",
+          progress: `Question processing failed: ${errorMessage}`,
           percentage: Math.floor(currentProgress),
         });
       }
 
-      // Use the backend ID if available
-      const backendId =
-        frontendToBackendIdMap.get(questionDto.id) || questionDto.id;
-      const existingQuestion = existingQuestions.find(
-        (q) => q.id === backendId,
-      );
-
-      // Check if content has changed to determine if translation is needed
-      const questionContentChanged =
-        forceTranslation ||
-        !existingQuestion ||
-        existingQuestion.question !== questionDto.question ||
-        !this.areChoicesEqual(existingQuestion.choices, questionDto.choices);
-
-      contentChanged.set(questionDto.id, questionContentChanged);
-
-      // Apply guardrails if the question text has changed
-      if (
-        existingQuestion &&
-        existingQuestion.question !== questionDto.question
-      ) {
-        if (jobId) {
-          await this.jobStatusService.updateJobStatus(jobId, {
-            status: "In Progress",
-            progress: `Validating question ${index + 1} content`,
-            percentage: Math.floor(currentProgress),
-          });
-        }
-
-        await this.applyGuardRails(questionDto);
-      }
-
-      // Upsert the question
-      const upsertedQuestion = await this.questionRepository.upsert({
-        id: existingQuestion ? existingQuestion.id : questionDto.id,
-        assignmentId,
-        question: questionDto.question,
-        type: questionDto.type,
-        answer: questionDto.answer ?? false,
-        totalPoints: questionDto.totalPoints ?? 0,
-        choices: questionDto.choices,
-        scoring: questionDto.scoring,
-        maxWords: questionDto.maxWords,
-        maxCharacters: questionDto.maxCharacters,
-        responseType: questionDto.responseType,
-        randomizedChoices: questionDto.randomizedChoices,
-        liveRecordingConfig: questionDto.liveRecordingConfig,
-        videoPresentationConfig: questionDto.videoPresentationConfig,
-        gradingContextQuestionIds: questionDto.gradingContextQuestionIds,
-      });
-
-      // Track the backend ID
-      if (!existingQuestion) {
-        frontendToBackendIdMap.set(questionDto.id, upsertedQuestion.id);
-      }
-
-      // Handle translations for the question ONLY if content has changed or force translation is set
-      if (jobId && (questionContentChanged || forceTranslation)) {
-        await this.jobStatusService.updateJobStatus(jobId, {
-          status: "In Progress",
-          progress: `Translating question ${index + 1}`,
-          percentage: Math.floor(currentProgress + progressPerQuestion * 0.5),
-        });
-
-        await this.translationService.translateQuestion(
-          assignmentId,
-          upsertedQuestion.id,
-          questionDto,
-          jobId,
-        );
-      } else if (jobId) {
-        // Skip translation but update progress
-        await this.jobStatusService.updateJobStatus(jobId, {
-          status: "In Progress",
-          progress: `Question ${index + 1} content unchanged, skipping translation`,
-          percentage: Math.floor(currentProgress + progressPerQuestion * 0.5),
-        });
-      }
-
-      // Check variant content changes
-      const checkVariantsChanged = this.checkVariantsForChanges(
-        existingQuestion?.variants || [],
-        questionDto.variants || [],
-      );
-
-      // Process variants
-      const variantCount = questionDto.variants?.length || 0;
-      if (variantCount > 0 && jobId) {
-        await this.jobStatusService.updateJobStatus(jobId, {
-          status: "In Progress",
-          progress: checkVariantsChanged
-            ? `Processing ${variantCount} variants for question ${index + 1} - content changes detected`
-            : `Processing ${variantCount} variants for question ${index + 1} - metadata only`,
-          percentage: Math.floor(currentProgress + progressPerQuestion * 0.7),
-        });
-      }
-
-      await this.processVariantsForQuestion(
-        assignmentId,
-        upsertedQuestion.id,
-        questionDto.variants || [],
-        existingQuestion?.variants || [],
-        jobId,
-        checkVariantsChanged || forceTranslation,
-      );
-
-      // Update progress after processing this question
-      currentProgress += progressPerQuestion;
+      throw error;
     }
-
-    // Final update for question processing
-    if (jobId) {
-      await this.jobStatusService.updateJobStatus(jobId, {
-        status: "In Progress",
-        progress: "Question processing completed",
-        percentage: 60,
-      });
-    }
-
-    return;
   }
 
   /**
@@ -348,13 +355,10 @@ export class QuestionService {
     payload: QuestionGenerationPayload,
     userId: string,
   ): Promise<{ message: string; jobId: number }> {
-    // Validate the payload
     this.validateQuestionGenerationPayload(payload);
 
-    // Create a job for tracking
     const job = await this.jobStatusService.createJob(assignmentId, userId);
 
-    // Start the question generation process asynchronously
     this.startQuestionGenerationProcess(
       assignmentId,
       job.id,
@@ -376,7 +380,6 @@ export class QuestionService {
   }
 
   async updateQuestionGradingContext(assignmentId: number): Promise<void> {
-    // 1. Get the assignment with its questions
     const assignment = await this.prisma.assignment.findUnique({
       where: { id: assignmentId },
       include: {
@@ -392,28 +395,23 @@ export class QuestionService {
       );
     }
 
-    // 2. Get the question order
     const questionOrder = assignment.questionOrder || [];
 
-    // 3. Sort questions based on the order
     const sortedQuestions = [...assignment.questions].sort(
       (a, b) => questionOrder.indexOf(a.id) - questionOrder.indexOf(b.id),
     );
 
-    // 4. Map questions to format expected by LLM service
     const questionsForGradingContext = sortedQuestions.map((q) => ({
       id: q.id,
       questionText: q.question,
     }));
 
-    // 5. Generate grading context mapping
     const gradingContextMap =
       await this.llmFacadeService.generateQuestionGradingContext(
         questionsForGradingContext,
         assignmentId,
       );
 
-    // 6. Update each question with its grading context
     const updates = Object.entries(gradingContextMap).map(
       ([questionId, contextIds]) =>
         this.prisma.question.update({
@@ -435,31 +433,38 @@ export class QuestionService {
     try {
       let content = "";
 
-      // Process files if provided
       if (files && files.length > 0) {
-        // Update job status
-        await this.jobStatusService.updateJobStatus(jobId, {
-          status: "In Progress",
-          progress: "Mark is organizing the notes merging file contents.",
-        });
+        await this.jobStatusService.updateJobStatus(
+          jobId,
+          {
+            status: "In Progress",
+            progress: "Mark is organizing the notes merging file contents.",
+          },
+          false,
+        );
 
-        // Merge file contents
         content = files.map((file) => file.content).join("\n");
 
-        // Sanitize content
-        await this.jobStatusService.updateJobStatus(jobId, {
-          status: "In Progress",
-          progress: "Mark is proofreading the content sanitizing material.",
-        });
+        await this.jobStatusService.updateJobStatus(
+          jobId,
+          {
+            status: "In Progress",
+            progress: "Mark is proofreading the content sanitizing material.",
+          },
+          false,
+        );
 
         content = this.llmFacadeService.sanitizeContent(content);
       }
 
-      // Generate questions
-      await this.jobStatusService.updateJobStatus(jobId, {
-        status: "In Progress",
-        progress: "Mark is thinking generating questions.",
-      });
+      await this.jobStatusService.updateJobStatus(
+        jobId,
+        {
+          status: "In Progress",
+          progress: "Mark is thinking generating questions.",
+        },
+        false,
+      );
 
       const llmResponse = await this.llmFacadeService.processMergedContent(
         assignmentId,
@@ -469,13 +474,16 @@ export class QuestionService {
         learningObjectives,
       );
 
-      // Update job with generated questions
-      await this.jobStatusService.updateJobStatus(jobId, {
-        status: "Completed",
-        progress:
-          "Mark has prepared the questions. Job completed successfully.",
-        result: llmResponse,
-      });
+      await this.jobStatusService.updateJobStatus(
+        jobId,
+        {
+          status: "Completed",
+          progress:
+            "Mark has prepared the questions. Job completed successfully.",
+          result: llmResponse,
+        },
+        false,
+      );
     } catch (error: unknown) {
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error";
@@ -485,11 +493,14 @@ export class QuestionService {
         errorStack,
       );
 
-      // Update job status to Failed
-      await this.jobStatusService.updateJobStatus(jobId, {
-        status: "Failed",
-        progress: "Mark hit a snag, we are sorry for the inconvenience",
-      });
+      await this.jobStatusService.updateJobStatus(
+        jobId,
+        {
+          status: "Failed",
+          progress: "Mark hit a snag, we are sorry for the inconvenience",
+        },
+        false,
+      );
     }
   }
 
@@ -503,19 +514,16 @@ export class QuestionService {
       assignmentId,
     } = payload;
 
-    // Check either file contents or learning objectives are provided
     if (!fileContents && !learningObjectives) {
       throw new BadRequestException(
         "Either file contents or learning objectives are required",
       );
     }
 
-    // Validate assignment ID
     if (Number.isNaN(assignmentId)) {
       throw new BadRequestException("Invalid assignment ID");
     }
 
-    // Validate questions to generate
     const totalQuestions =
       (questionsToGenerate.multipleChoice || 0) +
       (questionsToGenerate.multipleSelect || 0) +
@@ -531,14 +539,12 @@ export class QuestionService {
       );
     }
 
-    // Ensure response types are provided for advanced question types
     if (
       (questionsToGenerate.url > 0 ||
         questionsToGenerate.upload > 0 ||
         questionsToGenerate.linkFile > 0) &&
       !questionsToGenerate.responseTypes
     ) {
-      // Add default response types
       questionsToGenerate.responseTypes = {
         TEXT: [ResponseType.OTHER],
         URL: [ResponseType.OTHER],
@@ -566,7 +572,6 @@ export class QuestionService {
     jobId?: number,
     forceTranslation = false,
   ): Promise<void> {
-    // Create a map of existing variants by content for quick lookup
     const existingVariantsMap = new Map<string, VariantDto>();
     const existingVariantsIdMap = new Map<number, VariantDto>();
 
@@ -575,13 +580,11 @@ export class QuestionService {
       existingVariantsIdMap.set(v.id, v);
     }
 
-    // Identify variants to delete (existingVariants not in new variants)
     const newVariantContents = new Set(variants.map((v) => v.variantContent));
     const variantsToDelete = existingVariants.filter(
       (v) => !newVariantContents.has(v.variantContent),
     );
 
-    // Mark variants for deletion
     if (variantsToDelete.length > 0 && jobId) {
       await this.jobStatusService.updateJobStatus(jobId, {
         status: "In Progress",
@@ -593,16 +596,13 @@ export class QuestionService {
       );
     }
 
-    // Calculate progress increments for variants
     const totalVariants = variants.length;
 
-    // Process each variant (create or update)
     for (const [index, variantDto] of variants.entries()) {
       const existingVariant =
         existingVariantsMap.get(variantDto.variantContent) ||
         existingVariantsIdMap.get(variantDto.id);
 
-      // Check if content has changed or is new
       const contentChanged =
         forceTranslation ||
         !existingVariant ||
@@ -613,12 +613,15 @@ export class QuestionService {
         await this.jobStatusService.updateJobStatus(jobId, {
           status: "In Progress",
           progress: contentChanged
-            ? `Processing variant ${index + 1}/${totalVariants} for question #${questionId} - content changes detected`
-            : `Processing variant ${index + 1}/${totalVariants} for question #${questionId} - metadata only`,
+            ? `Processing variant ${
+                index + 1
+              }/${totalVariants} for question #${questionId} - content changes detected`
+            : `Processing variant ${
+                index + 1
+              }/${totalVariants} for question #${questionId} - metadata only`,
         });
       }
 
-      // Prepare variant data for upsert
       const variantData = {
         variantContent: variantDto.variantContent,
         choices: variantDto.choices,
@@ -632,17 +635,17 @@ export class QuestionService {
       };
 
       if (existingVariant) {
-        // Update existing variant
         const updatedVariant = await this.variantRepository.update(
           existingVariant.id,
           variantData,
         );
 
-        // Handle translations ONLY if content has changed or force translation is set
         if (jobId && contentChanged) {
           await this.jobStatusService.updateJobStatus(jobId, {
             status: "In Progress",
-            progress: `Translating variant ${index + 1}/${totalVariants} for question #${questionId}`,
+            progress: `Translating variant ${
+              index + 1
+            }/${totalVariants} for question #${questionId}`,
           });
 
           await this.translationService.translateVariant(
@@ -653,21 +656,22 @@ export class QuestionService {
             jobId,
           );
         } else if (jobId) {
-          // Skip translation but update progress
           await this.jobStatusService.updateJobStatus(jobId, {
             status: "In Progress",
-            progress: `Variant ${index + 1}/${totalVariants} unchanged, skipping translation`,
+            progress: `Variant ${
+              index + 1
+            }/${totalVariants} unchanged, skipping translation`,
           });
         }
       } else {
-        // Create new variant
         const newVariant = await this.variantRepository.create(variantData);
 
-        // Always translate new variants
         if (jobId) {
           await this.jobStatusService.updateJobStatus(jobId, {
             status: "In Progress",
-            progress: `Translating new variant ${index + 1}/${totalVariants} for question #${questionId}`,
+            progress: `Translating new variant ${
+              index + 1
+            }/${totalVariants} for question #${questionId}`,
           });
 
           await this.translationService.translateVariant(
@@ -691,7 +695,6 @@ export class QuestionService {
         throw new BadRequestException("Question not provided");
       }
 
-      // Generate variants using LLM service
       const variants = await this.llmFacadeService.generateQuestionRewordings(
         question.question,
         numberOfVariants,
@@ -701,7 +704,6 @@ export class QuestionService {
         question.variants,
       );
 
-      // Transform to VariantDto format
       return variants.map((variant) => ({
         id: variant.id,
         questionId: question.id,

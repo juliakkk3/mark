@@ -140,6 +140,7 @@ function AuthorHeader() {
     timeEstimateMinutes,
     allotedTimeMinutes,
     updatedAt,
+    numberOfQuestionsPerAttempt,
   ] = useAssignmentConfig((state) => [
     state.numAttempts,
     state.passingGrade,
@@ -149,13 +150,19 @@ function AuthorHeader() {
     state.timeEstimateMinutes,
     state.allotedTimeMinutes,
     state.updatedAt,
+    state.numberOfQuestionsPerAttempt,
   ]);
-  const [showSubmissionFeedback, showQuestionScore, showAssignmentScore] =
-    useAssignmentFeedbackConfig((state) => [
-      state.showSubmissionFeedback,
-      state.showQuestionScore,
-      state.showAssignmentScore,
-    ]);
+  const [
+    showSubmissionFeedback,
+    showQuestionScore,
+    showAssignmentScore,
+    showQuestions,
+  ] = useAssignmentFeedbackConfig((state) => [
+    state.showSubmissionFeedback,
+    state.showQuestionScore,
+    state.showAssignmentScore,
+    state.showQuestions,
+  ]);
   const [role, setRole] = useAuthorStore((state) => [
     state.role,
     state.setRole,
@@ -173,7 +180,6 @@ function AuthorHeader() {
   );
   const changesSummary = useChangesSummary();
 
-  // STATES FOR PROGRESS BAR & ROADMAP
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [jobProgress, setJobProgress] = useState<number>(0);
   const [currentMessage, setCurrentMessage] = useState<string>(
@@ -253,6 +259,8 @@ function AuthorHeader() {
         timeEstimateMinutes: newAssignment.timeEstimateMinutes,
         allotedTimeMinutes: newAssignment.allotedTimeMinutes,
         updatedAt: newAssignment.updatedAt,
+        showQuestions: newAssignment.showQuestions,
+        showSubmissionFeedback: newAssignment.showSubmissionFeedback,
       });
 
       if (newAssignment.questionVariationNumber !== undefined) {
@@ -272,7 +280,6 @@ function AuthorHeader() {
 
       setPageState("success");
     } catch (error) {
-      console.error(error);
       setPageState("error");
     }
   };
@@ -449,13 +456,14 @@ function AuthorHeader() {
       timeEstimateMinutes: timeEstimateMinutes,
       published: true,
       showSubmissionFeedback,
+      showQuestions,
       showQuestionScore,
       showAssignmentScore,
+      numberOfQuestionsPerAttempt,
       questions: questionsAreDifferent
         ? processQuestions(clonedCurrentQuestions)
         : null,
     };
-
     if (assignmentData.introduction === null) {
       toast.error("Introduction is required to publish the assignment.");
       setSubmitting(false);
@@ -520,21 +528,11 @@ function AuthorHeader() {
     toast.success("Synced with latest published version.");
   };
 
-  // -- RESPONSIVE LAYOUT TWEAKS BELOW --
   return (
     <>
-      {/*
-        Use container / max-w-screen-xl for typical responsive layout
-        Then space-y for vertical gaps on smaller screens
-      */}
       <div className="fixed w-full z-50">
         <header className="border-b border-gray-300 bg-white px-2 sm:px-4 md:px-6 py-2 md:py-4 flex flex-col">
-          {/*
-            Make this wrapper flex-col on small screens, then row on medium.
-            Also add "flex-wrap" so that if there's no space, items move to the next line.
-          */}
           <div className="flex flex-col flex-wrap lg:flex-nowrap md:flex-row md:items-center justify-between gap-2 md:gap-2">
-            {/* Left side: SNIcon + Title */}
             <div className="flex flex-row items-center space-x-4">
               <SNIcon />
               <div>
@@ -547,7 +545,6 @@ function AuthorHeader() {
               </div>
             </div>
 
-            {/* Middle: Navigation */}
             <Nav
               currentStepId={currentStepId}
               setCurrentStepId={setCurrentStepId}
@@ -575,11 +572,11 @@ function AuthorHeader() {
                 handlePublishButton={handlePublishButton}
                 submitting={submitting}
                 questionsAreReadyToBePublished={questionsAreReadyToBePublished}
+                currentStepId={currentStepId}
               />
             </div>
           </div>
 
-          {/* Progress bar, displayed below the top row if submitting */}
           {submitting && (
             <div className="mt-4">
               <ProgressBar
@@ -592,10 +589,6 @@ function AuthorHeader() {
         </header>
       </div>
 
-      {/*
-        Modal wrapper is usually responsive by default since it covers the screen.
-        Just ensure any internal content has some padding and wraps well.
-      */}
       {showAreYouSureModal && (
         <Modal
           onClose={() => setShowAreYouSureModal(false)}

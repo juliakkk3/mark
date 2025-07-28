@@ -4,6 +4,7 @@ coverage
 ./husky/_/
 **/.github/workflows/*
 helm-chart
+yarn.lock
 node_modules
 docs/
 .vscode

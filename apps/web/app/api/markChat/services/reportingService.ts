@@ -18,6 +18,7 @@ interface ReportResponse {
   success: boolean;
   content: string;
   issueId?: string | number;
+  issueNumber?: number;
   error?: string;
 }
 
@@ -37,9 +38,9 @@ export class ReportingService {
     title: string,
     description: string,
     details: IssueReportDetails,
+    cookieHeader?: string,
   ): Promise<ReportResponse> {
     try {
-      // Create the payload
       const payload = {
         issueType: details.issueType || "technical",
         description,
@@ -50,23 +51,27 @@ export class ReportingService {
         category: details.category || "General Issue",
         ...details,
       };
+      console.log("Forwarding cookies:", cookieHeader);
 
-      // Make the API call to the reports endpoint
       const response = await fetch(`${getBaseApiPath("v1")}/reports`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          ...(cookieHeader ? { Cookie: cookieHeader } : {}),
         },
+        credentials: "include",
         body: JSON.stringify(payload),
+      });
+      console.dir(response, {
+        depth: 2,
+        colors: true,
       });
 
       if (!response.ok) {
-        // If response is not OK, try to get the error message
         const errorData = await response.json().catch(() => null);
         throw new Error(errorData?.message || `HTTP error ${response.status}`);
       }
 
-      // Parse the successful response
       const data = await response.json();
 
       return {
@@ -74,12 +79,9 @@ export class ReportingService {
         content:
           data.message ||
           `Thank you for reporting this issue. Our team will review it shortly.`,
-        issueId: data.id,
+        issueNumber: data.issueNumber,
       };
     } catch (error) {
-      console.error("Error reporting issue:", error);
-
-      // Even if the API call fails, we want to give a decent user experience
       return {
         success: false,
         content: `There was an error submitting your issue report, but we've recorded it locally. Please try again later.`,
@@ -99,12 +101,9 @@ export class ReportingService {
     const errorMessage = error instanceof Error ? error.message : error;
     const errorStack = error instanceof Error ? error.stack : undefined;
 
-    console.error(`[ERROR] ${context}: ${errorMessage}`);
     if (errorStack) {
-      console.error(errorStack);
     }
 
-    // Could add local storage logging here if needed
     try {
       const errorLogs = JSON.parse(
         localStorage.getItem("mark_error_logs") || "[]",
@@ -116,14 +115,11 @@ export class ReportingService {
         stack: errorStack,
       });
 
-      // Keep only the last 50 errors
       if (errorLogs.length > 50) {
         errorLogs.shift();
       }
 
       localStorage.setItem("mark_error_logs", JSON.stringify(errorLogs));
-    } catch (e) {
-      // Silently fail if localStorage isn't available
-    }
+    } catch (e) {}
   }
 }

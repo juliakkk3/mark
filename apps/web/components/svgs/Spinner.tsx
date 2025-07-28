@@ -1,7 +1,7 @@
 import { cn } from "@/lib/strings";
 import type { ComponentPropsWithoutRef, FC } from "react";
 
-interface Props extends ComponentPropsWithoutRef<"svg"> {}
+type Props = ComponentPropsWithoutRef<"svg">;
 
 const Spinner: FC<Props> = (props) => {
   const { className, ...restOfProps } = props;

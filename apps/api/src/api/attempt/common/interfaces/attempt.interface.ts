@@ -27,15 +27,39 @@ export interface QuestionAnswerContext {
   question: string;
   answer: string;
 }
-
+export type RepoType = {
+  id: number;
+  name: string;
+  full_name: string;
+  private: boolean;
+  owner: {
+    login: string;
+  };
+  license?: {
+    key?: string;
+    name?: string;
+    spdx_id?: string;
+    url?: string;
+    node_id?: string;
+  };
+  default_branch?: string;
+};
 /**
  * Interface for learner file upload
  */
 export interface LearnerFileUpload {
   filename: string;
   content: string;
-  questionId: number;
+  questionId?: number;
+  fileType?: string;
+  bucket?: string;
   githubUrl?: string;
+  recordId?: number;
+  key?: string;
+  path?: string;
+  repo?: RepoType;
+  owner?: string;
+  blob?: Blob;
 }
 
 /**

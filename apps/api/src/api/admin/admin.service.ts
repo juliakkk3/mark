@@ -1,7 +1,4 @@
-import {
-  Injectable,
-  NotFoundException,
-} from "@nestjs/common";
+import { Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../../prisma.service";
 import { AdminAddAssignmentToGroupResponseDto } from "./dto/assignment/add.assignment.to.group.response.dto";
 import { BaseAssignmentResponseDto } from "./dto/assignment/base.assignment.response.dto";
@@ -29,7 +26,6 @@ export class AdminService {
       throw new NotFoundException(`Assignment with Id ${id} not found.`);
     }
 
-    // Prepare data for new assignment (excluding id)
     const newAssignmentData = {
       ...assignment,
       id: undefined,
@@ -64,7 +60,6 @@ export class AdminService {
       },
     };
 
-    // Create new assignment and questions in a single transaction
     const newAssignment = await this.prisma.assignment.create({
       data: newAssignmentData,
       include: { questions: true, groups: true },
@@ -80,7 +75,6 @@ export class AdminService {
     assignmentId: number,
     groupId: string,
   ): Promise<AdminAddAssignmentToGroupResponseDto> {
-    // check if the assignment exists
     const assignment = await this.prisma.assignment.findUnique({
       where: { id: assignmentId },
     });
@@ -99,7 +93,6 @@ export class AdminService {
     });
 
     if (assignmentGroup) {
-      // Assignment is already connected to the group so should return success
       return {
         assignmentId: assignmentId,
         groupId: groupId,
@@ -107,7 +100,6 @@ export class AdminService {
       };
     }
 
-    // Now, connect the assignment to the group or create the group if it doesn't exist
     await this.prisma.assignment.update({
       where: { id: assignmentId },
       data: {
@@ -140,8 +132,6 @@ export class AdminService {
   async createAssignment(
     createAssignmentRequestDto: AdminCreateAssignmentRequestDto,
   ): Promise<BaseAssignmentResponseDto> {
-    // Create a new Assignment and connect it to a Group either by finding an existing Group with the given groupId
-    // or by creating a new Group with that groupId
     const assignment = await this.prisma.assignment.create({
       data: {
         name: createAssignmentRequestDto.name,

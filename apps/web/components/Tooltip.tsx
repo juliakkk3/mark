@@ -3,7 +3,7 @@ import type { ComponentPropsWithoutRef, FC, ReactNode } from "react";
 
 interface Props extends Omit<ComponentPropsWithoutRef<"div">, "content"> {
   direction?: "x" | "y";
-  content: ReactNode; // Changed this to ReactNode to accept JSX or string
+  content: ReactNode;
   delay?: number;
   disabled?: boolean;
   distance?: number;
@@ -70,7 +70,7 @@ const Tooltip: FC<Props> = (props) => {
               getClassNamesFromDirectionAndDistance(),
             )}
           >
-            {content} {/* content can now be text or a JSX element */}
+            {content}
           </span>
         )}
       </div>

@@ -1,5 +1,3 @@
-// src/llm/features/grading/interfaces/image-grading.interface.ts
-
 import { ImageBasedQuestionEvaluateModel } from "src/api/llm/model/image.based.evalutate.model";
 import { ImageBasedQuestionResponseModel } from "src/api/llm/model/image.based.response.model";
 

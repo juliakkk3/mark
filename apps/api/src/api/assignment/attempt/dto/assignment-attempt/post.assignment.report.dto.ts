@@ -6,7 +6,7 @@ export class ReportRequestDTO {
   @ApiProperty({
     description: "Issue Type",
     enum: ReportType,
-    enumName: "ReportType", // Optional: Provide a name for Swagger documentation
+    enumName: "ReportType",
     required: true,
   })
   @IsEnum(ReportType)

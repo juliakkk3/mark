@@ -8,7 +8,7 @@ import { InformationCircleIcon } from "@heroicons/react/24/solid";
 import type { ComponentPropsWithoutRef, FC } from "react";
 import SectionWithTitle from "../ReusableSections/SectionWithTitle";
 
-interface Props extends ComponentPropsWithoutRef<"div"> {}
+type Props = ComponentPropsWithoutRef<"div">;
 
 const Component: FC<Props> = () => {
   const [numAttempts, setNumAttempts, passingGrade, setPassingGrade, errors] =

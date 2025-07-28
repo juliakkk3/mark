@@ -14,8 +14,6 @@ import {
   IsString,
 } from "class-validator";
 
-//making properties optional because user might just patch one or two fields
-
 export class UpdateAssignmentRequestDto {
   @ApiProperty({
     description: "The name of the assignment.",
@@ -137,6 +135,16 @@ export class UpdateAssignmentRequestDto {
   questionDisplay: QuestionDisplay | null;
 
   @ApiProperty({
+    description:
+      "The number of questions to be displayed per attempt. (null means all questions are displayed)",
+    type: Number,
+    required: false,
+  })
+  @IsOptional()
+  @IsInt()
+  numberOfQuestionsPerAttempt?: number | null;
+
+  @ApiProperty({
     description: "Is the assignment published or not.",
     type: Boolean,
     required: false,
@@ -176,7 +184,12 @@ export class UpdateAssignmentRequestDto {
   @IsOptional()
   @IsBoolean()
   showQuestionScore: boolean;
-
+  @ApiProperty({
+    description: "Show question",
+    type: Boolean,
+    required: false,
+  })
+  showQuestions: boolean;
   @ApiProperty({
     description:
       "Should the AI provide feedback when the learner submits a question",

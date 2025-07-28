@@ -1,6 +1,6 @@
 interface Props {
   className?: string;
-  [key: string]: any; // This allows for any additional props with an explicit type
+  [key: string]: any;
 }
 
 const MultipleChoiceSVG: React.FC<Props> = (props) => {

@@ -11,6 +11,7 @@ pids
 *.seed
 *.pid.lock
 
+
 # to insure no accidental commits of the seed file or mock jwt file
 seed.sql
 staging-seed.sql
@@ -59,17 +60,17 @@ typings/
 .yarn-integrity
 
 # dotenv environment variables file
-.env
+*.env
 dev.env
 dev.op.env
-.env.local
 .env.merged
 .env.op.local
 
+*.env
+.env.local
 
 # local configs
 config/local
-
 # typescript
 *.tsbuildinfo
 next-env.d.ts
@@ -103,3 +104,4 @@ dist/
 .turbo/
 out/
 .idea/whitesource/WebStormUsageMetrics.txt
+.specstory/

@@ -41,10 +41,8 @@ export class RubricService implements IRubricService {
     assignmentId: number,
     rubricIndex?: number,
   ): Promise<ScoringDto> {
-    // Map question type to correct rubric template
     const rubricTemplate = this.selectRubricTemplate(question.type);
 
-    // If no matching rubric template, return an empty scoring object
     if (!rubricTemplate) {
       return {
         type: ScoringType.CRITERIA_BASED,
@@ -91,7 +89,6 @@ export class RubricService implements IRubricService {
 
     const formatInstructions = parser.getFormatInstructions();
 
-    // Create a more direct prompt that will produce consistent rubric structure
     const prompt = new PromptTemplate({
       template: `
         You are an expert educator creating a marking rubric for a {questionType} question.
@@ -123,14 +120,12 @@ export class RubricService implements IRubricService {
     });
 
     try {
-      // Process the prompt through the LLM
       const response = await this.promptProcessor.processPrompt(
         prompt,
         assignmentId,
         AIUsageType.QUESTION_GENERATION,
       );
 
-      // Parse the response, with error handling
       let parsed:
         | {
             rubrics?: {
@@ -148,7 +143,6 @@ export class RubricService implements IRubricService {
         throw new Error(`Failed to parse JSON response: ${errorMessage}`);
       }
 
-      // Ensure we have the expected structure and valid rubrics
       if (
         !parsed ||
         !parsed.rubrics ||
@@ -159,7 +153,6 @@ export class RubricService implements IRubricService {
         throw new Error("Response did not contain valid rubrics");
       }
 
-      // Validate rubrics structure
       const validRubrics = parsed.rubrics.filter(
         (r) =>
           r &&
@@ -175,7 +168,6 @@ export class RubricService implements IRubricService {
         throw new Error("No valid rubrics found in response");
       }
 
-      // Build the final ScoringDto with validated rubrics
       const finalScoring: ScoringDto = {
         type: ScoringType.CRITERIA_BASED,
         rubrics: (validRubrics as RubricDto[]).map((r) => ({
@@ -195,7 +187,6 @@ export class RubricService implements IRubricService {
         `Error generating rubric: ${errorMessage || "Unknown error"}`,
       );
 
-      // Fallback response with a basic rubric structure
       return {
         type: ScoringType.CRITERIA_BASED,
         rubrics: [
@@ -257,16 +248,14 @@ export class RubricService implements IRubricService {
         ],
       };
     }
-  } // Validation function to ensure criteria have different point values
+  }
   private validateCriteria(rubric: RubricDto): boolean {
     if (!rubric.criteria || rubric.criteria.length < 2) {
       return false;
     }
 
-    // Check for unique point values
     const pointValues = new Set<number>();
 
-    // Check that points are in descending order
     let previousPoints = Number.POSITIVE_INFINITY;
 
     for (const criterion of rubric.criteria) {
@@ -274,13 +263,11 @@ export class RubricService implements IRubricService {
         return false;
       }
 
-      // Check if point value is unique
       if (pointValues.has(criterion.points)) {
         return false;
       }
       pointValues.add(criterion.points);
 
-      // Check if points are in descending order
       if (criterion.points > previousPoints) {
         return false;
       }
@@ -297,11 +284,9 @@ export class RubricService implements IRubricService {
     question: QuestionDto,
     assignmentId: number,
   ): Promise<ScoringDto> {
-    // Select the correct template for the question type
     const rubricTemplate = this.selectRubricTemplate(question.type);
 
     if (!rubricTemplate) {
-      // If no specialized template, just return existing rubrics or an empty set
       return (
         question.scoring || {
           type: ScoringType.CRITERIA_BASED,
@@ -310,10 +295,8 @@ export class RubricService implements IRubricService {
       );
     }
 
-    // Read existing rubrics from the question. If none, start with []
     const existingRubrics = question.scoring?.rubrics ?? [];
 
-    // Define the output schema
     const parser = StructuredOutputParser.fromZodSchema(
       z.object({
         newRubrics: z
@@ -398,14 +381,12 @@ export class RubricService implements IRubricService {
     });
 
     try {
-      // Process the prompt through the LLM
       const response = await this.promptProcessor.processPrompt(
         prompt,
         assignmentId,
         AIUsageType.QUESTION_GENERATION,
       );
 
-      // Parse the response, with error handling
       let parsed:
         | {
             newRubrics?: {
@@ -423,7 +404,6 @@ export class RubricService implements IRubricService {
         throw new Error(`Failed to parse JSON response: ${errorMessage}`);
       }
 
-      // Ensure we have the expected structure and valid rubrics
       if (
         !parsed ||
         !parsed.newRubrics ||
@@ -434,7 +414,6 @@ export class RubricService implements IRubricService {
         throw new Error("Response did not contain valid new rubrics");
       }
 
-      // Validate new rubrics
       const validNewRubrics = parsed.newRubrics.filter(
         (r) =>
           r &&
@@ -449,7 +428,6 @@ export class RubricService implements IRubricService {
         throw new Error("No valid new rubrics found in response");
       }
 
-      // Combine with existing rubrics, checking for duplicates
       const combinedRubrics = [...existingRubrics];
       const existingQuestions = new Set(
         existingRubrics.map((r) => r.rubricQuestion),
@@ -467,7 +445,6 @@ export class RubricService implements IRubricService {
         }
       }
 
-      // Return the combined set
       return {
         type: ScoringType.CRITERIA_BASED,
         rubrics: combinedRubrics,
@@ -499,13 +476,11 @@ export class RubricService implements IRubricService {
       return [];
     }
 
-    // Select the correct template
     const choiceTemplate =
       question.type === "SINGLE_CORRECT"
         ? this.getSingleChoiceTemplate()
         : this.getMultipleChoiceTemplate();
 
-    // Define the output schema
     const parser = StructuredOutputParser.fromZodSchema(
       z.object({
         choices: z
@@ -533,7 +508,6 @@ export class RubricService implements IRubricService {
 
     const formatInstructions = parser.getFormatInstructions();
 
-    // Create the prompt
     const prompt = new PromptTemplate({
       template: choiceTemplate,
       inputVariables: [],
@@ -544,14 +518,12 @@ export class RubricService implements IRubricService {
     });
 
     try {
-      // Process the prompt through the LLM
       const response = await this.promptProcessor.processPrompt(
         prompt,
         assignmentId,
         AIUsageType.QUESTION_GENERATION,
       );
 
-      // Parse the response
       let parsed:
         | {
             choices?: {
@@ -582,7 +554,6 @@ export class RubricService implements IRubricService {
         throw new Error("Response did not contain valid choices");
       }
 
-      // Validate choices
       const validChoices = parsed.choices.filter(
         (c) =>
           c &&
@@ -597,7 +568,6 @@ export class RubricService implements IRubricService {
         throw new Error("No valid choices found in response");
       }
 
-      // For SINGLE_CORRECT, ensure exactly one choice is marked as correct
       if (question.type === "SINGLE_CORRECT") {
         const correctChoices = validChoices.filter((c) => c.isCorrect);
         if (correctChoices.length !== 1) {
@@ -607,7 +577,6 @@ export class RubricService implements IRubricService {
         }
       }
 
-      // For MULTIPLE_CORRECT, ensure at least one choice is marked as correct
       if (
         question.type === "MULTIPLE_CORRECT" &&
         !validChoices.some((c) => c.isCorrect)
@@ -615,7 +584,6 @@ export class RubricService implements IRubricService {
         validChoices[0].isCorrect = true;
       }
 
-      // Convert to the expected format
       const finalChoices: Choice[] = validChoices.map((ch) => ({
         choice: ch.choice,
         isCorrect: ch.isCorrect,
@@ -631,7 +599,6 @@ export class RubricService implements IRubricService {
         `Error generating choices: ${errorMessage || "Unknown error"}`,
       );
 
-      // Return a fallback set of choices
       return question.type === "SINGLE_CORRECT"
         ? [
             {
@@ -692,12 +659,10 @@ export class RubricService implements IRubricService {
    * Check if a rubric is complete
    */
   isRubricComplete(rubric: RubricDto): boolean {
-    // Must have at least 2 criteria
     if (!rubric.criteria || rubric.criteria.length < 2) {
       return false;
     }
 
-    // Each criterion must have a non-empty description
     for (const c of rubric.criteria) {
       if (!c.description || !c.description.trim()) {
         return false;
@@ -727,8 +692,6 @@ export class RubricService implements IRubricService {
       }
     }
   }
-
-  // Template methods
 
   private getTextRubricTemplate(): string {
     return `

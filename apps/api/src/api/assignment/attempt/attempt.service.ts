@@ -18,18 +18,20 @@ import {
   Translation,
 } from "@prisma/client";
 import { JsonValue } from "@prisma/client/runtime/library";
+import { LearnerFileUpload } from "src/api/attempt/common/interfaces/attempt.interface";
+import { LlmFacadeService } from "src/api/llm/llm-facade.service";
 import { PresentationQuestionEvaluateModel } from "src/api/llm/model/presentation.question.evaluate.model";
 import { VideoPresentationQuestionEvaluateModel } from "src/api/llm/model/video-presentation.question.evaluate.model";
-import { QuestionAnswerContext } from "../../llm/model/base.question.evaluate.model";
-import { UrlBasedQuestionEvaluateModel } from "../../llm/model/url.based.question.evaluate.model";
 import {
   UserRole,
   UserSession,
   UserSessionRequest,
 } from "../../../auth/interfaces/user.session.interface";
 import { PrismaService } from "../../../prisma.service";
+import { QuestionAnswerContext } from "../../llm/model/base.question.evaluate.model";
 import { FileUploadQuestionEvaluateModel } from "../../llm/model/file.based.question.evaluate.model";
 import { TextBasedQuestionEvaluateModel } from "../../llm/model/text.based.question.evaluate.model";
+import { UrlBasedQuestionEvaluateModel } from "../../llm/model/url.based.question.evaluate.model";
 import type { LearnerGetAssignmentResponseDto } from "../dto/get.assignment.response.dto";
 import {
   AttemptQuestionDto,
@@ -38,6 +40,7 @@ import {
 } from "../dto/update.questions.request.dto";
 import { Choice } from "../question/dto/create.update.question.request.dto";
 import { QuestionService } from "../question/question.service";
+import { AssignmentServiceV1 } from "../v1/services/assignment.service";
 import {
   GRADE_SUBMISSION_EXCEPTION,
   IN_PROGRESS_SUBMISSION_EXCEPTION,
@@ -62,10 +65,7 @@ import {
   GetAssignmentAttemptResponseDto,
 } from "./dto/assignment-attempt/get.assignment.attempt.response.dto";
 import type { AssignmentAttemptQuestions } from "./dto/assignment-attempt/get.assignment.attempt.response.dto";
-import {
-  LearnerFileUpload,
-  LearnerPresentationResponse,
-} from "./dto/assignment-attempt/types";
+import { LearnerPresentationResponse } from "./dto/assignment-attempt/types";
 import { UpdateAssignmentAttemptResponseDto } from "./dto/assignment-attempt/update.assignment.attempt.response.dto";
 import { CreateQuestionResponseAttemptRequestDto } from "./dto/question-response/create.question.response.attempt.request.dto";
 import {
@@ -74,10 +74,7 @@ import {
 } from "./dto/question-response/create.question.response.attempt.response.dto";
 import type { GetQuestionResponseAttemptResponseDto } from "./dto/question-response/get.question.response.attempt.response.dto";
 import { AttemptHelper } from "./helper/attempts.helper";
-import { LlmFacadeService } from "src/api/llm/llm-facade.service";
-import { AssignmentServiceV1 } from "../v1/services/assignment.service";
 
-//types
 type QuestionResponse = CreateQuestionResponseAttemptRequestDto & {
   id: number;
   assignmentAttemptId?: number;
@@ -298,7 +295,6 @@ export class AttemptServiceV1 {
   ): Promise<AssignmentAttemptResponseDto[]> {
     const { userId, role } = userSession;
 
-    // Correct ownership permissions are handled through AssignmentAttemptAccessControlGuard.
     return role === UserRole.AUTHOR
       ? this.prisma.assignmentAttempt.findMany({
           where: { assignmentId },
@@ -501,7 +497,6 @@ export class AttemptServiceV1 {
         assignmentAttempt.expiresAt &&
         tenSecondsBeforeNow > assignmentAttempt.expiresAt
       ) {
-        // if the attempt is expired, we should allow the user to submit the attempt but not grade it
         await this.prisma.assignmentAttempt.update({
           where: { id: assignmentAttemptId },
           data: {
@@ -519,13 +514,13 @@ export class AttemptServiceV1 {
           totalPossiblePoints: 0,
           grade: 0,
           showSubmissionFeedback: false,
+          showQuestions: false,
           feedbacksForQuestions: [],
           message: SUBMISSION_DEADLINE_EXCEPTION_MESSAGE,
         };
       }
       const preTranslatedQuestions = new Map<number, QuestionDto>();
 
-      // Loop through each response (assume each has a questionId property)
       for (const response of updateAssignmentAttemptDto.responsesForQuestions) {
         const questionId: number = response.id;
         const variantMapping = assignmentAttempt.questionVariants.find(
@@ -533,7 +528,7 @@ export class AttemptServiceV1 {
         );
         let question: QuestionDto;
         if (variantMapping && variantMapping.questionVariant !== null) {
-          // Build the question from variant details (logic from createQuestionResponse)
+          // Build the question from variant details (logic from Response)
           const variant = variantMapping.questionVariant;
           const baseQuestion = variant.variantOf;
           question = {
@@ -564,10 +559,9 @@ export class AttemptServiceV1 {
               baseQuestion.gradingContextQuestionIds ?? [],
           };
         } else {
-          // Fallback to fetching the question by ID if no variant was selected
           question = await this.questionService.findOne(questionId);
         }
-        // Apply the translation before storing it
+
         question = await this.applyTranslationToQuestion(
           question,
           updateAssignmentAttemptDto.language,
@@ -575,7 +569,7 @@ export class AttemptServiceV1 {
         );
         preTranslatedQuestions.set(questionId, question);
       }
-      // Attach the pre-translated questions to the DTO.
+
       updateAssignmentAttemptDto.preTranslatedQuestions =
         preTranslatedQuestions;
     }
@@ -609,7 +603,6 @@ export class AttemptServiceV1 {
           );
 
     if (gradingCallbackRequired && role === UserRole.LEARNER) {
-      // find the highest grade for the user and send it to the LTI gateway.  This is to ensure that the grade sent to the LTI gateway is the highest grade achieved by the user so it doesnt get overwritten by a lower grade
       const userAttempts = await this.prisma.assignmentAttempt.findMany({
         where: {
           userId,
@@ -631,7 +624,6 @@ export class AttemptServiceV1 {
       await this.sendGradeToLtiGateway(highestOverall, authCookie);
     }
     if (role === UserRole.AUTHOR) {
-      // if the request is from the author, we don't need to reflect the grade in the database since it's just a test run
       return {
         id: -1,
         submitted: true,
@@ -640,6 +632,7 @@ export class AttemptServiceV1 {
         totalPossiblePoints,
         grade: assignment.showAssignmentScore ? grade : undefined,
         showSubmissionFeedback: assignment.showSubmissionFeedback,
+        showQuestions: assignment.showQuestions,
         feedbacksForQuestions: this.constructFeedbacksForQuestions(
           successfulQuestionResponses,
           assignment as unknown as LearnerGetAssignmentResponseDto,
@@ -657,6 +650,7 @@ export class AttemptServiceV1 {
         success: true,
         totalPointsEarned,
         totalPossiblePoints,
+        showQuestions: assignment.showQuestions,
         grade: assignment.showAssignmentScore ? result.grade : undefined,
         showSubmissionFeedback: assignment.showSubmissionFeedback,
         feedbacksForQuestions: this.constructFeedbacksForQuestions(
@@ -743,6 +737,7 @@ export class AttemptServiceV1 {
         showAssignmentScore: true,
         showSubmissionFeedback: true,
         showQuestionScore: true,
+        showQuestions: true,
       },
     });
 
@@ -882,6 +877,7 @@ export class AttemptServiceV1 {
             ? (JSON.parse(question.choices) as Choice[])
             : question.choices,
       })),
+      showQuestions: assignment.showQuestions,
       passingGrade: assignment.passingGrade,
       showAssignmentScore: assignment.showAssignmentScore,
       showSubmissionFeedback: assignment.showSubmissionFeedback,
@@ -914,13 +910,11 @@ export class AttemptServiceV1 {
     assignmentAttemptId: number,
     language: string,
   ): Promise<GetAssignmentAttemptResponseDto> {
-    // 1. Normalize language (e.g., "en-US" -> "en")
     if (!language) {
       language = "en";
     }
     const normalizedLanguage = language.toLowerCase().split("-")[0];
 
-    // 2. Fetch assignmentAttempt with questionResponses and questionVariants
     const assignmentAttempt = await this.prisma.assignmentAttempt.findUnique({
       where: { id: assignmentAttemptId },
       include: {
@@ -942,7 +936,6 @@ export class AttemptServiceV1 {
       );
     }
 
-    // 3. Fetch assignment (and relevant settings)
     const assignment = (await this.prisma.assignment.findUnique({
       where: { id: assignmentAttempt.assignmentId },
       select: {
@@ -959,15 +952,13 @@ export class AttemptServiceV1 {
     const questionOrder =
       assignmentAttempt.questionOrder || assignment.questionOrder || [];
 
-    // 4. Build a map of the assignment’s original questions
     const questionById = new Map(assignment.questions.map((q) => [q.id, q]));
-    // 5. Collect the IDs for questions and variants
+
     const questionIds = assignment.questions.map((q) => q.id);
     const variantIds = assignmentAttempt.questionVariants
       .map((qv) => qv.questionVariant?.id)
       .filter((id) => id != undefined);
 
-    // 6. Fetch all translations that might apply (for questions or variants)
     const translations = await this.prisma.translation.findMany({
       where: {
         OR: [
@@ -977,7 +968,6 @@ export class AttemptServiceV1 {
       },
     });
 
-    // 7. Build a lookup keyed by "question-{id}" or "variant-{id}"
     const translationMap = new Map<
       string,
       Record<string, { translatedText: string; translatedChoices: any }>
@@ -995,22 +985,19 @@ export class AttemptServiceV1 {
       };
     }
 
-    // 8. Merge data for question variants used in this attempt
     const questionVariantsArray = assignmentAttempt.questionVariants ?? [];
 
     const questionsWithVariants = questionVariantsArray?.map((qv) => {
       const variant = qv.questionVariant;
       const originalQ = questionById.get(qv.questionId);
 
-      // Determine which translation to use.
       const variantTranslations = variant
         ? translationMap.get(`variant-${variant.id}`) || {}
         : {};
       const questionTranslations = variant
-        ? {} // When a variant exists, ignore question translations.
+        ? {}
         : translationMap.get(`question-${qv.questionId}`) || {};
 
-      // Create a fallback translation (using base question data) if none exists.
       const translationFallback = {
         translatedText: variant
           ? variant.variantContent || originalQ?.question
@@ -1030,7 +1017,6 @@ export class AttemptServiceV1 {
 
       const normalizedChoices: Choice[] = this.parseChoices(baseChoicesRaw);
 
-      // guard against unexpected formats
       if (!Array.isArray(normalizedChoices)) {
         throw new InternalServerErrorException(
           `Malformed choices for question ${originalQ.id}`,
@@ -1038,7 +1024,6 @@ export class AttemptServiceV1 {
       }
       let finalChoices = normalizedChoices;
 
-      // --- REORDERING BASE CHOICES & COMPUTING PERMUTATION ---
       if (qv.randomizedChoices) {
         let randomizedChoicesArray: Choice[] = [];
         if (typeof qv.randomizedChoices === "string") {
@@ -1110,12 +1095,10 @@ export class AttemptServiceV1 {
       };
     });
 
-    // 9. Create a map of "question ID -> merged question data"
     const questionVariantsMap = new Map(
       questionsWithVariants.map((question) => [question.id, question]),
     );
 
-    // 10. For any questions that didn't have a variant, use the original question
     const questions: Question[] = await this.prisma.question.findMany({
       where: { assignmentId: assignmentAttempt.assignmentId },
     });
@@ -1123,13 +1106,11 @@ export class AttemptServiceV1 {
       (originalQ) => !questionVariantsMap.has(originalQ.id),
     );
 
-    // 11. Combine them
     const mergedQuestions = [
       ...questionVariantsMap.values(),
       ...nonVariantQuestions,
     ];
 
-    // 12. Apply any questionOrder
     const finalQuestions =
       questionOrder.length > 0
         ? questionOrder
@@ -1194,6 +1175,7 @@ export class AttemptServiceV1 {
       showAssignmentScore: assignment.showAssignmentScore,
       showSubmissionFeedback: assignment.showSubmissionFeedback,
       showQuestionScore: assignment.showQuestionScore,
+      showQuestions: assignment.showQuestions,
     };
   }
 
@@ -1241,7 +1223,7 @@ export class AttemptServiceV1 {
     language: string,
     authorQuestions?: QuestionDto[],
     assignmentDetails?: authorAssignmentDetailsDTO,
-    preTranslatedQuestions?: Map<number, QuestionDto>, // new optional parameter
+    preTranslatedQuestions?: Map<number, QuestionDto>,
   ): Promise<CreateQuestionResponseAttemptResponseDto> {
     let question: QuestionDto;
     let assignmentContext: {
@@ -1389,7 +1371,6 @@ export class AttemptServiceV1 {
     description: string,
     userId: string,
   ): Promise<void> {
-    // Ensure the assignment exists
     const assignmentExists = await this.prisma.assignment.findUnique({
       where: { id: assignmentId },
     });
@@ -1397,7 +1378,7 @@ export class AttemptServiceV1 {
     if (!assignmentExists) {
       throw new NotFoundException("Assignment not found");
     }
-    // check if assignment attempt exists
+
     const assignmentAttemptExists =
       await this.prisma.assignmentAttempt.findUnique({
         where: { id: attemptId },
@@ -1405,7 +1386,7 @@ export class AttemptServiceV1 {
     if (!assignmentAttemptExists) {
       throw new NotFoundException("Assignment attempt not found");
     }
-    // if the user created more than 5 reports in the last 24 hours, throw an error
+
     const reports = await this.prisma.report.findMany({
       where: {
         reporterId: userId,
@@ -1420,7 +1401,6 @@ export class AttemptServiceV1 {
       );
     }
 
-    // Create a new report
     await this.prisma.report.create({
       data: {
         assignmentId,
@@ -1432,7 +1412,6 @@ export class AttemptServiceV1 {
       },
     });
   }
-  // ==================== PRIVATE METHODS ====================
 
   /**
    * Validates whether a new attempt can be created for the given assignment and user session.
@@ -1570,7 +1549,6 @@ export class AttemptServiceV1 {
     const questionResponsesPromise = responsesForQuestions.map(
       async (questionResponse) => {
         const { id: questionId, ...cleanedQuestionResponse } = questionResponse;
-        console.log("qustionResponse", questionResponse);
         return await this.createQuestionResponse(
           assignmentAttemptId,
           questionId,
@@ -1699,13 +1677,12 @@ export class AttemptServiceV1 {
     updateAssignmentAttemptDto: LearnerUpdateAssignmentAttemptRequestDto,
     grade: number,
   ) {
-    // Omit fields that shouldn't be part of the update
     const {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       responsesForQuestions,
-      authorQuestions, // removing author questions from the update request
-      authorAssignmentDetails, // removing author assignment details from the update request
-      language, // removing language from the update requests
+      authorQuestions,
+      authorAssignmentDetails,
+      language,
       preTranslatedQuestions,
       ...cleanedUpdateAssignmentAttemptDto
     } = updateAssignmentAttemptDto;
@@ -1807,7 +1784,6 @@ export class AttemptServiceV1 {
       ];
       return { responseDto, learnerResponse: "" };
     }
-    // convert language code to language name
 
     switch (question.type) {
       case QuestionType.TEXT: {
@@ -2204,7 +2180,6 @@ export class AttemptServiceV1 {
 
     let translation: Translation | null = null;
 
-    // If there's a variant, first attempt to fetch the translation for the variant.
     if (
       variantMapping &&
       variantMapping.questionVariant !== null &&
@@ -2217,7 +2192,7 @@ export class AttemptServiceV1 {
           languageCode: language,
         },
       });
-      // Fallback to base question translation if no variant translation is found.
+
       if (!translation) {
         translation = await this.prisma.translation.findFirst({
           where: {
@@ -2245,7 +2220,7 @@ export class AttemptServiceV1 {
               translation.translatedChoices,
             ) as Choice[];
           } catch {
-            question.choices = []; // Default to empty array on failure
+            question.choices = [];
           }
         } else if (Array.isArray(translation.translatedChoices)) {
           question.choices =
@@ -2286,7 +2261,6 @@ export class AttemptServiceV1 {
     const normalizedLearnerChoice = this.normalizeText(learnerChoice);
     const correctChoice = choices.find((choice) => choice.isCorrect);
 
-    // Use normalized comparison here.
     const selectedChoice = choices.find(
       (choice) => this.normalizeText(choice.choice) === normalizedLearnerChoice,
     );
@@ -2362,19 +2336,17 @@ export class AttemptServiceV1 {
 
     const learnerChoices =
       createQuestionResponseAttemptRequestDto.learnerChoices;
-    // Normalize the learner's submitted choices
+
     const normalizedLearnerChoices = new Set(
       learnerChoices.map((choice) => this.normalizeText(choice)),
     );
 
-    // Parse the choices from the question and build normalized versions
     const choices = this.parseChoices(question.choices);
     const normalizedChoices = choices.map((choice) => ({
       original: choice,
       normalized: this.normalizeText(choice.choice),
     }));
 
-    // Get normalized texts for all correct choices
     const correctChoices = choices.filter((choice) => choice.isCorrect) || [];
     const correctChoiceTexts = correctChoices.map((choice) =>
       this.normalizeText(choice.choice),
@@ -2383,7 +2355,6 @@ export class AttemptServiceV1 {
     let totalPoints = 0;
     const feedbackDetails: string[] = [];
 
-    // Evaluate each learner choice using normalized comparisons
     for (const learnerChoice of learnerChoices) {
       const normalizedLearnerChoice = this.normalizeText(learnerChoice);
       const matchedChoice = normalizedChoices.find(
@@ -2423,7 +2394,6 @@ export class AttemptServiceV1 {
     );
     const finalPoints = Math.max(0, Math.min(totalPoints, maxPoints));
 
-    // Check if every correct choice (normalized) is among the learner's normalized choices
     const allCorrectSelected = correctChoiceTexts.every((correctText) =>
       normalizedLearnerChoices.has(correctText),
     );
@@ -2453,13 +2423,11 @@ export class AttemptServiceV1 {
   }
 
   private normalizeText(text: string): string {
-    return (
-      text
-        .trim()
-        .toLowerCase()
-        // Remove common punctuation that might differ in translations
-        .replaceAll(/[!,.،؛؟]/g, "")
-    );
+    return text
+      .trim()
+      .toLowerCase()
+
+      .replaceAll(/[!,.،؛؟]/g, "");
   }
   /**
    * Calculates the time range start date based on the assignment settings.
@@ -2494,8 +2462,6 @@ export class AttemptServiceV1 {
       },
     });
   }
-
-  // ─── ADD HELPER FUNCTIONS FOR LOCALIZATION ──────────────────────────────
 
   private getLocalizedString(
     key: string,
@@ -2862,7 +2828,6 @@ export class AttemptServiceV1 {
           metadata: {},
         }));
 
-      // If choices are stored as JSON, ensure they are parsed properly into an array of objects
       const choices: {
         choice: string;
         points: number;
@@ -2885,7 +2850,6 @@ export class AttemptServiceV1 {
             }[])
         : [];
 
-      // Ensure the choices are in the expected format
       const formattedChoices = choices?.map(
         (choice: {
           choice: string;
@@ -2908,7 +2872,7 @@ export class AttemptServiceV1 {
         maxCharacters: question.maxCharacters,
         type: question.type,
         question: question.question,
-        choices: formattedChoices, // Use the formatted choices
+        choices: formattedChoices,
         assignmentId: question.assignmentId,
         alreadyInBackend: true,
         questionResponses: correspondingResponses,
@@ -2954,7 +2918,6 @@ export class AttemptServiceV1 {
     let questionsAnswersContext: QuestionAnswerContext[] = [];
 
     if (role === UserRole.AUTHOR && assignmentDetails && authorQuestions) {
-      // Use the provided assignment details and questions for the author mode
       assignmentInstructions = assignmentDetails.instructions || "";
       const authorQuestion = authorQuestions.find((q) => q.id === questionId);
 
@@ -2964,10 +2927,9 @@ export class AttemptServiceV1 {
 
       questionsAnswersContext = authorQuestions.map((q) => ({
         question: q.question,
-        answer: "", // No learner answers available in author mode
+        answer: "",
       }));
     } else {
-      // Default behavior for learner mode
       const assignment = await this.prisma.assignment.findUnique({
         where: { id: assignmentId },
         select: { instructions: true },

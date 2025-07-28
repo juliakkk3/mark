@@ -6,7 +6,7 @@ import { useAssignmentConfig } from "@/stores/assignmentConfig";
 import { useEffect, type ComponentPropsWithoutRef, type FC } from "react";
 import SectionWithTitle from "../ReusableSections/SectionWithTitle";
 
-interface Props extends ComponentPropsWithoutRef<"div"> {}
+type Props = ComponentPropsWithoutRef<"div">;
 
 const Component: FC<Props> = () => {
   const [

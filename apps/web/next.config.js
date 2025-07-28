@@ -1,15 +1,12 @@
 /** @type {import('next').NextConfig} */
-
+const instana = require("@instana/collector");
+instana();
 const nextConfig = {
-  reactStrictMode: true, // for development
+  reactStrictMode: true,
   compiler: {
     styledComponents: true,
   },
-  // ignore typescript errors
-  // typescript: {
-  //   ignoreBuildErrors: true,
-  // },
-  // proxy api requests to nestjs server
+
   async rewrites() {
     return [
       {

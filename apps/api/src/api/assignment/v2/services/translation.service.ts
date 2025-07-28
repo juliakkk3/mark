@@ -9,15 +9,15 @@ import {
   getLanguageNameFromCode,
 } from "../../attempt/helper/languages";
 import {
+  GetAssignmentResponseDto,
+  LearnerGetAssignmentResponseDto,
+} from "../../dto/get.assignment.response.dto";
+import {
   Choice,
   QuestionDto,
   VariantDto,
 } from "../../dto/update.questions.request.dto";
 import { JobStatusServiceV2 } from "./job-status.service";
-import {
-  GetAssignmentResponseDto,
-  LearnerGetAssignmentResponseDto,
-} from "../../dto/get.assignment.response.dto";
 
 interface IExistingTranslation {
   introduction: string;
@@ -63,33 +63,29 @@ export class TranslationService {
   private readonly languageTranslation: boolean;
   private readonly limiter: Bottleneck;
 
-  // Configuration constants for optimized performance
-  private readonly MAX_BATCH_SIZE = 25;
-  private readonly CONCURRENCY_LIMIT = 20;
+  private readonly MAX_BATCH_SIZE = 50;
+  private readonly CONCURRENCY_LIMIT = 35;
   private readonly MAX_RETRY_ATTEMPTS = 2;
-  private readonly RETRY_DELAY_BASE = 200; // ms
-  private readonly STATUS_UPDATE_INTERVAL = 5; // Update status every N items
+  private readonly RETRY_DELAY_BASE = 200;
+  private readonly STATUS_UPDATE_INTERVAL = 10;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly llmFacadeService: LlmFacadeService,
     private readonly jobStatusService: JobStatusServiceV2,
   ) {
-    this.languageTranslation = process.env.NODE_ENV === "development";
+    this.languageTranslation = process.env.NODE_ENV !== "development";
 
-    // Optimized bottleneck configuration for better throughput
     this.limiter = new Bottleneck({
-      maxConcurrent: 25, // Balanced concurrency
-      minTime: 10, // Minimal delay between operations
-      reservoir: 100, // More available slots
-      reservoirRefreshInterval: 10_000, // Refresh more frequently (10s)
-      reservoirRefreshAmount: 100,
-      highWater: 2000, // Higher queue size
-      strategy: Bottleneck.strategy.LEAK, // LEAK strategy for better throughput
-      timeout: 30_000, // Shorter timeout (30s)
+      maxConcurrent: 35,
+      minTime: 5,
+      reservoir: 200,
+      reservoirRefreshInterval: 5000,
+      reservoirRefreshAmount: 200,
+      highWater: 3000,
+      strategy: Bottleneck.strategy.OVERFLOW,
+      timeout: 45_000,
     });
-
-    // Schedule health checks
     setInterval(() => this.checkLimiterHealth(), 30_000);
   }
 
@@ -109,16 +105,13 @@ export class TranslationService {
     const results: BatchProcessResult = { success: 0, failure: 0, dropped: 0 };
     const chunks: T[][] = [];
 
-    // Create chunks for processing
     for (let index = 0; index < items.length; index += batchSize) {
       chunks.push(items.slice(index, index + batchSize));
     }
 
-    // Process chunks in sequence, but with internal parallelism
     for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
       const chunk = chunks[chunkIndex];
 
-      // Process items in parallel with concurrency limit
       const processingPromises = chunk.map((item) =>
         this.limiter
           .schedule({ expiration: 15_000, priority: 5 }, () =>
@@ -138,7 +131,6 @@ export class TranslationService {
 
       const chunkResults = await Promise.all(processingPromises);
 
-      // Count successful results
       results.success += chunkResults.filter(
         (result) => result === true,
       ).length;
@@ -146,7 +138,6 @@ export class TranslationService {
         (result) => result === false,
       ).length;
 
-      // Brief pause between chunks to avoid overwhelming external services
       if (chunkIndex < chunks.length - 1) {
         await new Promise((resolve) => setTimeout(resolve, 100));
       }
@@ -174,7 +165,6 @@ export class TranslationService {
       availableLanguages.add(translation.languageCode);
     }
 
-    // Always include English as a fallback
     availableLanguages.add("en");
 
     return [...availableLanguages];
@@ -228,7 +218,6 @@ export class TranslationService {
       );
 
       void this.limiter.stop({ dropWaitingJobs: false }).then(() => {
-        // Create a new limiter instance with the same settings
         this.limiter.updateSettings({
           maxConcurrent: 25,
           minTime: 10,
@@ -260,7 +249,6 @@ export class TranslationService {
   ): Promise<void> {
     if (!assignment) return;
 
-    // Skip if language detection fails or matches
     try {
       const originalLanguage = await this.llmFacadeService.getLanguageCode(
         assignment.introduction || "en",
@@ -275,7 +263,6 @@ export class TranslationService {
       );
     }
 
-    // Get translation in a single query
     const assignmentTranslation =
       await this.prisma.assignmentTranslation.findUnique({
         where: {
@@ -293,7 +280,6 @@ export class TranslationService {
       });
 
     if (assignmentTranslation) {
-      // Apply translations if available
       if (assignmentTranslation.translatedName)
         assignment.name = assignmentTranslation.translatedName;
       if (assignmentTranslation.translatedIntroduction)
@@ -339,7 +325,6 @@ export class TranslationService {
     currentItem?: string | number,
     additionalInfo?: string,
   ): Promise<void> {
-    // Skip some updates to reduce database load
     if (
       tracker.completedItems % this.STATUS_UPDATE_INTERVAL !== 0 &&
       tracker.completedItems !== tracker.totalItems
@@ -392,7 +377,6 @@ export class TranslationService {
         const errorMessage =
           error instanceof Error ? error.message : String(error);
 
-        // Only log on final attempt to reduce log noise
         if (attempts >= maxAttempts) {
           this.logger.error(
             `Failed ${operationName} after ${maxAttempts} attempts: ${errorMessage}`,
@@ -400,7 +384,6 @@ export class TranslationService {
           throw error;
         }
 
-        // Shorter backoff with randomization to prevent thundering herd
         const jitter = Math.random() * 200;
         await new Promise((resolve) =>
           setTimeout(resolve, this.RETRY_DELAY_BASE * attempts + jitter),
@@ -442,24 +425,22 @@ export class TranslationService {
   async translateAssignment(
     assignmentId: number,
     jobId?: number,
+    progressRange?: { start: number; end: number },
   ): Promise<void> {
-    // Skip translation if disabled
     if (!this.languageTranslation) {
       this.logger.log("Translation is disabled in development mode");
-      if (jobId) {
+      if (jobId && progressRange) {
         await this.jobStatusService.updateJobStatus(jobId, {
           status: "In Progress",
           progress: "Translation skipped (disabled in development mode)",
-          percentage: 85,
+          percentage: progressRange.end - 5,
         });
       }
       return;
     }
 
-    // Check limiter health before starting
     this.checkLimiterHealth();
 
-    // Fetch assignment data
     const assignment = (await this.prisma.assignment.findUnique({
       where: { id: assignmentId },
       select: {
@@ -478,7 +459,7 @@ export class TranslationService {
         await this.jobStatusService.updateJobStatus(jobId, {
           status: "Failed",
           progress: `Assignment with id ${assignmentId} not found`,
-          percentage: 0,
+          percentage: progressRange?.start || 0,
         });
       }
       throw new NotFoundException(
@@ -486,35 +467,35 @@ export class TranslationService {
       );
     }
 
-    // Update job status at the start
+    const start = progressRange?.start || 0;
+    const end = progressRange?.end || 100;
+    const range = end - start;
+
     if (jobId) {
       await this.jobStatusService.updateJobStatus(jobId, {
         status: "In Progress",
         progress: "Preparing assignment translation",
-        percentage: 62,
+        percentage: start + Math.floor(range * 0.1),
       });
     }
 
     const supportedLanguages = getAllLanguageCodes() ?? ["en"];
 
-    // Initialize progress tracker if job ID is provided
     const progressTracker = jobId
       ? this.initializeProgressTracker(
           jobId,
           Math.ceil(supportedLanguages.length / this.MAX_BATCH_SIZE),
-          63,
-          88,
+          start + Math.floor(range * 0.2),
+          start + Math.floor(range * 0.9),
           "Translating assignment",
           supportedLanguages.length,
         )
       : undefined;
 
-    // Process translations in parallel batches
     const results = await this.processBatchesInParallel(
       supportedLanguages,
       async (lang: string) => {
         try {
-          // Update progress if tracking
           if (progressTracker && jobId) {
             await this.updateJobProgress(
               progressTracker,
@@ -524,7 +505,6 @@ export class TranslationService {
             );
           }
 
-          // Translate assignment to this language
           await this.executeWithOptimizedRetry(
             `translateAssignment-${assignmentId}-${lang}`,
             () => this.translateAssignmentToLanguage(assignment, lang),
@@ -532,7 +512,6 @@ export class TranslationService {
             jobId,
           );
 
-          // Update progress after successful translation
           if (progressTracker) {
             this.incrementLanguageCompleted(progressTracker);
             await this.updateJobProgress(
@@ -557,12 +536,11 @@ export class TranslationService {
       this.CONCURRENCY_LIMIT,
     );
 
-    // Final job status update
     if (jobId) {
       await this.jobStatusService.updateJobStatus(jobId, {
         status: "In Progress",
-        progress: `Assignment translated to ${results.success} languages (${results.failure} failed, ${results.dropped} retried)`,
-        percentage: 89,
+        progress: `Assignment translated to ${results.success} languages`,
+        percentage: end,
       });
     }
 
@@ -595,7 +573,6 @@ export class TranslationService {
       return;
     }
 
-    // Initial job status update
     await this.jobStatusService.updateJobStatus(jobId, {
       status: "In Progress",
       progress: `Preparing question #${questionId} for translation`,
@@ -605,8 +582,7 @@ export class TranslationService {
     const normalizedText = question.question.trim();
     const normalizedChoices = question.choices ?? null;
 
-    // Detect source language with error handling
-    let questionLang = "en"; // Default to English
+    let questionLang = "en";
     try {
       const detectedLang =
         await this.llmFacadeService.getLanguageCode(normalizedText);
@@ -617,24 +593,18 @@ export class TranslationService {
       this.logger.warn(
         `Language detection failed for question #${questionId}, using English as fallback`,
       );
-
-      await this.jobStatusService.updateJobStatus(jobId, {
-        status: "In Progress",
-        progress: `Language detection failed for question #${questionId}, using English as fallback`,
-        percentage: 12,
-      });
     }
 
-    // Update job status
     await this.jobStatusService.updateJobStatus(jobId, {
       status: "In Progress",
-      progress: `Question #${questionId} detected as ${getLanguageNameFromCode(questionLang)}. Preparing translations...`,
+      progress: `Question #${questionId} detected as ${getLanguageNameFromCode(
+        questionLang,
+      )}. Preparing translations...`,
       percentage: 15,
     });
 
     const supportedLanguages = getAllLanguageCodes() ?? ["en"];
 
-    // Initialize progress tracker (question translation: 20-95%)
     const progressTracker = this.initializeProgressTracker(
       jobId,
       Math.ceil(supportedLanguages.length / this.MAX_BATCH_SIZE),
@@ -644,65 +614,25 @@ export class TranslationService {
       supportedLanguages.length,
     );
 
-    // Process translations in optimized parallel batches
+    // DELETE ALL existing translations for this question first
+    await this.prisma.translation.deleteMany({
+      where: {
+        questionId: questionId,
+        variantId: null,
+      },
+    });
+
     const results = await this.processBatchesInParallel(
       supportedLanguages,
       async (lang: string) => {
         try {
-          // Skip translation if source and target languages are the same
-          if (questionLang.toLowerCase() === lang.toLowerCase()) {
-            this.incrementLanguageCompleted(progressTracker);
-            await this.updateJobProgress(
-              progressTracker,
-              getLanguageNameFromCode(lang),
-              undefined,
-              "Skipped (same language)",
-            );
-            return true;
-          }
-
-          // Update progress
           await this.updateJobProgress(
             progressTracker,
             getLanguageNameFromCode(lang),
             undefined,
-            "Checking for existing translation",
-          );
-
-          // Check for existing translation first
-          const existingReusable = await this.findExistingTranslation(
-            normalizedText,
-            normalizedChoices,
-            lang,
-          );
-
-          if (existingReusable) {
-            await this.linkExistingTranslation(
-              questionId,
-              null,
-              existingReusable,
-              normalizedText,
-              normalizedChoices,
-              lang,
-            );
-
-            this.incrementLanguageCompleted(progressTracker);
-            await this.updateJobProgress(
-              progressTracker,
-              getLanguageNameFromCode(lang),
-              undefined,
-              "Reused existing translation ✓",
-            );
-
-            return true;
-          }
-
-          // Generate new translation
-          await this.updateJobProgress(
-            progressTracker,
-            getLanguageNameFromCode(lang),
-            undefined,
-            "Generating new translation",
+            lang === questionLang
+              ? "Storing original content"
+              : "Checking for existing translation",
           );
 
           await this.generateAndStoreTranslation(
@@ -720,7 +650,9 @@ export class TranslationService {
             progressTracker,
             getLanguageNameFromCode(lang),
             undefined,
-            "Translation completed ✓",
+            lang === questionLang
+              ? "Original stored ✓"
+              : "Translation completed ✓",
           );
 
           return true;
@@ -737,7 +669,6 @@ export class TranslationService {
       this.CONCURRENCY_LIMIT,
     );
 
-    // Final update
     await this.jobStatusService.updateJobStatus(jobId, {
       status: "Completed",
       progress: `Question #${questionId} translated to ${results.success} languages (${results.failure} failed, ${results.dropped} retried)`,
@@ -775,7 +706,6 @@ export class TranslationService {
       return;
     }
 
-    // Initial job status update
     await this.jobStatusService.updateJobStatus(jobId, {
       status: "In Progress",
       progress: `Preparing variant #${variantId} for translation`,
@@ -785,8 +715,7 @@ export class TranslationService {
     const normalizedText = variant.variantContent.trim();
     const normalizedChoices = variant.choices ?? null;
 
-    // Detect source language with error handling
-    let variantLang = "en"; // Default to English
+    let variantLang = "en";
     try {
       const detectedLang =
         await this.llmFacadeService.getLanguageCode(normalizedText);
@@ -801,7 +730,6 @@ export class TranslationService {
 
     const supportedLanguages = getAllLanguageCodes() ?? ["en"];
 
-    // Initialize progress tracker
     const progressTracker = this.initializeProgressTracker(
       jobId,
       Math.ceil(supportedLanguages.length / this.MAX_BATCH_SIZE),
@@ -811,65 +739,25 @@ export class TranslationService {
       supportedLanguages.length,
     );
 
-    // Process translations in optimized parallel batches
+    // DELETE ALL existing translations for this variant first
+    await this.prisma.translation.deleteMany({
+      where: {
+        questionId: questionId,
+        variantId: variantId,
+      },
+    });
+
     const results = await this.processBatchesInParallel(
       supportedLanguages,
       async (lang: string) => {
         try {
-          // Skip translation if source and target languages are the same
-          if (variantLang.toLowerCase() === lang.toLowerCase()) {
-            this.incrementLanguageCompleted(progressTracker);
-            await this.updateJobProgress(
-              progressTracker,
-              getLanguageNameFromCode(lang),
-              undefined,
-              "Skipped (same language)",
-            );
-            return true;
-          }
-
-          // Update progress
           await this.updateJobProgress(
             progressTracker,
             getLanguageNameFromCode(lang),
             undefined,
-            "Checking for existing translation",
-          );
-
-          // Check for existing translation first
-          const existingReusable = await this.findExistingTranslation(
-            normalizedText,
-            normalizedChoices,
-            lang,
-          );
-
-          if (existingReusable) {
-            await this.linkExistingTranslation(
-              questionId,
-              variantId,
-              existingReusable,
-              normalizedText,
-              normalizedChoices,
-              lang,
-            );
-
-            this.incrementLanguageCompleted(progressTracker);
-            await this.updateJobProgress(
-              progressTracker,
-              getLanguageNameFromCode(lang),
-              undefined,
-              "Reused existing translation ✓",
-            );
-
-            return true;
-          }
-
-          // Generate new translation
-          await this.updateJobProgress(
-            progressTracker,
-            getLanguageNameFromCode(lang),
-            undefined,
-            "Generating new translation",
+            lang === variantLang
+              ? "Storing original content"
+              : "Checking for existing translation",
           );
 
           await this.generateAndStoreTranslation(
@@ -887,7 +775,9 @@ export class TranslationService {
             progressTracker,
             getLanguageNameFromCode(lang),
             undefined,
-            "Translation completed ✓",
+            lang === variantLang
+              ? "Original stored ✓"
+              : "Translation completed ✓",
           );
 
           return true;
@@ -904,7 +794,6 @@ export class TranslationService {
       this.CONCURRENCY_LIMIT,
     );
 
-    // Final update
     await this.jobStatusService.updateJobStatus(jobId, {
       status: "Completed",
       progress: `Variant #${variantId} translated to ${results.success} languages (${results.failure} failed, ${results.dropped} retried)`,
@@ -928,7 +817,6 @@ export class TranslationService {
     lang: string,
   ): Promise<void> {
     try {
-      // Check for existing translation first
       const existingTranslation =
         await this.prisma.assignmentTranslation.findFirst({
           where: { assignmentId: assignment.id, languageCode: lang },
@@ -967,7 +855,6 @@ export class TranslationService {
     const updatedData: Prisma.AssignmentTranslationUpdateInput = {};
     const translationPromises: Array<Promise<void>> = [];
 
-    // Translate fields in parallel if they have changed
     if (assignment.name !== existingTranslation.name && assignment.name) {
       translationPromises.push(
         this.llmFacadeService
@@ -1053,10 +940,8 @@ export class TranslationService {
       );
     }
 
-    // Process all translation promises in parallel
     await Promise.all(translationPromises);
 
-    // Only update if there are changes
     if (Object.keys(updatedData).length > 0) {
       await this.prisma.assignmentTranslation.update({
         where: { id: existingTranslation.id },
@@ -1076,11 +961,9 @@ export class TranslationService {
     assignment: GetAssignmentResponseDto | LearnerGetAssignmentResponseDto,
     lang: string,
   ): Promise<void> {
-    // Translate all fields in parallel
     const translationPromises: Array<Promise<any>> = [];
     const translatedData: Record<string, string> = {};
 
-    // Define what to translate
     const fieldsToTranslate = [
       { field: "name", source: assignment.name || "" },
       { field: "instructions", source: assignment.instructions || "" },
@@ -1091,7 +974,6 @@ export class TranslationService {
       { field: "introduction", source: assignment.introduction || "" },
     ];
 
-    // Start all translation requests in parallel
     for (const { field, source } of fieldsToTranslate) {
       if (source) {
         translationPromises.push(
@@ -1107,7 +989,7 @@ export class TranslationService {
               this.logger.error(
                 `Failed to translate ${field}: ${errorMessage}`,
               );
-              translatedData[field] = source; // Use original text as fallback
+              translatedData[field] = source;
               return { field, translated: source };
             }),
         );
@@ -1116,10 +998,8 @@ export class TranslationService {
       }
     }
 
-    // Wait for all translations to complete
     await Promise.all(translationPromises);
 
-    // Create the translation record with all translated fields
     try {
       await this.prisma.assignmentTranslation.create({
         data: {
@@ -1159,7 +1039,6 @@ export class TranslationService {
     languageCode: string,
   ): Promise<Translation | null> {
     try {
-      // Use more specific query to improve performance
       return await this.prisma.translation.findFirst({
         where: {
           languageCode,
@@ -1206,7 +1085,6 @@ export class TranslationService {
     languageCode: string,
   ): Promise<void> {
     try {
-      // Check if translation already exists for this specific question/variant
       const existingCount = await this.prisma.translation.count({
         where: {
           questionId,
@@ -1215,7 +1093,6 @@ export class TranslationService {
         },
       });
 
-      // Only create if it doesn't exist (faster than findFirst + create)
       if (existingCount === 0) {
         await this.prisma.translation.create({
           data: {
@@ -1250,44 +1127,74 @@ export class TranslationService {
    * @param sourceLanguage - The source language code
    * @param targetLanguage - The target language code
    */
+  /**
+   * Generate and store translation (creates new record each time)
+   */
   private async generateAndStoreTranslation(
     assignmentId: number,
     questionId: number,
     variantId: number | null,
-    normalizedText: string,
-    normalizedChoices: Choice[] | null,
+    originalText: string,
+    originalChoices: Choice[] | null,
     sourceLanguage: string,
     targetLanguage: string,
   ): Promise<void> {
-    // Skip translation if source and target are the same
-    if (sourceLanguage.toLowerCase() === targetLanguage.toLowerCase()) {
+    // OPTIMIZATION: Check if we already have a translation for this EXACT text
+    const existingTranslation = await this.prisma.translation.findFirst({
+      where: {
+        languageCode: targetLanguage,
+        untranslatedText: originalText, // Exact match on the text content
+        untranslatedChoices: { equals: this.prepareJsonValue(originalChoices) },
+      },
+      orderBy: { createdAt: "desc" }, // Get the most recent one
+    });
+
+    if (existingTranslation) {
+      // Reuse existing translation for this exact content
       await this.prisma.translation.create({
         data: {
           questionId,
           variantId,
           languageCode: targetLanguage,
-          untranslatedText: normalizedText,
-          untranslatedChoices: this.prepareJsonValue(normalizedChoices),
-          translatedText: normalizedText, // Same text
-          translatedChoices: this.prepareJsonValue(normalizedChoices), // Same choices
+          untranslatedText: originalText,
+          untranslatedChoices: this.prepareJsonValue(originalChoices),
+          translatedText: existingTranslation.translatedText, // Reuse existing translation
+          translatedChoices: existingTranslation.translatedChoices,
         },
       });
       return;
     }
 
-    // Prepare for parallel translation
-    const translationPromises: Array<Promise<any>> = [];
-    let translatedText = normalizedText;
-    let translatedChoices: any = normalizedChoices;
+    // No existing translation found - generate new one
+    if (sourceLanguage.toLowerCase() === targetLanguage.toLowerCase()) {
+      // Same language - store original content
+      await this.prisma.translation.create({
+        data: {
+          questionId,
+          variantId,
+          languageCode: targetLanguage,
+          untranslatedText: originalText,
+          untranslatedChoices: this.prepareJsonValue(originalChoices),
+          translatedText: originalText,
+          translatedChoices: this.prepareJsonValue(originalChoices),
+        },
+      });
+      return;
+    }
 
-    // Translate text
+    // Different language - translate it
+    const translationPromises: Array<Promise<any>> = [];
+    let translatedText: string = originalText;
+    let translatedChoices: Choice[] | null = originalChoices;
+
+    // Translate the text
     translationPromises.push(
       this.executeWithOptimizedRetry(
         `translateQuestionText-${questionId}-${targetLanguage}`,
         () =>
           this.llmFacadeService.generateQuestionTranslation(
             assignmentId,
-            normalizedText,
+            originalText,
             targetLanguage,
           ),
       )
@@ -1301,18 +1208,18 @@ export class TranslationService {
           this.logger.error(
             `Failed to translate question text: ${errorMessage}`,
           );
-          return normalizedText; // Use original as fallback
+          return originalText;
         }),
     );
 
-    // Translate choices if present
-    if (normalizedChoices) {
+    // Translate the choices if they exist
+    if (originalChoices) {
       translationPromises.push(
         this.executeWithOptimizedRetry(
           `translateChoices-${questionId}-${targetLanguage}`,
           () =>
             this.llmFacadeService.generateChoicesTranslation(
-              normalizedChoices,
+              originalChoices,
               assignmentId,
               targetLanguage,
             ),
@@ -1325,28 +1232,26 @@ export class TranslationService {
             const errorMessage =
               error instanceof Error ? error.message : String(error);
             this.logger.error(`Failed to translate choices: ${errorMessage}`);
-            return normalizedChoices; // Use original as fallback
+            return originalChoices;
           }),
       );
     }
 
-    // Wait for all translations to complete
     await Promise.all(translationPromises);
 
-    // Store the translation
+    // Create new translation record
     await this.prisma.translation.create({
       data: {
         questionId,
         variantId,
         languageCode: targetLanguage,
-        untranslatedText: normalizedText,
-        untranslatedChoices: this.prepareJsonValue(normalizedChoices),
+        untranslatedText: originalText,
+        untranslatedChoices: this.prepareJsonValue(originalChoices),
         translatedText,
         translatedChoices: this.prepareJsonValue(translatedChoices),
       },
     });
   }
-
   /**
    * Prepare a value for storage as Prisma.JsonValue
    *

@@ -17,7 +17,6 @@ import React, { FC, useEffect, useState } from "react";
 import { toast } from "sonner";
 import BeginTheAssignmentButton from "./BeginTheAssignmentButton";
 
-// Reusable section component for instructions and criteria
 interface AssignmentSectionProps {
   title: string;
   content: string;
@@ -40,7 +39,6 @@ interface AboutTheAssignmentProps {
   fetchData: () => void;
 }
 
-// Utility function to determine assignment state
 const getAssignmentState = (
   attempts: AssignmentAttempt[],
   numAttempts: number,
@@ -64,7 +62,6 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
   assignmentId,
   fetchData,
 }) => {
-  // Destructure assignment properties with default values
   const {
     introduction = "No introduction provided.",
     instructions = "",
@@ -119,7 +116,6 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
       ? Infinity
       : Math.max(0, numAttempts - attempts.length);
 
-  // find the latest attempt date
   const latestAttempt = attempts?.reduce((latest, attempt) => {
     if (!latest) return attempt;
     if (
@@ -209,15 +205,11 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
               <div className="flex flex-col gap-y-2 text-gray-600">
                 <span className="font-semibold">Assignment attempts</span>
                 <span>
-                  {
-                    // if attempts are -1 or null then it's unlimited else
-                    // show the number of attempts left
-                    numAttempts === -1
-                      ? "Unlimited"
-                      : `${attemptsLeft} attempt${
-                          attemptsLeft > 1 ? "s" : ""
-                        } left`
-                  }
+                  {numAttempts === -1
+                    ? "Unlimited"
+                    : `${attemptsLeft} attempt${
+                        attemptsLeft > 1 ? "s" : ""
+                      } left`}
                 </span>
               </div>
               <div className="flex flex-col gap-y-2 text-gray-600">

@@ -1,8 +1,6 @@
-// src/llm/llm-facade.service.ts
 import { Injectable, Inject } from "@nestjs/common";
 import { QuestionType } from "@prisma/client";
 
-// Constants
 import {
   PROMPT_PROCESSOR,
   MODERATION_SERVICE,
@@ -92,8 +90,6 @@ export class LlmFacadeService {
     this.logger = parentLogger.child({ context: LlmFacadeService.name });
   }
 
-  // Content moderation methods
-
   /**
    * Validate content using moderation service
    */
@@ -116,8 +112,6 @@ export class LlmFacadeService {
   ): Promise<{ flagged: boolean; details: string }> {
     return this.moderationService.moderateContent(content);
   }
-
-  // Question grading methods
 
   /**
    * Generate contextual relationships between questions for grading
@@ -216,8 +210,6 @@ export class LlmFacadeService {
     );
   }
 
-  // Question generation methods
-
   /**
    * Process content and/or learning objectives to generate assignment questions
    */
@@ -280,8 +272,6 @@ export class LlmFacadeService {
     );
   }
 
-  // Rubric methods
-
   /**
    * Create a marking rubric for a question
    */
@@ -317,12 +307,10 @@ export class LlmFacadeService {
     return this.rubricService.createChoices(question, assignmentId);
   }
 
-  // Translation methods
-
   /**
    * Detect the language of text
    */
-  // This code block has been revised ✅
+
   async getLanguageCode(text: string): Promise<string> {
     return this.translationService.getLanguageCode(text);
   }

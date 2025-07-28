@@ -1,11 +1,9 @@
-// src/llm/core/services/usage-tracker.service.ts
-import { Injectable, HttpException, HttpStatus } from "@nestjs/common";
+import { HttpException, HttpStatus, Inject, Injectable } from "@nestjs/common";
 import { AIUsageType } from "@prisma/client";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
-import { Inject } from "@nestjs/common";
 import { PrismaService } from "src/prisma.service";
-import { IUsageTracker } from "../interfaces/user-tracking.interface";
 import { Logger } from "winston";
+import { IUsageTracker } from "../interfaces/user-tracking.interface";
 
 @Injectable()
 export class UsageTrackerService implements IUsageTracker {
@@ -29,23 +27,25 @@ export class UsageTrackerService implements IUsageTracker {
     tokensOut: number,
   ): Promise<void> {
     try {
-      // Ensure that the assignment exists
+      const assignmentIdToDatabase = Number(assignmentId);
+      console.log(
+        `Tracking usage for assignment ID: ${assignmentIdToDatabase}, usage type: ${usageType}, tokens in: ${tokensIn}, tokens out: ${tokensOut}`,
+      );
       const assignmentExists = await this.prisma.assignment.findUnique({
-        where: { id: assignmentId },
+        where: { id: assignmentIdToDatabase },
       });
 
       if (!assignmentExists) {
         throw new HttpException(
-          `Assignment with ID ${assignmentId} does not exist`,
+          `Assignment with ID ${assignmentIdToDatabase} does not exist`,
           HttpStatus.BAD_REQUEST,
         );
       }
 
-      // Track usage using upsert to handle both new and existing records
       await this.prisma.aIUsage.upsert({
         where: {
           assignmentId_usageType: {
-            assignmentId,
+            assignmentId: assignmentIdToDatabase,
             usageType,
           },
         },
@@ -56,7 +56,7 @@ export class UsageTrackerService implements IUsageTracker {
           updatedAt: new Date(),
         },
         create: {
-          assignmentId,
+          assignmentId: assignmentIdToDatabase,
           usageType,
           tokensIn,
           tokensOut,
@@ -67,10 +67,9 @@ export class UsageTrackerService implements IUsageTracker {
       });
 
       this.logger.debug(
-        `Tracked usage for assignment ${assignmentId}: ${tokensIn} in, ${tokensOut} out (${usageType})`,
+        `Tracked usage for assignment ${assignmentIdToDatabase}: ${tokensIn} in, ${tokensOut} out (${usageType})`,
       );
     } catch (error) {
-      // Special handling for our own HttpExceptions
       if (error instanceof HttpException) {
         throw error;
       }

@@ -19,7 +19,6 @@ export class BaseAssignmentResponseDto {
   error?: string;
 }
 export class UpdateAssignmentQuestionsResponseDto extends BaseAssignmentResponseDto {
-  // questions
   @ApiPropertyOptional({
     description: "Array of questions for the assignment",
     type: [Object],

@@ -8,6 +8,9 @@ type GradingDataActions = {
   questionDisplay: QuestionDisplayType;
   setQuestionDisplay: (questionDisplay: QuestionDisplayType) => void;
   questionVariationNumber: number;
+  setNumberOfQuestionsPerAttempt?: (
+    numberOfQuestionsPerAttempt: number | undefined,
+  ) => void;
   setQuestionVariationNumber: (questionVariationNumber: number) => void;
   setGraded: (graded: boolean) => void;
   setNumAttempts: (numAttempts: number) => void;
@@ -33,7 +36,7 @@ export const useAssignmentConfig = createWithEqualityFn<
         errors: {},
         numAttempts: -1,
         passingGrade: 50,
-        displayOrder: "DEFINED" as const,
+        displayOrder: "DEFINED",
         strictTimeLimit: false,
         updatedAt: undefined,
         graded: false,
@@ -44,6 +47,16 @@ export const useAssignmentConfig = createWithEqualityFn<
         setQuestionDisplay: (questionDisplay: QuestionDisplayType) => {
           set({ questionDisplay });
         },
+        showQuestions: true,
+        showSubmissionFeedback: true,
+        showAssignmentScore: false,
+        numberOfQuestionsPerAttempt: null,
+        setNumberOfQuestionsPerAttempt: (numberOfQuestionsPerAttempt) => {
+          set({ numberOfQuestionsPerAttempt });
+        },
+        setShowSubmissionFeedback: (showSubmissionFeedback: boolean) =>
+          set({ showSubmissionFeedback }),
+        setShowQuestions: (showQuestions: boolean) => set({ showQuestions }),
         setGraded: (graded) => set({ graded }),
         setNumAttempts: (numAttempts) =>
           set({
@@ -69,7 +82,7 @@ export const useAssignmentConfig = createWithEqualityFn<
         },
         toggleStrictTimeLimit: () => {
           set((state) => {
-            const newStrictTimeLimit = !state.strictTimeLimit; // toggle strictTime limit, if newStrictTimeLimit is true, it means the time limit is strict
+            const newStrictTimeLimit = !state.strictTimeLimit;
             return {
               ...state,
               strictTimeLimit: newStrictTimeLimit,
@@ -95,8 +108,12 @@ export const useAssignmentConfig = createWithEqualityFn<
           ) {
             errors.passingGrade = "Passing grade must be between 1 and 100.";
           }
-          if (!state.displayOrder) {
-            errors.displayOrder = "Question order is required.";
+          if (
+            !state.displayOrder &&
+            state.numberOfQuestionsPerAttempt === null
+          ) {
+            // set default display order if not set
+            state.displayOrder = "DEFINED";
           }
           if (!state.questionDisplay) {
             errors.questionDisplay = "Question display type is required.";

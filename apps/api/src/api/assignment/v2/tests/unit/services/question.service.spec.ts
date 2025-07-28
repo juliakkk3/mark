@@ -45,7 +45,6 @@ describe("QuestionService", () => {
   let jobStatusService: ReturnType<typeof createMockJobStatusService>;
 
   beforeEach(async () => {
-    // Create mock dependencies using utility functions
     prismaService = createMockPrismaService();
     questionRepository = createMockQuestionRepository();
     variantRepository = createMockVariantRepository();
@@ -53,7 +52,6 @@ describe("QuestionService", () => {
     llmFacadeService = createMockLlmFacadeService();
     jobStatusService = createMockJobStatusService();
 
-    // Create a testing module with our service and mocked dependencies
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         QuestionService,
@@ -84,13 +82,11 @@ describe("QuestionService", () => {
       ],
     }).compile();
 
-    // Get the service instance from the testing module
     questionService = module.get<QuestionService>(QuestionService);
   });
 
   describe("getQuestionsForAssignment", () => {
     it("should return questions for an assignment", async () => {
-      // Arrange
       const assignmentId = 1;
       const expectedQuestions = [
         createMockQuestionDto(),
@@ -100,11 +96,9 @@ describe("QuestionService", () => {
         expectedQuestions,
       );
 
-      // Act
       const result =
         await questionService.getQuestionsForAssignment(assignmentId);
 
-      // Assert
       expect(questionRepository.findByAssignmentId).toHaveBeenCalledWith(
         assignmentId,
       );
@@ -114,7 +108,6 @@ describe("QuestionService", () => {
 
   describe("generateQuestionVariants", () => {
     it("should generate variants for questions", async () => {
-      // Arrange
       const assignmentId = 1;
       const question1 = createMockQuestionDto({ id: 1 });
       const question2 = createMockQuestionDto(
@@ -127,7 +120,6 @@ describe("QuestionService", () => {
         questionVariationNumber: 2,
       };
 
-      // Mock the LLM service to return some variants
       const mockVariants = [
         createMockVariantDto({
           id: 101,
@@ -142,13 +134,11 @@ describe("QuestionService", () => {
         mockVariants,
       );
 
-      // Act
       const result = await questionService.generateQuestionVariants(
         assignmentId,
         generateVariantDto,
       );
 
-      // Assert
       expect(result.id).toEqual(assignmentId);
       expect(result.success).toBe(true);
       expect(result.questions).toBeDefined();
@@ -159,11 +149,9 @@ describe("QuestionService", () => {
       );
     });
 
-    // Fix for "should not generate variants when enough already exist"
     it("should not generate variants when enough already exist", async () => {
-      // Arrange
       const assignmentId = 1;
-      // Create a question with existing variants
+
       const existingVariants = [
         createMockVariantDto({ id: 101 }),
         createMockVariantDto({ id: 102 }),
@@ -175,21 +163,18 @@ describe("QuestionService", () => {
 
       const generateVariantDto: GenerateQuestionVariantDto = {
         questions: [question],
-        questionVariationNumber: 2, // We already have 2 variants
+        questionVariationNumber: 2,
       };
 
-      // Mock the calculateRequiredVariants method to return 0
       jest
         .spyOn(questionService as any, "calculateRequiredVariants")
         .mockReturnValue(0);
 
-      // Act
       const result = await questionService.generateQuestionVariants(
         assignmentId,
         generateVariantDto,
       );
 
-      // Assert
       expect(result.id).toEqual(assignmentId);
       expect(result.success).toBe(true);
       expect(
@@ -199,7 +184,6 @@ describe("QuestionService", () => {
 
     describe("processQuestionsForPublishing", () => {
       it("should process questions for publishing", async () => {
-        // Arrange
         const assignmentId = 1;
         const jobId = 1;
         const questions = [
@@ -207,48 +191,41 @@ describe("QuestionService", () => {
           createMockQuestionDto({ id: 2 }, QuestionType.MULTIPLE_CORRECT),
         ];
 
-        // Mock existing questions (one matching, one not)
         const existingQuestions = [
           createMockQuestionDto({ id: 1 }),
-          createMockQuestionDto({ id: 3 }), // This one is not in the new questions
+          createMockQuestionDto({ id: 3 }),
         ];
 
         questionRepository.findByAssignmentId.mockResolvedValue(
           existingQuestions,
         );
 
-        // Mock successful upsert
         questionRepository.upsert.mockResolvedValue(questions[0]);
 
-        // Act
         await questionService.processQuestionsForPublishing(
           assignmentId,
           questions,
           jobId,
         );
 
-        // Assert
         expect(questionRepository.findByAssignmentId).toHaveBeenCalledWith(
           assignmentId,
         );
         expect(questionRepository.markAsDeleted).toHaveBeenCalledWith([3]);
-        // This should be a specific number instead of expect.any(Number)
-        expect(jobStatusService.updateJobStatus).toHaveBeenCalled(); // or use a specific number like .toHaveBeenCalledTimes(6)
+
+        expect(jobStatusService.updateJobStatus).toHaveBeenCalled();
         expect(questionRepository.upsert).toHaveBeenCalledTimes(2);
       });
 
       it("should handle translations for changed content", async () => {
-        // Arrange
         const assignmentId = 1;
         const jobId = 1;
 
-        // Original question
         const originalQuestion = createMockQuestionDto({
           id: 1,
           question: "Original question text",
         });
 
-        // Updated question with changed content
         const updatedQuestion = createMockQuestionDto({
           id: 1,
           question: "Updated question text",
@@ -260,44 +237,37 @@ describe("QuestionService", () => {
         questionRepository.upsert.mockResolvedValue(updatedQuestion);
         llmFacadeService.applyGuardRails.mockResolvedValue(true);
 
-        // Act
         await questionService.processQuestionsForPublishing(
           assignmentId,
           [updatedQuestion],
           jobId,
         );
 
-        // Assert
         expect(llmFacadeService.applyGuardRails).toHaveBeenCalled();
         expect(translationService.translateQuestion).toHaveBeenCalled();
       });
 
       it("should skip translation for unchanged content", async () => {
-        // Arrange
         const assignmentId = 1;
         const jobId = 1;
 
-        // Same question object for existing and new
         const question = createMockQuestionDto({ id: 1 });
 
         questionRepository.findByAssignmentId.mockResolvedValue([question]);
         questionRepository.upsert.mockResolvedValue(question);
 
-        // Act
         await questionService.processQuestionsForPublishing(
           assignmentId,
           [question],
           jobId,
         );
 
-        // Assert
         expect(translationService.translateQuestion).not.toHaveBeenCalled();
       });
     });
 
     describe("generateQuestions", () => {
       it("should start question generation job", async () => {
-        // Arrange
         const assignmentId = 1;
         const userId = "author-123";
         const mockJob = createMockJob({ id: 1 });
@@ -305,19 +275,16 @@ describe("QuestionService", () => {
 
         jobStatusService.createJob.mockResolvedValue(mockJob);
 
-        // We need to spy on startQuestionGenerationProcess which is a private method
         jest
           .spyOn(questionService as any, "startQuestionGenerationProcess")
           .mockResolvedValue(undefined);
 
-        // Act
         const result = await questionService.generateQuestions(
           assignmentId,
           payload,
           userId,
         );
 
-        // Assert
         expect(jobStatusService.createJob).toHaveBeenCalledWith(
           assignmentId,
           userId,
@@ -329,7 +296,6 @@ describe("QuestionService", () => {
       });
 
       it("should validate question generation payload", async () => {
-        // Arrange
         const assignmentId = 1;
         const userId = "author-123";
         const invalidPayload = {
@@ -338,7 +304,6 @@ describe("QuestionService", () => {
           learningObjectives: undefined,
         };
 
-        // Act & Assert
         await expect(
           questionService.generateQuestions(
             assignmentId,
@@ -349,7 +314,6 @@ describe("QuestionService", () => {
       });
 
       it("should validate questions to generate count", async () => {
-        // Arrange
         const assignmentId = 1;
         const userId = "author-123";
         const invalidPayload = {
@@ -368,7 +332,6 @@ describe("QuestionService", () => {
           },
         };
 
-        // Act & Assert
         await expect(
           questionService.generateQuestions(
             assignmentId,
@@ -381,7 +344,6 @@ describe("QuestionService", () => {
 
     describe("updateQuestionGradingContext", () => {
       it("should update question grading context", async () => {
-        // Arrange
         const assignmentId = 1;
         const mockAssignment = {
           id: assignmentId,
@@ -403,10 +365,8 @@ describe("QuestionService", () => {
         );
         prismaService.question.update.mockResolvedValue({});
 
-        // Act
         await questionService.updateQuestionGradingContext(assignmentId);
 
-        // Assert
         expect(prismaService.assignment.findUnique).toHaveBeenCalledWith({
           where: { id: assignmentId },
           include: {
@@ -430,11 +390,9 @@ describe("QuestionService", () => {
       });
 
       it("should throw not found exception for invalid assignment", async () => {
-        // Arrange
         const assignmentId = 999;
         prismaService.assignment.findUnique.mockResolvedValue(null);
 
-        // Act & Assert
         await expect(
           questionService.updateQuestionGradingContext(assignmentId),
         ).rejects.toThrow(NotFoundException);
@@ -444,7 +402,6 @@ describe("QuestionService", () => {
     describe("private methods", () => {
       describe("areChoicesEqual", () => {
         it("should return true for identical choices", () => {
-          // Arrange
           const choices1: Choice[] = [
             {
               id: 1,
@@ -464,18 +421,15 @@ describe("QuestionService", () => {
 
           const choices2 = [...choices1];
 
-          // Act
           const result = (questionService as any).areChoicesEqual(
             choices1,
             choices2,
           );
 
-          // Assert
           expect(result).toBe(true);
         });
 
         it("should return false for different choices", () => {
-          // Arrange
           const choices1: Choice[] = [
             {
               id: 1,
@@ -510,18 +464,15 @@ describe("QuestionService", () => {
             },
           ];
 
-          // Act
           const result = (questionService as any).areChoicesEqual(
             choices1,
             choices2,
           );
 
-          // Assert
           expect(result).toBe(false);
         });
 
         it("should handle undefined choices correctly", () => {
-          // Act & Assert
           expect((questionService as any).areChoicesEqual()).toBe(true);
           expect((questionService as any).areChoicesEqual([])).toBe(false);
           expect((questionService as any).areChoicesEqual(undefined, [])).toBe(
@@ -532,7 +483,6 @@ describe("QuestionService", () => {
 
       describe("checkVariantsForChanges", () => {
         it("should detect changes in variant count", () => {
-          // Arrange
           const existingVariants: VariantDto[] = [
             createMockVariantDto({ id: 101 }),
           ];
@@ -542,18 +492,15 @@ describe("QuestionService", () => {
             createMockVariantDto({ id: 102 }),
           ];
 
-          // Act
           const result = (questionService as any).checkVariantsForChanges(
             existingVariants,
             newVariants,
           );
 
-          // Assert
           expect(result).toBe(true);
         });
 
         it("should detect changes in variant content", () => {
-          // Arrange
           const existingVariants: VariantDto[] = [
             createMockVariantDto({
               id: 101,
@@ -568,92 +515,76 @@ describe("QuestionService", () => {
             }),
           ];
 
-          // Act
           const result = (questionService as any).checkVariantsForChanges(
             existingVariants,
             newVariants,
           );
 
-          // Assert
           expect(result).toBe(true);
         });
 
         it("should return false when no changes exist", () => {
-          // Arrange
           const existingVariant = createMockVariantDto({ id: 101 });
           const existingVariants: VariantDto[] = [existingVariant];
           const newVariants: VariantDto[] = [existingVariant];
 
-          // Act
           const result = (questionService as any).checkVariantsForChanges(
             existingVariants,
             newVariants,
           );
 
-          // Assert
           expect(result).toBe(false);
         });
       });
 
       describe("calculateRequiredVariants", () => {
         it("should calculate required variants for single question", () => {
-          // Act
           const result = (questionService as any).calculateRequiredVariants(
             1,
             1,
             3,
           );
 
-          // Assert
-          expect(result).toBe(3); // Should generate all requested variants
+          expect(result).toBe(3);
         });
 
         it("should calculate required variants for multiple questions", () => {
-          // Act
           const result = (questionService as any).calculateRequiredVariants(
             2,
             1,
             3,
           );
 
-          // Assert
-          expect(result).toBe(2); // Should generate difference (3-1)
+          expect(result).toBe(2);
         });
 
         it("should return zero when enough variants exist", () => {
-          // Act
           const result = (questionService as any).calculateRequiredVariants(
             2,
             4,
             3,
           );
 
-          // Assert
-          expect(result).toBe(0); // Already have more than needed
+          expect(result).toBe(0);
         });
       });
 
       describe("applyGuardRails", () => {
         it("should validate question content through LLM service", async () => {
-          // Arrange
           const question = createMockQuestionDto();
           llmFacadeService.applyGuardRails.mockResolvedValue(true);
 
-          // Act
           await (questionService as any).applyGuardRails(question);
 
-          // Assert
           expect(llmFacadeService.applyGuardRails).toHaveBeenCalledWith(
             expect.any(String),
           );
         });
 
         it("should throw exception for invalid content", async () => {
-          // Arrange
           const question = createMockQuestionDto();
           llmFacadeService.applyGuardRails.mockResolvedValue(false);
 
-          // Act & Assert
           await expect(
             (questionService as any).applyGuardRails(question),
           ).rejects.toThrow(BadRequestException);

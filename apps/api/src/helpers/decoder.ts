@@ -1,10 +1,9 @@
 /* eslint-disable unicorn/no-null */
-// This code block has been revised ✅
+
 export function decodeIfBase64(value: string | null): string | null {
-  if (!value) return null; // Return null if the input is null
+  if (!value) return null;
 
   try {
-    // Check if the string is Base64-encoded
     const decoded = Buffer.from(value, "base64").toString("utf8");
 
     const reEncoded = Buffer.from(decoded, "utf8").toString("base64");

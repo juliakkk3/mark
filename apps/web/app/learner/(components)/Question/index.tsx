@@ -29,6 +29,7 @@ function QuestionPage(props: Props) {
   const debugLog = useDebugLog();
   const router = useRouter();
   const questionsStore = useLearnerStore((state) => state.questions);
+
   const setLearnerStore = useLearnerStore((state) => state.setLearnerStore);
   const [assignmentDetails, setAssignmentDetails] = useAssignmentDetails(
     (state) => [state.assignmentDetails, state.setAssignmentDetails],
@@ -38,14 +39,18 @@ function QuestionPage(props: Props) {
   >("loading");
   const tips = useAppConfig((state) => state.tips);
   const setTipsVersion = useAppConfig((state) => state.setTipsVersion);
+
   useEffect(() => {
     setTipsVersion("v1.0"); // change this version to update the tips
-  });
+  }, []);
+
   useEffect(() => {
     const fetchAssignment = async () => {
+      //backend call to get the assignment details
       const assignment = await getAssignment(assignmentId);
 
       if (assignment) {
+        // Assignment contains encoded fields
         // Decode specific fields before using them
         const decodedFields = decodeFields({
           introduction: assignment.introduction,
@@ -53,13 +58,14 @@ function QuestionPage(props: Props) {
           gradingCriteriaOverview: assignment.gradingCriteriaOverview,
         });
 
-        // Merge decoded fields back into assignment
         const decodedAssignment = {
           ...assignment,
           ...decodedFields,
         };
 
         // Only set assignment details if they are different from the current state
+        // Fetched assignment will be stored in the global state, assignmentDetails
+        // Set the global state only if it is different from the fetched assignment
         if (
           !assignmentDetails ||
           assignmentDetails.id !== decodedAssignment.id ||
@@ -95,7 +101,8 @@ function QuestionPage(props: Props) {
     ) {
       void fetchAssignment();
     }
-
+    //questions come from the attempt object that is passed in the props
+    //user actions complete the attemp object and submit it
     const questionsWithStatus = questions.map((question) => ({
       ...question,
       status: question.status ?? "unedited",
@@ -158,15 +165,14 @@ function QuestionPage(props: Props) {
       <div className="rounded-md h-auto pt-6 px-4 w-full md:w-auto">
         <Overview questions={questionsStore} />
       </div>
-      {/* Questions section that takes the remaining space */}
+
       <div
         className={`flex flex-col gap-y-5 py-6 overflow-y-auto pl-4 h-full ${
           tips ? "pr-4" : "pr-14"
         }`}
       >
         {assignmentDetails?.questionDisplay === "ALL_PER_PAGE"
-          ? // Display all questions
-            questionsStore.map((question, index) => (
+          ? questionsStore.map((question, index) => (
               <QuestionContainer
                 key={index}
                 questionNumber={index + 1}
@@ -179,8 +185,7 @@ function QuestionPage(props: Props) {
                 lastQuestionNumber={questionsStore.length}
               />
             ))
-          : // Display one question per page
-            questionsStore.map((question, index) =>
+          : questionsStore.map((question, index) =>
               index + 1 === activeQuestionNumber ? (
                 <QuestionContainer
                   key={index}

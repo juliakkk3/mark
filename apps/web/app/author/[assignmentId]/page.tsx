@@ -29,7 +29,10 @@ function Component(props: Props) {
             description="Responses in this section will be shown to learners."
           />
           <MainContent />
-          <FooterNavigation assignmentId={String(assignmentId)} />
+          <FooterNavigation
+            assignmentId={String(assignmentId)}
+            nextStep="questions"
+          />
         </>
       )}
     </main>

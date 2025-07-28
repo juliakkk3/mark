@@ -40,7 +40,7 @@ const AuthFetchToAbout: FC<AuthFetchToAboutProps> = ({
   );
   const userPreferedLanguage = useSearchParams().get("lang") || "en";
   const isQuestionPage = useSearchParams().get("question") === "true";
-  const isMounted = true; // Prevent memory leak
+  const isMounted = true;
   const [error, setError] = useState<{
     code: number;
     message: string;
@@ -50,14 +50,12 @@ const AuthFetchToAbout: FC<AuthFetchToAboutProps> = ({
     try {
       if (role === "learner") {
         try {
-          // Fetch assignment first to handle errors early
           const assignmentData = await getAssignment(
             assignmentId,
             userPreferedLanguage,
             cookie,
           );
 
-          // Fetch attempts separately, so it's not blocked if assignment fetching fails
           const attemptsData = await getAttempts(assignmentId, cookie);
 
           if (isMounted && assignmentData) {
@@ -74,12 +72,11 @@ const AuthFetchToAbout: FC<AuthFetchToAboutProps> = ({
             setAssignment(decodedAssignment);
             setAssignmentDetails({
               ...decodedAssignment,
-              name: decodedAssignment.name || "Untitled Assignment", // Provide a default name if undefined
+              name: decodedAssignment.name || "Untitled Assignment",
             });
             setListOfAttempts(attemptsData);
           }
         } catch (error) {
-          console.error("Error loading assignment or attempts:", error);
           setError({
             code: 403,
             message: "You are not authorized to view this page",
@@ -109,7 +106,6 @@ const AuthFetchToAbout: FC<AuthFetchToAboutProps> = ({
         }
       }
     } catch (error) {
-      console.error(error);
       if (isMounted) {
         setAssignment(null);
       }
@@ -145,7 +141,7 @@ const AuthFetchToAbout: FC<AuthFetchToAboutProps> = ({
         : role === "author"
           ? "Assignment could not be fetched from local storage"
           : "You are not authorized to view this page";
-    return <ErrorPage error={errorMessage} />;
+    return <ErrorPage error={errorMessage} statusCode={403} />;
   }
 
   return (

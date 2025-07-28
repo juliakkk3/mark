@@ -1,4 +1,3 @@
-// src/llm/core/services/openai-llm-mini.service.ts
 import { Injectable, Inject } from "@nestjs/common";
 import { ChatOpenAI } from "@langchain/openai";
 import { HumanMessage } from "@langchain/core/messages";
@@ -75,7 +74,7 @@ export class OpenAiLlmMiniService implements ILlmProvider {
     const processedImageData = this.normalizeImageData(imageData);
 
     const textTokens = this.tokenCounter.countTokens(textContent);
-    const estimatedImageTokens = 150; // rough constant
+    const estimatedImageTokens = 150;
     this.logger.debug(
       `Invoking 4o-mini with image (${textTokens} text tokens + ~${estimatedImageTokens} image tokens)`,
     );
@@ -111,7 +110,6 @@ export class OpenAiLlmMiniService implements ILlmProvider {
 
     if (imageData.startsWith("data:")) return imageData;
 
-    // naive mime sniff
     let mimeType = "image/jpeg";
     if (imageData.startsWith("iVBORw0KGgo")) mimeType = "image/png";
     else if (imageData.startsWith("R0lGOD")) mimeType = "image/gif";

@@ -6,16 +6,17 @@ import { withUpdatedAt } from "./middlewares";
 
 type FeedbackDataActions = {
   setVerbosityLevel: (verbosityLevel: VerbosityLevels) => void;
-  // toggleShowCorrectAnswer: () => void;
+
   toggleShowSubmissionFeedback: () => void;
   toggleShowQuestionScore: () => void;
   toggleShowAssignmentScore: () => void;
-  // toggleShowStatus: () => void;
-  // setShowCorrectAnswer: (showCorrectAnswer: boolean) => void;
+  toggleShowQuestions: () => void;
+
   setShowSubmissionFeedback: (showSubmissionFeedback: boolean) => void;
   setShowQuestionScore: (showQuestionScore: boolean) => void;
+  setShowQuestion: (showQuestions: boolean) => void;
   setShowAssignmentScore: (showAssignmentScore: boolean) => void;
-  // setShowStatus: (showStatus: boolean) => void;
+
   setUpdatedAt: (updatedAt: number) => void;
   setAssignmentFeedbackConfigStore: (state: Partial<FeedbackData>) => void;
   deleteStore: () => void;
@@ -31,6 +32,10 @@ export const useAssignmentFeedbackConfig = createWithEqualityFn<
         showSubmissionFeedback: true,
         showQuestionScore: true,
         showAssignmentScore: true,
+        showQuestions: true,
+        setShowQuestion: (showQuestions: boolean) => set({ showQuestions }),
+        toggleShowQuestions: () =>
+          set((state) => ({ showQuestions: !state.showQuestions })),
         updatedAt: Date.now(),
         setVerbosityLevel: (verbosityLevel) => set({ verbosityLevel }),
         toggleShowSubmissionFeedback: () =>
@@ -61,10 +66,9 @@ export const useAssignmentFeedbackConfig = createWithEqualityFn<
       })),
     ),
     {
-      name: getAssignmentFeedbackConfigName(),
+      name: getAuthorStoreName(),
       storage: createJSONStorage(() => localStorage),
       partialize(state) {
-        // store everything that is not a function
         return Object.fromEntries(
           Object.entries(state).filter(
             ([_, value]) => typeof value !== "function",
@@ -74,11 +78,9 @@ export const useAssignmentFeedbackConfig = createWithEqualityFn<
     },
   ),
 );
-function getAssignmentFeedbackConfigName() {
+function getAuthorStoreName() {
   if (typeof window !== "undefined") {
-    return `assignment-${extractAssignmentId(
-      window.location.pathname,
-    )}-feedback-config`;
+    return `assignmentFeedbackConfig-${extractAssignmentId(window.location.pathname)}`;
   }
-  return "assignment-feedback-config";
+  return "assignmentFeedbackConfig-1";
 }

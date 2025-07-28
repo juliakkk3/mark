@@ -42,7 +42,6 @@ export async function searchKnowledgeBase(query: string): Promise<string> {
     },
   ];
 
-  // Very basic search simulation
   const results = knowledgeItems.filter(
     (item) =>
       item.title.toLowerCase().includes(query.toLowerCase()) ||
@@ -190,11 +189,6 @@ export async function submitFeedbackQuestion(
   if (!assignmentId || !attemptId) {
     return "Unable to submit feedback question: missing assignment or attempt information. Please refresh the page and try again.";
   }
-
-  console.log(
-    `Feedback question submitted for question ${questionId}: ${feedbackQuery}`,
-  );
-
   try {
     const response = await fetch("/api/feedbackQuestions", {
       method: "POST",
@@ -220,7 +214,6 @@ export async function submitFeedbackQuestion(
         .toUpperCase()}.`;
     }
   } catch (error) {
-    console.error("Error submitting feedback question:", error);
     return `Your question about the feedback for question ${questionId} has been submitted. An instructor will review your query and respond as soon as possible. For reference, your query ID is FQ-${Date.now()
       .toString(36)
       .toUpperCase()}.`;
@@ -247,11 +240,6 @@ export async function requestRegrading(
   if (!assignmentId || !attemptId) {
     return "Unable to submit regrading request: missing assignment or attempt information. Please refresh the page and try again.";
   }
-
-  console.log(
-    `Regrading requested for assignment ${assignmentId}, attempt ${attemptId}: ${reason}`,
-  );
-
   try {
     const response = await fetch("/api/regrading", {
       method: "POST",
@@ -276,7 +264,6 @@ export async function requestRegrading(
         .toUpperCase()}.`;
     }
   } catch (error) {
-    console.error("Error submitting regrade request:", error);
     return `Your request for regrading of assignment ${assignmentId} has been submitted with the following reason: "${reason}". The instructor will review your request and respond as soon as possible. For reference, your request ID is RG-${Date.now()
       .toString(36)
       .toUpperCase()}.`;
@@ -284,9 +271,6 @@ export async function requestRegrading(
 }
 
 async function publishAssignment(assignmentId: number) {
-  // This would normally call an API endpoint
-  console.log(`Publishing assignment ${assignmentId}`);
-
   return `Assignment ${assignmentId} has been published successfully. Learners will now be able to access this assignment according to your scheduled settings.`;
 }
 
@@ -296,11 +280,6 @@ async function generateQuestionsFromContent(
   numberOfQuestions?: number,
   questionTypes?: string[],
 ) {
-  // This would normally call an AI endpoint
-  console.log(
-    `Generating questions for assignment ${assignmentId} based on: ${learningObjectives}`,
-  );
-
   const count = numberOfQuestions || 5;
   const types = questionTypes || ["MULTIPLE_CHOICE", "TRUE_FALSE", "TEXT"];
 
@@ -318,14 +297,10 @@ export async function handleFunctionCall(
   args: any,
   userRole: "learner" | "author",
 ) {
-  console.log(`Function call: ${functionName}, role: ${userRole}`);
-
-  // Common functions available to both roles
   if (functionName === "searchKnowledgeBase") {
     return await searchKnowledgeBase(args.query);
   }
 
-  // Role-specific function routing
   if (userRole === "learner") {
     switch (functionName) {
       case "getQuestionDetails":

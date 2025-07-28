@@ -56,7 +56,6 @@ export class JobStatusServiceV1 {
 
       this.jobStatusSubjects.get(jobId).next(update as MessageEvent);
 
-      // If job is done, complete the stream
       if (update.data.done) {
         this.jobStatusSubjects.get(jobId).complete();
         this.jobStatusSubjects.delete(jobId);

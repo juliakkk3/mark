@@ -1,4 +1,3 @@
-// src/llm/features/question-generation/question-generation.module.ts
 import { Module } from "@nestjs/common";
 import { WinstonModule } from "nest-winston";
 import { PrismaService } from "../../../../prisma.service";

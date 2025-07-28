@@ -15,10 +15,9 @@ export const withUpdatedAt =
           partial?.pageState ||
           get().pageState === "loading"
         ) {
-          // revert to the default behavior if it satisfies the above conditions
           return set(partial, replace);
         }
-        // Update the `updatedAt` field every time state is updated
+
         set(
           (_state) => ({
             ...partial,

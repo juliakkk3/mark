@@ -38,13 +38,13 @@ import {
   IconCheckbox,
   IconCircleCheck,
   IconDeviceComputerCamera,
+  IconPhotoScan,
 } from "@tabler/icons-react";
-import { useRouter } from "next/navigation"; // Importing useRouter for navigation
+import { useRouter } from "next/navigation";
 import { FC, Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import QuestionWrapper from "../(questionComponents)/QuestionWrapper";
 
-// Props type definition for the Question component
 interface QuestionProps {
   question: QuestionAuthorStore;
   onDelete?: (questionId: number) => void;
@@ -56,7 +56,6 @@ interface QuestionProps {
   preview?: boolean;
 }
 
-// Main functional component to handle each question
 const Question: FC<QuestionProps> = ({
   question,
   onDelete,
@@ -79,7 +78,7 @@ const Question: FC<QuestionProps> = ({
   const deleteVariant = useAuthorStore((state) => state.deleteVariant);
   const [newIndex, setNewIndex] = useState<number>(questionIndex);
   const [isFocused, setIsFocused] = useState(false);
-  const disabledMenuButtons = ["VIDEO", "AUDIO"]; // in case we want to disable some question types
+  const disabledMenuButtons = ["VIDEO", "AUDIO"];
   const { questionStates, setShowWordCountInput, setCountMode } =
     useQuestionStore();
   const [variantLoading, setVariantLoading] = useState(false);
@@ -122,7 +121,6 @@ const Question: FC<QuestionProps> = ({
     questionIndex.toString(),
   );
 
-  // Function to handle deleting a variant
   const handleDeleteVariant = (variantId: number) => {
     try {
       deleteVariant(questionId, variantId);
@@ -131,9 +129,8 @@ const Question: FC<QuestionProps> = ({
       toast.error("Failed to delete variant");
     }
   };
-  // Apply the checkQuestionToggle effect whenever the questionType changes
+
   useEffect(() => {
-    // checkQuestionToggle;
     if (!collapse || isFocusedQuestion) {
       setToggleQuestion(true);
     }
@@ -144,8 +141,20 @@ const Question: FC<QuestionProps> = ({
     params: UpdateQuestionStateParams,
     variantMode = false,
   ) => {
+    //if showRubricsToLearner is undefined, use false as default
+    const showRubrics =
+      params.showRubricsToLearner !== undefined
+        ? params.showRubricsToLearner
+        : (question.scoring?.showRubricsToLearner ?? false);
+
+    //if showRubrics is false, showPoints uses false as default
+    const showPoints = showRubrics
+      ? params.showPoints !== undefined
+        ? params.showPoints
+        : (question.scoring?.showPoints ?? false)
+      : false;
+
     if (variantMode) {
-      // Update variant state
       const updatedData: Partial<QuestionVariants> = {};
       if (params.questionTitle !== undefined) {
         updatedData.variantContent = params.questionTitle;
@@ -165,9 +174,10 @@ const Question: FC<QuestionProps> = ({
       if (params.maxCharacters !== undefined) {
         updatedData.maxCharacters = params.maxCharacters;
       }
-      if (params.showRubricsToLearner !== undefined) {
-        updatedData.scoring.showRubricsToLearner = params.showRubricsToLearner;
-      }
+
+      updatedData.scoring.showRubricsToLearner = showRubrics;
+      updatedData.scoring.showPoints = showPoints;
+
       if (params.maxWordCount !== undefined) {
         updatedData.maxWords = params.maxWordCount;
       }
@@ -179,7 +189,6 @@ const Question: FC<QuestionProps> = ({
           : question.choices,
       });
     } else {
-      // Update main question state
       const updatedQuestion: Partial<QuestionAuthorStore> = {
         id: questionId,
         responseType: params.responseType ?? responseType,
@@ -192,19 +201,18 @@ const Question: FC<QuestionProps> = ({
           params.randomizedChoices ?? question.randomizedChoices,
         scoring: {
           type: "CRITERIA_BASED",
-          showRubricsToLearner:
-            params.showRubricsToLearner ??
-            question.scoring?.showRubricsToLearner,
+          showPoints: showPoints,
+          showRubricsToLearner: showRubrics,
           rubrics: params.rubrics
             ? params.rubrics
             : (question.scoring?.rubrics ?? []),
         },
       };
+
       useAuthorStore.getState().modifyQuestion(questionId, updatedQuestion);
     }
   };
 
-  // Function to update a variant
   const handleUpdateVariant = (
     variantId: number,
     updatedData: Partial<QuestionVariants>,
@@ -212,7 +220,6 @@ const Question: FC<QuestionProps> = ({
     useAuthorStore.getState().editVariant(questionId, variantId, updatedData);
   };
 
-  // Function to handle adding a new variant
   const handleAddVariant = () => {
     const newVariant: QuestionVariants = {
       id: generateTempQuestionId(),
@@ -262,13 +269,11 @@ const Question: FC<QuestionProps> = ({
     addVariant(question.id, newVariant);
   };
 
-  // Handle changes to the question index
   const handleIndexChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setInputValue(value);
   };
 
-  // Handle key press events, particularly the "Enter" key
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
       handleIndexBlur();
@@ -276,7 +281,6 @@ const Question: FC<QuestionProps> = ({
   };
 
   const handleAddVariantUsingAi = async () => {
-    // if choices in some variants are empty then return
     if (
       Array.isArray(question.variants) &&
       question.variants.some(
@@ -299,7 +303,6 @@ const Question: FC<QuestionProps> = ({
     setVariantLoading(false);
   };
 
-  // Handle the reset of character or word counters based on the mode
   const handleResetCounters = (mode: "CHARACTER" | "WORD") => {
     if (mode === "CHARACTER") {
       setMaxWordCount(null);
@@ -341,7 +344,6 @@ const Question: FC<QuestionProps> = ({
     }
   }, [inputValue, newIndex, questionId, questionIndex]);
 
-  // Memoized list of question types for rendering in the dropdown
   const questionTypes = useMemo(
     () => [
       {
@@ -391,11 +393,7 @@ const Question: FC<QuestionProps> = ({
         label: "Code",
         icon: <CodeBracketIcon className="w-5 h-5 stroke-gray-500" />,
       },
-      // {
-      //   value: "REPO",
-      //   label: "GitHub Repository",
-      //   icon: <IconBrandGithub className="w-5 h-5 stroke-gray-500" />,
-      // },
+
       {
         value: "ESSAY",
         label: "Essay",
@@ -416,25 +414,15 @@ const Question: FC<QuestionProps> = ({
         label: "Live Recording (Beta)",
         icon: <IconDeviceComputerCamera className="w-5 h-5 stroke-gray-500" />,
       },
-      // {
-      //   value: "SPREADSHEET",
-      //   label: "Spreadsheet",
-      //   icon: <TableCellsIcon className="w-5 h-5 stroke-gray-500" />,
-      // },
+      {
+        value: "IMAGES",
+        label: "Image",
+        icon: <IconPhotoScan className="w-5 h-5 stroke-gray-500" />,
+      },
       {
         value: "OTHER",
         label: "Other",
       },
-      // {
-      //   value: "VIDEO",
-      //   label: "Video",
-      //   icon: <CameraIcon className="w-5 h-5 stroke-gray-500" />,
-      // },
-      // {
-      //   value: "AUDIO",
-      //   label: "Audio",
-      //   icon: <MicrophoneIcon className="w-5 h-5  stroke-gray-500" />,
-      // },
     ],
     [],
   );
@@ -471,7 +459,6 @@ const Question: FC<QuestionProps> = ({
 
   return (
     <div className="flex flex-col items-center justify-between rounded-lg bg-white w-full gap-y-6">
-      {/* First row containing the question index input and dropdown menu */}
       <div className="flex gap-2 flex-wrap w-full">
         <div className="flex items-center gap-x-2 flex-1">
           <div className="items-center w-11 h-full typography-body text-gray-500 border border-gray-200 rounded-md text-center">
@@ -597,7 +584,7 @@ const Question: FC<QuestionProps> = ({
               </Menu.Items>
             </Transition>
           </Menu>
-          {/* Dropdown menu for selecting question type */}
+
           {["TEXT", "URL", "UPLOAD", "LINK_FILE"].includes(questionType) ? (
             <Menu as="div" className="relative inline-block text-left">
               <div>
@@ -639,7 +626,6 @@ const Question: FC<QuestionProps> = ({
                   <div className="py-1">
                     {responseTypes
                       ?.filter((qt) => {
-                        // Exclude specific response types for TEXT questionType
                         if (questionType === "TEXT") {
                           return ![
                             "SPREADSHEET",
@@ -649,7 +635,7 @@ const Question: FC<QuestionProps> = ({
                             "LIVE_RECORDING",
                           ].includes(qt.value);
                         }
-                        return true; // Include all for other question types
+                        return true;
                       })
                       .map((qt) => (
                         <Menu.Item key={qt.value}>
@@ -691,55 +677,7 @@ const Question: FC<QuestionProps> = ({
             </Menu>
           ) : null}
         </div>
-        {["TEXT", "URL", "UPLOAD", "LINK_FILE"].includes(questionType) ? (
-          <div className="flex items-center mr-4 gap-2 text-gray-600 text-nowrap ">
-            {/* toggleButton */}
-            <span className="text-gray-600 typography-body">
-              Show Rubrics to Learner
-            </span>
-            <Tooltip
-              content="Show rubrics to learners"
-              className="flex items-center"
-            >
-              <button
-                type="button"
-                onClick={
-                  question.scoring?.showRubricsToLearner
-                    ? () => {
-                        handleUpdateQuestionState({
-                          showRubricsToLearner: false,
-                        });
-                      }
-                    : () => {
-                        handleUpdateQuestionState({
-                          showRubricsToLearner: true,
-                        });
-                      }
-                }
-                className={cn(
-                  "relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
-                  question.scoring?.showRubricsToLearner
-                    ? "bg-violet-600"
-                    : "bg-gray-200",
-                )}
-                role="switch"
-                aria-checked={question.scoring?.showRubricsToLearner}
-              >
-                <span
-                  aria-hidden="true"
-                  className={cn(
-                    "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
-                    question.scoring?.showRubricsToLearner
-                      ? "translate-x-5"
-                      : "translate-x-0",
-                  )}
-                />
-              </button>
-            </Tooltip>
-          </div>
-        ) : null}
 
-        {/* Word count and other controls */}
         <div className="flex items-center gap-4 flex-wrap">
           {preview ? (
             <div className="flex items-center gap-2 text-gray-600 text-nowrap ">
@@ -1026,7 +964,7 @@ const Question: FC<QuestionProps> = ({
               >
                 <DocumentDuplicateIcon width={20} height={20} />
               </button>
-              {/* Delete question button */}
+
               <button
                 className="text-gray-500"
                 onClick={() => setToggleDeleteConfirmation(true)}
@@ -1061,11 +999,11 @@ const Question: FC<QuestionProps> = ({
             questionFromParent={question}
             variantMode={false}
             responseType={question.responseType ?? ("OTHER" as const)}
+            showRubricsToLearner={question.scoring?.showRubricsToLearner}
+            showPoints={question.scoring?.showPoints}
           />
 
-          {/* Render Variants */}
           {question.variants?.map((variant, index) => {
-            // Local states for variant properties
             const [localVariantContent, setLocalVariantContent] = useState(
               variant.variantContent || "",
             );
@@ -1198,9 +1136,7 @@ const Question: FC<QuestionProps> = ({
             );
           })}
 
-          {questionTitle?.length > 0 &&
-          !preview &&
-          question.scoring?.rubrics?.length > 0 ? (
+          {questionTitle?.length > 0 && !preview ? (
             variantLoading ? (
               <div className="flex items-center justify-center w-full gap-4">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
@@ -1208,7 +1144,6 @@ const Question: FC<QuestionProps> = ({
             ) : (
               <>
                 <div className="flex items-center justify-center w-full gap-4">
-                  {/* Add New Variant Button */}
                   <button
                     onClick={handleAddVariant}
                     className="flex items-center gap-2 border border-gray-200 rounded-md p-2 hover:bg-gray-100 py-2 px-4"
@@ -1219,7 +1154,6 @@ const Question: FC<QuestionProps> = ({
                     </span>
                   </button>
 
-                  {/* add variant using ai */}
                   <button
                     onClick={handleAddVariantUsingAi}
                     className="flex items-center gap-2 bg-violet-100 border border-violet-200 rounded-md p-2 hover:bg-violet-100 py-2 px-4"

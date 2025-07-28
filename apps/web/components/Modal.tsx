@@ -16,7 +16,7 @@ const Modal = ({ onClose, children, Title }: ModalProps) => {
             onClick={onClose}
             className="text-gray-400 hover:text-gray-600 focus:outline-none"
           >
-            &#10005; {/* Close icon */}
+            &#10005;
           </button>
         </div>
         <div className="modal-body">{children}</div>

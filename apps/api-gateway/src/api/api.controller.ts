@@ -42,7 +42,6 @@ export class ApiController {
     @Req() request: UserSessionRequest,
     @Res() response: Response,
   ) {
-    // If request is SSE, use native HTTP forwarding.
     if (request.headers.accept?.includes("text/event-stream")) {
       const { endpoint, extraHeaders } = this.apiService.getForwardingDetails(
         DownstreamService.LTI_CREDENTIAL_MANAGER,
@@ -57,7 +56,6 @@ export class ApiController {
       return;
     }
 
-    // Otherwise, use the axios-based forwarding.
     const apiResponse = await this.apiService.forwardRequestToDownstreamService(
       DownstreamService.LTI_CREDENTIAL_MANAGER,
       request,
@@ -92,7 +90,49 @@ export class ApiController {
     );
     return response.status(apiResponse.status).send(apiResponse.data);
   }
+  @Get(
+    "assignments/:assignmentId/attempts/:attemptId/grading/:gradingJobId/status-stream",
+  )
+  @UseGuards(DynamicJwtCookieAuthGuard)
+  @ApiOperation({ summary: "Stream grading job status" })
+  async handleGradingStatusStream(
+    @Req() request: UserSessionRequest,
+    @Res() response: Response,
+  ) {
+    const { endpoint, extraHeaders } = this.apiService.getForwardingDetails(
+      DownstreamService.MARK_API,
+      request,
+    );
 
+    // Forward as SSE
+    await this.apiService.forwardSSERequest(
+      request,
+      response,
+      endpoint,
+      extraHeaders,
+    );
+  }
+  // Special handling for assignment publish SSE endpoints
+  @Get("assignments/jobs/:jobId/status-stream")
+  @UseGuards(DynamicJwtCookieAuthGuard)
+  @ApiOperation({ summary: "Stream publish job status" })
+  async handlePublishStatusStream(
+    @Req() request: UserSessionRequest,
+    @Res() response: Response,
+  ) {
+    const { endpoint, extraHeaders } = this.apiService.getForwardingDetails(
+      DownstreamService.MARK_API,
+      request,
+    );
+
+    // Forward as SSE
+    await this.apiService.forwardSSERequest(
+      request,
+      response,
+      endpoint,
+      extraHeaders,
+    );
+  }
   @All("/*")
   @UseGuards(DynamicJwtCookieAuthGuard)
   @ApiOperation({ summary: "Handle API requests for the Mark API" })

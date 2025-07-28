@@ -1,20 +1,20 @@
 /* eslint-disable @typescript-eslint/require-await */
-import { Injectable, BadRequestException } from "@nestjs/common";
+import { BadRequestException, Injectable } from "@nestjs/common";
 import { QuestionType } from "@prisma/client";
 import { CreateQuestionResponseAttemptRequestDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.request.dto";
 import {
-  CreateQuestionResponseAttemptResponseDto,
   ChoiceBasedFeedbackDto,
+  CreateQuestionResponseAttemptResponseDto,
 } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.response.dto";
 import {
-  QuestionDto,
   Choice,
+  QuestionDto,
 } from "src/api/assignment/dto/update.questions.request.dto";
+import { ScoringType } from "src/api/assignment/question/dto/create.update.question.request.dto";
 import { GradingAuditService } from "../../services/question-response/grading-audit.service";
 import { GradingContext } from "../interfaces/grading-context.interface";
 import { LocalizationService } from "../utils/localization.service";
 import { AbstractGradingStrategy } from "./abstract-grading.strategy";
-import { ScoringType } from "src/api/assignment/question/dto/create.update.question.request.dto";
 
 @Injectable()
 export class ChoiceGradingStrategy extends AbstractGradingStrategy<string[]> {
@@ -58,8 +58,6 @@ export class ChoiceGradingStrategy extends AbstractGradingStrategy<string[]> {
     question: QuestionDto,
     requestDto: CreateQuestionResponseAttemptRequestDto,
   ): Promise<boolean> {
-    // For choice-based questions, we allow empty responses (no selection)
-    // but we'll handle that in the grading logic
     if (
       question.type === QuestionType.SINGLE_CORRECT &&
       requestDto.learnerChoices &&
@@ -126,13 +124,10 @@ export class ChoiceGradingStrategy extends AbstractGradingStrategy<string[]> {
     responseDto: CreateQuestionResponseAttemptResponseDto;
     learnerResponse: string[];
   }> {
-    // Validate the response
     await this.validateResponse(question, requestDto);
 
-    // Extract the learner response
     const learnerResponse = await this.extractLearnerResponse(requestDto);
 
-    // Grade the response
     return this.gradeSingleChoice(question, learnerResponse, context);
   }
 
@@ -149,7 +144,6 @@ export class ChoiceGradingStrategy extends AbstractGradingStrategy<string[]> {
   }> {
     const choices = this.parseChoices(question.choices);
 
-    // No selection case
     if (!learnerResponse || learnerResponse.length === 0) {
       const responseDto = this.createResponseDto(0, [
         {
@@ -168,7 +162,6 @@ export class ChoiceGradingStrategy extends AbstractGradingStrategy<string[]> {
     const normalizedLearnerChoice = this.normalizeText(learnerChoice);
     const correctChoice = choices.find((choice) => choice.isCorrect);
 
-    // Find the selected choice
     const selectedChoice = choices.find(
       (choice) => this.normalizeText(choice.choice) === normalizedLearnerChoice,
     );
@@ -182,7 +175,6 @@ export class ChoiceGradingStrategy extends AbstractGradingStrategy<string[]> {
     const responseDto = new CreateQuestionResponseAttemptResponseDto();
 
     if (selectedChoice) {
-      // Apply feedback based on selection
       let choiceFeedback = "";
       if (selectedChoice.feedback) {
         choiceFeedback = this.formatFeedback(selectedChoice.feedback, data);
@@ -211,7 +203,6 @@ export class ChoiceGradingStrategy extends AbstractGradingStrategy<string[]> {
         },
       ] as ChoiceBasedFeedbackDto[];
 
-      // Add detailed grading information for auditing
       responseDto.metadata = {
         isCorrect: selectedChoice.isCorrect,
         correctChoice: correctChoice?.choice,
@@ -219,7 +210,6 @@ export class ChoiceGradingStrategy extends AbstractGradingStrategy<string[]> {
         scoredPoints: responseDto.totalPoints,
       };
     } else {
-      // Invalid selection
       responseDto.totalPoints = 0;
       responseDto.feedback = [
         {
@@ -232,7 +222,6 @@ export class ChoiceGradingStrategy extends AbstractGradingStrategy<string[]> {
         },
       ] as ChoiceBasedFeedbackDto[];
 
-      // Add metadata about the invalid selection
       responseDto.metadata = {
         isCorrect: false,
         error: "invalidSelection",
@@ -254,13 +243,10 @@ export class ChoiceGradingStrategy extends AbstractGradingStrategy<string[]> {
     responseDto: CreateQuestionResponseAttemptResponseDto;
     learnerResponse: string[];
   }> {
-    // Validate the response
     await this.validateResponse(question, requestDto);
 
-    // Extract the learner response
     const learnerResponse = await this.extractLearnerResponse(requestDto);
 
-    // Grade the response
     return this.gradeMultipleChoice(question, learnerResponse, context);
   }
 
@@ -278,7 +264,6 @@ export class ChoiceGradingStrategy extends AbstractGradingStrategy<string[]> {
   }> {
     const responseDto = new CreateQuestionResponseAttemptResponseDto();
 
-    // Check if any choices were selected
     if (!learnerResponse || learnerResponse.length === 0) {
       responseDto.totalPoints = 0;
       responseDto.feedback = [
@@ -294,25 +279,21 @@ export class ChoiceGradingStrategy extends AbstractGradingStrategy<string[]> {
       return { responseDto, learnerResponse: [] };
     }
 
-    // Normalize chosen options for comparison
     const normalizedLearnerChoices = new Set(
       learnerResponse.map((choice) => this.normalizeText(choice)),
     );
 
-    // Parse and normalize question choices
     const choices = this.parseChoices(question.choices);
     const normalizedChoices = choices.map((choice) => ({
       original: choice,
       normalized: this.normalizeText(choice.choice),
     }));
 
-    // Get all correct choices
     const correctChoices = choices.filter((choice) => choice.isCorrect) || [];
     const correctChoiceTexts = correctChoices.map((choice) =>
       this.normalizeText(choice.choice),
     );
 
-    // Process feedback for each learner choice
     let totalPoints = 0;
     const feedbackDetails: string[] = [];
     const selectedChoices: Choice[] = [];
@@ -324,7 +305,6 @@ export class ChoiceGradingStrategy extends AbstractGradingStrategy<string[]> {
       );
 
       if (matchedChoice) {
-        // Track selected choices
         selectedChoices.push({
           choice: matchedChoice.original.choice,
           isCorrect: matchedChoice.original.isCorrect,
@@ -332,7 +312,6 @@ export class ChoiceGradingStrategy extends AbstractGradingStrategy<string[]> {
           feedback: matchedChoice.original.feedback,
         });
 
-        // Award points for correct choices
         if (matchedChoice.original.isCorrect) {
           totalPoints += matchedChoice.original.points || 0;
         } else if (question.scoring?.type === ScoringType.LOSS_PER_MISTAKE) {
@@ -344,7 +323,6 @@ export class ChoiceGradingStrategy extends AbstractGradingStrategy<string[]> {
           points: matchedChoice.original.points || 0,
         };
 
-        // Generate feedback
         let choiceFeedback = "";
         if (matchedChoice.original.feedback) {
           choiceFeedback = this.formatFeedback(
@@ -367,7 +345,6 @@ export class ChoiceGradingStrategy extends AbstractGradingStrategy<string[]> {
 
         feedbackDetails.push(choiceFeedback);
       } else {
-        // Handle invalid choice
         selectedChoices.push({
           choice: learnerChoice,
           isCorrect: false,
@@ -389,16 +366,13 @@ export class ChoiceGradingStrategy extends AbstractGradingStrategy<string[]> {
       }
     }
 
-    // Calculate final score
     const maxPoints = correctChoices.reduce(
       (accumulator, choice) => accumulator + (choice.points || 0),
       0,
     );
 
-    // Ensure score is not negative and does not exceed max points
     const finalPoints = Math.max(0, Math.min(totalPoints, maxPoints));
 
-    // Check if all correct options were selected (and no incorrect ones)
     const allCorrectSelected: boolean = correctChoiceTexts.every(
       (correctText) => normalizedLearnerChoices.has(correctText),
     );
@@ -409,7 +383,6 @@ export class ChoiceGradingStrategy extends AbstractGradingStrategy<string[]> {
 
     const perfectScore: boolean = allCorrectSelected && noIncorrectSelected;
 
-    // Construct final feedback message
     const feedbackMessage = `
       ${feedbackDetails.join(".\n")}.
       ${
@@ -438,13 +411,12 @@ export class ChoiceGradingStrategy extends AbstractGradingStrategy<string[]> {
       },
     ];
 
-    // Add metadata for auditing
     responseDto.metadata = {
       selectedChoices,
       correctChoices: correctChoices.map((c) => c.choice),
       maxPoints,
       actualPoints: totalPoints,
-      finalPoints, // After capping to min 0, max maxPoints
+      finalPoints,
       perfectScore,
       allCorrectSelected,
       noIncorrectSelected,
@@ -476,13 +448,11 @@ export class ChoiceGradingStrategy extends AbstractGradingStrategy<string[]> {
    * Normalize text for comparison (lowercase, trim, remove punctuation)
    */
   private normalizeText(text: string): string {
-    return (
-      text
-        .trim()
-        .toLowerCase()
-        // Remove common punctuation that might differ in translations
-        .replaceAll(/[!,.،؛؟]/g, "")
-    );
+    return text
+      .trim()
+      .toLowerCase()
+
+      .replaceAll(/[!,.،؛؟]/g, "");
   }
 
   /**

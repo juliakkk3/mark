@@ -11,6 +11,7 @@ interface TooltipMessageProps {
   changesSummary: string;
   invalidQuestionId: number;
   onNavigate: () => void;
+  showAction?: boolean;
 }
 
 const TooltipMessage: FC<TooltipMessageProps> = ({
@@ -24,18 +25,18 @@ const TooltipMessage: FC<TooltipMessageProps> = ({
   changesSummary,
   invalidQuestionId,
   onNavigate,
+  showAction = true,
 }) => {
   if (isLoading) return "Loading questions...";
-  if (questionsLength === 0) return "You need to add at least one question";
   if (hasEmptyQuestion) return "Some questions have incomplete fields";
   if (!isValid)
     return (
       <>
         <span>{message}</span>
-        {!isValid && (
+        {!isValid && showAction && (
           <button
             onClick={onNavigate}
-            className="ml-2 text-blue-500 hover:underline"
+            className="ml-2 text-purple-500 hover:underline"
           >
             Take me there
           </button>

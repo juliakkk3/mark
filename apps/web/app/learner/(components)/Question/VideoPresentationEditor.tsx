@@ -10,10 +10,6 @@ import { fetchFile, toBlobURL } from "@ffmpeg/util";
 import JSZip from "jszip";
 import React, { useEffect, useRef, useState } from "react";
 import { useDropzone } from "react-dropzone";
-
-// -------------------- Helpers -------------------- //
-
-// This function ensures ffmpeg is loaded before returning control.
 const ensureFfmpegLoaded = async (ffmpeg: FFmpeg) => {
   if (!ffmpeg.loaded) {
     await ffmpeg.load({
@@ -28,8 +24,6 @@ const ensureFfmpegLoaded = async (ffmpeg: FFmpeg) => {
     });
   }
 };
-
-// Convert an image File to base64
 const fileToBase64 = (file: File): Promise<string> =>
   new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -44,7 +38,6 @@ const fileToBase64 = (file: File): Promise<string> =>
     reader.readAsDataURL(file);
   });
 
-// Extract text from PPTX using JSZip
 const extractTextFromPptx = async (file: File): Promise<string> => {
   const zip = await JSZip.loadAsync(file);
   let text = "";
@@ -66,8 +59,6 @@ const extractTextFromPptx = async (file: File): Promise<string> => {
   }
   return text.trim();
 };
-
-// Format transcript with timestamps/confidences if time management is enabled.
 const formatTranscriptWithConfidence = (
   segments: TranscriptSegment[],
 ): string => {
@@ -124,9 +115,6 @@ const extractAudio = async (ffmpeg: FFmpeg, videoBlob: Blob): Promise<Blob> => {
   }
 };
 
-// -------------------- Main Component -------------------- //
-
-// Initialize FFmpeg once at module level
 const ffmpeg = new FFmpeg();
 
 interface VideoPresentationEditorProps {
@@ -139,23 +127,21 @@ const VideoPresentationEditor = ({
   assignmentId,
 }: VideoPresentationEditorProps) => {
   const questionId = question.id;
-  // Extract config
+
   const config = question.videoPresentationConfig;
   const evaluateSlidesQuality = config?.evaluateSlidesQuality ?? false;
   const evaluateTimeManagement = config?.evaluateTimeManagement ?? false;
-  // targetTime is the maximum allowed length in seconds
-  const targetTime = config?.targetTime ?? 0; // 0 => no limit
-  // FFmpeg load state
+
+  const targetTime = config?.targetTime ?? 0;
+
   const [ffmpegLoaded, setFfmpegLoaded] = useState(false);
   const [processSlides, setProcessSlides] = useState(false);
 
-  // Video states
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoURL, setVideoURL] = useState("");
   const videoRef = useRef<HTMLVideoElement>(null);
   const [videoDuration, setVideoDuration] = useState(0);
 
-  // Trimming states
   const [trimStart, setTrimStart] = useState(0);
   const [trimEnd, setTrimEnd] = useState(0);
   const [trimStartMinutes, setTrimStartMinutes] = useState(0);
@@ -165,22 +151,19 @@ const VideoPresentationEditor = ({
   const [trimmedVideoURL, setTrimmedVideoURL] = useState("");
   const [processingTrim, setProcessingTrim] = useState(false);
 
-  // Slides
   const [slidesFiles, setSlidesFiles] = useState<File[]>([]);
   const slidesData = question.presentationResponse?.slidesData ?? "";
   const setSlidesData = useLearnerStore((state) => state.setSlidesData);
-  // Transcript
+
   const transcript = question.presentationResponse?.transcript ?? "";
   const setTranscript = useLearnerStore((state) => state.setTranscript);
   const [processingTranscript, setProcessingTranscript] = useState(false);
 
-  // UI
   const [showEditorModal, setShowEditorModal] = useState(false);
   const [limitError, setLimitError] = useState("");
-  // New: indicate if user has "ready" data
+
   const [readyIndicator, setReadyIndicator] = useState(false);
 
-  // 1. Ensure FFmpeg is loaded on mount
   useEffect(() => {
     const load = async () => {
       if (!ffmpeg.loaded) {
@@ -210,12 +193,12 @@ const VideoPresentationEditor = ({
   };
   const onDropSlides = async (acceptedFiles: File[]) => {
     if (!acceptedFiles || acceptedFiles.length === 0) return;
-    // Accumulate these in state
+
     setSlidesFiles((prev) => [...prev, ...acceptedFiles]);
-    // Immediately generate slides data:
+
     await generateSlidesData([...slidesFiles, ...acceptedFiles]);
   };
-  // 2. Video dropzone
+
   const {
     getRootProps: getVideoRootProps,
     getInputProps: getVideoInputProps,
@@ -226,7 +209,6 @@ const VideoPresentationEditor = ({
     onDrop: onDropVideo,
   });
 
-  // 3. Slides dropzone (only if evaluateSlidesQuality is true)
   const {
     getRootProps: getSlidesRootProps,
     getInputProps: getSlidesInputProps,
@@ -244,12 +226,12 @@ const VideoPresentationEditor = ({
       const file = acceptedVideoFiles[0];
       setVideoFile(file);
       setVideoURL(URL.createObjectURL(file));
-      // reset
+
       setTrimmedVideoURL("");
       setTranscript(questionId, "");
       setSlidesData(questionId, undefined);
       setLimitError("");
-      setReadyIndicator(false); // user re-uploaded a new video, reset readiness
+      setReadyIndicator(false);
     }
   }, [acceptedVideoFiles]);
 
@@ -269,13 +251,11 @@ const VideoPresentationEditor = ({
   };
 
   useEffect(() => {
-    // everytime the video file changes, generate transcript
     if (videoFile) {
       void generateTranscript(videoFile);
     }
   }, [videoFile]);
 
-  // 4. Video loaded
   const onVideoLoadedMetadata = () => {
     if (videoRef.current) {
       const duration = videoRef.current.duration;
@@ -292,38 +272,34 @@ const VideoPresentationEditor = ({
     }
   };
 
-  // Helper: enforce the max trim length (targetTime) if set
   const enforceTargetTime = (
     startSec: number,
     endSec: number,
   ): [number, string] => {
     let errorMsg = "";
-    // If targetTime is 0 or not set, no limit
+
     if (targetTime <= 0) return [endSec, errorMsg];
 
-    // The user's requested length
     const length = endSec - startSec;
     if (length > targetTime) {
-      // clamp
       errorMsg = `Maximum allowed length is ${targetTime} seconds. Clamping end time.`;
       return [startSec + targetTime, errorMsg];
     }
     return [endSec, errorMsg];
   };
 
-  // updateTrimStart
   const updateTrimStart = (minutes: number, seconds: number) => {
     setTrimStartMinutes(minutes);
     setTrimStartSeconds(seconds);
     const newStartSec = minutes * 60 + seconds;
-    // enforce max length
+
     const currentLength = trimEnd - newStartSec;
     let newEndSec = trimEnd;
     let errorMsg = "";
     if (targetTime > 0 && currentLength > targetTime) {
       errorMsg = `Maximum allowed length is ${targetTime} seconds. Clamping end time.`;
       newEndSec = newStartSec + targetTime;
-      if (newEndSec > videoDuration) newEndSec = videoDuration; // can't exceed video length
+      if (newEndSec > videoDuration) newEndSec = videoDuration;
     }
 
     setTrimStart(newStartSec);
@@ -331,20 +307,18 @@ const VideoPresentationEditor = ({
     if (errorMsg) setLimitError(errorMsg);
     else setLimitError("");
 
-    // recalc min/sec for end
     const endMin = Math.floor(newEndSec / 60);
     const endSec = Math.round(newEndSec % 60);
     setTrimEndMinutes(endMin);
     setTrimEndSeconds(endSec);
   };
 
-  // updateTrimEnd
   const updateTrimEnd = (minutes: number, seconds: number) => {
     setTrimEndMinutes(minutes);
     setTrimEndSeconds(seconds);
     const newEndSec = minutes * 60 + seconds;
     const startSec = trimStart;
-    // clamp to targetTime
+
     const [finalEnd, errorMsg] = enforceTargetTime(startSec, newEndSec);
 
     let clampedEnd = finalEnd;
@@ -354,14 +328,12 @@ const VideoPresentationEditor = ({
     if (errorMsg) setLimitError(errorMsg);
     else setLimitError("");
 
-    // recalc min/sec
     const endMin = Math.floor(clampedEnd / 60);
     const endSec = Math.round(clampedEnd % 60);
     setTrimEndMinutes(endMin);
     setTrimEndSeconds(endSec);
   };
 
-  // 5. Trim the video
   const trimVideo = async () => {
     if (!videoFile) return;
     setProcessingTrim(true);
@@ -386,8 +358,9 @@ const VideoPresentationEditor = ({
       setTrimmedVideoURL(URL.createObjectURL(trimmedBlob));
     } catch (err) {
       console.error("Error trimming video:", err);
+      setTrimmedVideoURL("");
+      setLimitError("Error trimming video. Please try again.");
     } finally {
-      // Clean up
       await ffmpeg.deleteFile("input.mp4");
       await ffmpeg.deleteFile("output.mp4");
       setProcessingTrim(false);
@@ -398,13 +371,12 @@ const VideoPresentationEditor = ({
     setTrimmedVideoURL("");
   };
 
-  // 6. Transcript
   const generateTranscript = async (file: File) => {
     try {
       setProcessingTranscript(true);
       await ensureFfmpegLoaded(ffmpeg);
       const audioBlob = await extractAudio(ffmpeg, file);
-      // Await the transcription result
+
       const result = await transcribeAudio(audioBlob);
       if (evaluateTimeManagement && result.segments) {
         setTranscript(
@@ -416,12 +388,12 @@ const VideoPresentationEditor = ({
       }
     } catch (err) {
       console.error("Error generating transcript:", err);
+      setTranscript(questionId, "");
     } finally {
       setProcessingTranscript(false);
     }
   };
 
-  // 7. Slides data
   const generateSlidesData = async (files: File[]) => {
     if (!evaluateSlidesQuality || files.length === 0) return;
 
@@ -431,7 +403,6 @@ const VideoPresentationEditor = ({
       const file = files[fileIndex];
 
       try {
-        // 1) If it's an image file, just store a single slide with base64.
         if (file.type.startsWith("image/")) {
           const base64 = await fileToBase64(file);
           slidesArray.push({
@@ -442,14 +413,12 @@ const VideoPresentationEditor = ({
           continue;
         }
 
-        // 2) If it's a PPTX file, parse each internal slide (slide1.xml, slide2.xml, etc.)
         if (
           file.type ===
           "application/vnd.openxmlformats-officedocument.presentationml.presentation"
         ) {
-          // Unzip PPTX
           const zip = await JSZip.loadAsync(file);
-          // Find all "ppt/slides/slideN.xml" files
+
           const internalSlideFiles = Object.keys(zip.files).filter((filename) =>
             filename.startsWith("ppt/slides/slide"),
           );
@@ -459,7 +428,6 @@ const VideoPresentationEditor = ({
             let slideText = "";
             let slideImage = "";
 
-            // 2.1) Extract text from slideX.xml
             try {
               const content = await zip.file(slideXmlFile)?.async("string");
               if (content) {
@@ -477,7 +445,6 @@ const VideoPresentationEditor = ({
                 slideText = slideText.trim();
               }
             } catch (textErr) {
-              console.error(`Error reading text for ${slideXmlFile}:`, textErr);
               slideText = "[Error extracting text]";
             }
 
@@ -492,7 +459,7 @@ const VideoPresentationEditor = ({
                   relContent,
                   "application/xml",
                 );
-                // Find all <Relationship> tags referencing images
+
                 const relNodes = relDoc.getElementsByTagName("Relationship");
                 for (let r = 0; r < relNodes.length; r++) {
                   const relType = relNodes[r].getAttribute("Type");
@@ -502,12 +469,10 @@ const VideoPresentationEditor = ({
                   ) {
                     const targetValue =
                       relNodes[r].getAttribute("Target") || "";
-                    // Typically "../media/imageX.png" or similar
-                    // So let's build the actual path inside the zip
+
                     const mediaPath =
                       "ppt/slides/" + targetValue.replace("../", "");
-                    // If the path doesn't start with "ppt/media", let's try to fix it
-                    // e.g. sometimes "media/imageX.png" is used
+
                     let actualPath = mediaPath;
                     if (!mediaPath.startsWith("ppt/media")) {
                       actualPath = mediaPath.replace("slides/media", "media");
@@ -518,26 +483,21 @@ const VideoPresentationEditor = ({
                       .file(actualPath)
                       ?.async("uint8array");
                     if (imageBinary) {
-                      // Convert to base64
                       const blob = new Blob([imageBinary]);
                       const base64 = await fileToBase64(
                         new File([blob], "slideImage", { type: "image/*" }),
                       );
                       slideImage = base64;
                     }
-                    // For simplicity, let's stop after the first image
+
                     break;
                   }
                 }
               }
             } catch (imgErr) {
-              console.error(
-                `Error reading image reference for ${slideXmlFile}:`,
-                imgErr,
-              );
+              slideImage = "[Error extracting image]";
             }
 
-            // 2.3) Create the array item for this internal PPTX slide
             slidesArray.push({
               slideNumber: slidesArray.length + 1,
               slideText,
@@ -547,7 +507,6 @@ const VideoPresentationEditor = ({
           continue;
         }
 
-        // 3) If it's a legacy PPT or unsupported file type:
         if (file.type === "application/vnd.ms-powerpoint") {
           slidesArray.push({
             slideNumber: slidesArray.length + 1,
@@ -562,7 +521,6 @@ const VideoPresentationEditor = ({
           });
         }
       } catch (outerErr) {
-        console.error(`Error processing file: ${file.name}`, outerErr);
         slidesArray.push({
           slideNumber: slidesArray.length + 1,
           slideText: "[Error reading file]",
@@ -571,7 +529,6 @@ const VideoPresentationEditor = ({
       }
     }
 
-    // Finally store the array in Zustand
     setSlidesData(questionId, slidesArray);
     setProcessSlides(false);
   };
@@ -588,10 +545,10 @@ const VideoPresentationEditor = ({
       setVideoURL(trimmedVideoURL);
       setTrimmedVideoURL("");
       setShowEditorModal(false);
-      // If user replaced the video, that might change the final content
+
       setReadyIndicator(false);
-    } catch (error) {
-      console.error("Error replacing with trimmed video:", error);
+    } catch (err) {
+      console.error("Error replacing original video:", err);
     }
   };
 
@@ -601,13 +558,11 @@ const VideoPresentationEditor = ({
     setLimitError("");
   };
 
-  // Evaluate the length of final trimmed video to check if we exceed targetTime
   const finalTrimLength = trimEnd - trimStart;
   const isExceedingLimit = targetTime > 0 && finalTrimLength > targetTime;
 
   return (
     <div className="bg-white rounded-lg overflow-hidden w-full max-w-lg mx-auto border">
-      {/* Let's replicate the "PresentationGrader" style with a top video area. */}
       {processingTranscript || (!transcript && videoFile) ? (
         <div className="flex items-center justify-center h-64 border-b">
           <div className="flex items-center space-x-2">
@@ -631,7 +586,7 @@ const VideoPresentationEditor = ({
 
       <div className="p-6">
         <label className="block font-semibold mb-1">Upload Video:</label>
-        {/* Dropzone for video */}
+
         <div
           {...getVideoRootProps()}
           className="border-dashed border-2 p-4 text-center cursor-pointer mb-4"
@@ -654,14 +609,13 @@ const VideoPresentationEditor = ({
             </button>
             <button
               onClick={openEditorModal}
-              className="px-5 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
+              className="px-5 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 transition"
             >
               Edit/Trim Video
             </button>
           </div>
         )}
 
-        {/* Slides Dropzone (conditionally) */}
         {evaluateSlidesQuality && (
           <div className="mb-4">
             <label className="block font-semibold mb-1">
@@ -706,7 +660,6 @@ const VideoPresentationEditor = ({
           </div>
         )}
 
-        {/* If Mark as Ready was pressed and we have data, show an indicator */}
         {readyIndicator &&
           (transcript || (evaluateSlidesQuality && slidesData)) && (
             <div className="mb-4 p-3 border border-green-300 bg-green-50 text-green-700 rounded">
@@ -716,7 +669,6 @@ const VideoPresentationEditor = ({
             </div>
           )}
 
-        {/* Show limit error or the final results below */}
         {limitError && (
           <p className="text-red-600 text-sm mb-2">
             <strong>Note:</strong> {limitError}
@@ -724,7 +676,6 @@ const VideoPresentationEditor = ({
         )}
       </div>
 
-      {/* Editor Modal for trimming */}
       {showEditorModal && (
         <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
           <div className="bg-white w-full max-w-lg p-4 rounded shadow-lg relative">
@@ -819,7 +770,7 @@ const VideoPresentationEditor = ({
                 className={`px-4 py-2 rounded text-white ${
                   !ffmpegLoaded || processingTrim
                     ? "bg-gray-400"
-                    : "bg-blue-600 hover:bg-blue-700"
+                    : "bg-purple-600 hover:bg-purple-700"
                 }`}
               >
                 {processingTrim ? "Trimming..." : "Trim Now"}

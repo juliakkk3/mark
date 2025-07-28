@@ -5,11 +5,14 @@ import {
   Get,
   Inject,
   Injectable,
+  NotFoundException,
   Param,
   Patch,
   Post,
   Query,
   Req,
+  Res,
+  Sse,
   UseGuards,
 } from "@nestjs/common";
 import {
@@ -20,35 +23,36 @@ import {
   ApiTags,
 } from "@nestjs/swagger";
 import { ReportType } from "@prisma/client";
+import { Response as ExpressResponse } from "express";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
-import { Logger } from "winston";
-import { AttemptServiceV2 } from "./services/attempt.service";
+import { Observable } from "rxjs";
 import {
   UserRole,
   UserSessionRequest,
 } from "src/auth/interfaces/user.session.interface";
-import { AssignmentAttemptAccessControlGuard } from "../assignment/attempt/guards/assignment.attempt.access.control.guard";
 import { Roles } from "src/auth/role/roles.global.guard";
+import { Logger } from "winston";
 import {
+  GRADE_SUBMISSION_EXCEPTION,
   MAX_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE,
   SUBMISSION_DEADLINE_EXCEPTION_MESSAGE,
-  GRADE_SUBMISSION_EXCEPTION,
 } from "../assignment/attempt/api-exceptions/exceptions";
 import { BaseAssignmentAttemptResponseDto } from "../assignment/attempt/dto/assignment-attempt/base.assignment.attempt.response.dto";
 import { LearnerUpdateAssignmentAttemptRequestDto } from "../assignment/attempt/dto/assignment-attempt/create.update.assignment.attempt.request.dto";
 import {
-  AssignmentFeedbackResponseDto,
   AssignmentFeedbackDto,
-  RequestRegradingResponseDto,
+  AssignmentFeedbackResponseDto,
   RegradingRequestDto,
   RegradingStatusResponseDto,
+  RequestRegradingResponseDto,
 } from "../assignment/attempt/dto/assignment-attempt/feedback.request.dto";
 import {
   AssignmentAttemptResponseDto,
   GetAssignmentAttemptResponseDto,
 } from "../assignment/attempt/dto/assignment-attempt/get.assignment.attempt.response.dto";
 import { ReportRequestDTO } from "../assignment/attempt/dto/assignment-attempt/post.assignment.report.dto";
-import { UpdateAssignmentAttemptResponseDto } from "../assignment/attempt/dto/assignment-attempt/update.assignment.attempt.response.dto";
+import { AssignmentAttemptAccessControlGuard } from "../assignment/attempt/guards/assignment.attempt.access.control.guard";
+import { AttemptServiceV2 } from "./services/attempt.service";
 
 @ApiTags("Attempts")
 @Injectable()
@@ -57,7 +61,7 @@ import { UpdateAssignmentAttemptResponseDto } from "../assignment/attempt/dto/as
   version: "2",
 })
 export class AttemptControllerV2 {
-  private logger;
+  private logger: Logger;
   constructor(
     @Inject(WINSTON_MODULE_PROVIDER) private parentLogger: Logger,
     private readonly attemptService: AttemptServiceV2,
@@ -154,7 +158,19 @@ export class AttemptControllerV2 {
     type: LearnerUpdateAssignmentAttemptRequestDto,
     required: true,
   })
-  @ApiResponse({ status: 201, type: BaseAssignmentAttemptResponseDto })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      type: "object",
+      properties: {
+        gradingJobId: {
+          type: "number",
+          description: "Job ID for tracking grading progress",
+        },
+        message: { type: "string", description: "Status message" },
+      },
+    },
+  })
   @ApiResponse({
     status: 422,
     type: String,
@@ -167,27 +183,139 @@ export class AttemptControllerV2 {
   })
   @ApiResponse({ status: 403 })
   async updateAssignmentAttempt(
-    @Param("attemptId") assignmentAttemptId: number,
+    @Param("attemptId") attemptId: number,
     @Param("assignmentId") assignmentId: number,
     @Body()
     learnerUpdateAssignmentAttemptDto: LearnerUpdateAssignmentAttemptRequestDto,
     @Req() request: UserSessionRequest,
-  ): Promise<UpdateAssignmentAttemptResponseDto> {
-    // The authentication cookie is used for LTI grade callbacks
+  ): Promise<any> {
+    // Parse IDs to ensure they're numbers
+    const parsedAttemptId = Number(attemptId);
+    const parsedAssignmentId = Number(assignmentId);
+
+    this.logger.info(
+      `Updating attempt: attemptId=${parsedAttemptId}, assignmentId=${parsedAssignmentId}`,
+    );
+
     const authCookie: string =
       typeof request?.cookies?.authentication === "string"
         ? request.cookies.authentication
         : "";
     const gradingCallbackRequired =
       request?.userSession.gradingCallbackRequired ?? false;
-    return this.attemptService.updateAssignmentAttempt(
-      Number(assignmentAttemptId),
-      Number(assignmentId),
-      learnerUpdateAssignmentAttemptDto,
-      authCookie,
-      gradingCallbackRequired,
-      request,
-    );
+
+    // Always use SSE for submitted assignments
+    const needsLongRunningGrading = true;
+    // Check if this is author mode (might have fake attempt ID)
+    const isAuthorMode = request.userSession.role === UserRole.AUTHOR;
+
+    if (needsLongRunningGrading && !isAuthorMode) {
+      // Only create grading jobs for real learner attempts
+      const { gradingJobId, message } =
+        await this.attemptService.createGradingJob(
+          parsedAttemptId,
+          parsedAssignmentId,
+          learnerUpdateAssignmentAttemptDto,
+          authCookie,
+          request,
+        );
+
+      // Start the grading process asynchronously (don't await)
+      this.attemptService
+        .processGradingJob(
+          gradingJobId,
+          parsedAttemptId,
+          parsedAssignmentId,
+          learnerUpdateAssignmentAttemptDto,
+          authCookie,
+          request,
+        )
+        .catch((error) => {
+          this.logger.error(`Grading job ${gradingJobId} failed:`, error);
+        });
+
+      // Return immediately with job ID
+      return { gradingJobId, message };
+    } else if (needsLongRunningGrading && isAuthorMode) {
+      // For author mode, create a job without attemptId
+      const { gradingJobId, message } =
+        await this.attemptService.createAuthorGradingJob(
+          parsedAssignmentId,
+          learnerUpdateAssignmentAttemptDto,
+          authCookie,
+          request,
+        );
+
+      // Process author preview asynchronously
+      this.attemptService
+        .processAuthorPreviewJob(
+          gradingJobId,
+          parsedAssignmentId,
+          learnerUpdateAssignmentAttemptDto,
+          authCookie,
+          request,
+        )
+        .catch((error) => {
+          this.logger.error(
+            `Author preview job ${gradingJobId} failed:`,
+            error,
+          );
+        });
+
+      return { gradingJobId, message };
+    } else {
+      // Regular synchronous update
+      const result = await this.attemptService.updateAssignmentAttempt(
+        parsedAttemptId,
+        parsedAssignmentId,
+        learnerUpdateAssignmentAttemptDto,
+        authCookie,
+        gradingCallbackRequired,
+        request,
+      );
+      return result;
+    }
+  }
+
+  @Get(":attemptId/grading/:gradingJobId/status-stream")
+  @Roles(UserRole.LEARNER, UserRole.AUTHOR)
+  @ApiOperation({ summary: "Stream grading job status" })
+  @ApiParam({ name: "attemptId", required: true, description: "Attempt ID" })
+  @ApiParam({
+    name: "gradingJobId",
+    required: true,
+    description: "Grading Job ID",
+  })
+  @Sse()
+  async streamGradingStatus(
+    @Param("attemptId") attemptId: number,
+    @Param("gradingJobId") gradingJobId: number,
+    @Req() request: UserSessionRequest,
+  ): Promise<Observable<MessageEvent>> {
+    const job = await this.attemptService.getGradingJob(Number(gradingJobId));
+
+    if (!job) {
+      throw new NotFoundException(
+        `Grading job with ID ${gradingJobId} not found`,
+      );
+    }
+
+    // For author mode, attemptId might be null or not match
+    // Only validate attemptId for learner jobs
+    if (job.attemptId !== null && job.attemptId !== Number(attemptId)) {
+      throw new BadRequestException(
+        `Grading job ${gradingJobId} does not belong to attempt ${attemptId}`,
+      );
+    }
+
+    request.on("close", () => {
+      this.logger.info(
+        `Client disconnected from grading job ${gradingJobId} stream`,
+      );
+      void this.attemptService.cleanupGradingJobStream(Number(gradingJobId));
+    });
+
+    return this.attemptService.getGradingJobStatusStream(Number(gradingJobId));
   }
 
   @Post(":attemptId/feedback")
@@ -291,7 +419,6 @@ export class AttemptControllerV2 {
   ): Promise<{ message: string }> {
     const { issueType, description } = body;
 
-    // Validate input
     if (!issueType || !description) {
       throw new BadRequestException("Issue type and description are required");
     }
@@ -306,7 +433,6 @@ export class AttemptControllerV2 {
       throw new BadRequestException("Invalid user ID");
     }
 
-    // Create the report
     await this.attemptService.createReport(
       Number(assignmentId),
       Number(attemptId),

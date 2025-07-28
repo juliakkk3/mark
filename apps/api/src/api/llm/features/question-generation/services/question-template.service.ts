@@ -1,4 +1,3 @@
-// src/llm/features/question-generation/services/question-template.service.ts
 import { Injectable } from "@nestjs/common";
 import { QuestionType } from "@prisma/client";
 import { StructuredOutputParser } from "langchain/output_parsers";
@@ -17,7 +16,6 @@ export class QuestionTemplateService {
     questionType: QuestionType,
     variationCount: number,
   ): StructuredOutputParser<any> {
-    // Define base schema
     const baseQuestionSchema = z.object({
       id: z.number().describe("Unique identifier for the variation"),
       variantContent: z
@@ -25,7 +23,6 @@ export class QuestionTemplateService {
         .describe("A reworded variation of the question text"),
     });
 
-    // Schema for TRUE_FALSE questions
     const trueFalseQuestionItemSchema = baseQuestionSchema.extend({
       type: z.literal("TRUE_FALSE"),
       choices: z
@@ -40,7 +37,6 @@ export class QuestionTemplateService {
         .length(2),
     });
 
-    // Schema for MULTIPLE_CORRECT questions
     const multipleCorrectQuestionItemSchema = baseQuestionSchema.extend({
       type: z.literal("MULTIPLE_CORRECT"),
       choices: z
@@ -55,7 +51,6 @@ export class QuestionTemplateService {
         .min(2),
     });
 
-    // Schema for SINGLE_CORRECT questions
     const singleCorrectQuestionItemSchema = baseQuestionSchema.extend({
       type: z.literal("SINGLE_CORRECT"),
       choices: z.array(
@@ -68,7 +63,6 @@ export class QuestionTemplateService {
       ),
     });
 
-    // Select the appropriate schema based on question type
     switch (questionType) {
       case QuestionType.TRUE_FALSE: {
         return StructuredOutputParser.fromZodSchema(
@@ -145,7 +139,6 @@ export class QuestionTemplateService {
         return "Moderately challenging questions to test comprehension.";
       }
       case AssignmentTypeEnum.ASSESSMENT: {
-        // Handle possible typo in enum
         return "In-depth questions requiring detailed explanations or calculations.";
       }
       case AssignmentTypeEnum.MIDTERM: {

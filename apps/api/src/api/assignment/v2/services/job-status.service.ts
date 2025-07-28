@@ -4,11 +4,16 @@ import { Job } from "@prisma/client";
 import {
   catchError,
   concatWith,
+  defer,
   finalize,
+  from,
+  interval,
   map,
   Observable,
   of,
   Subject,
+  switchMap,
+  takeWhile,
 } from "rxjs";
 import { PrismaService } from "src/prisma.service";
 
@@ -47,12 +52,6 @@ export class JobStatusServiceV2 {
       },
     });
   }
-
-  async getJobStatus(jobId: number): Promise<Job | null> {
-    return this.prisma.job.findUnique({
-      where: { id: jobId },
-    });
-  }
   getPublishJobStatusStream(jobId: number): Observable<MessageEvent> {
     if (!this.jobStatusStreams.has(jobId)) {
       this.jobStatusStreams.set(jobId, new Subject<MessageEvent>());
@@ -70,7 +69,19 @@ export class JobStatusServiceV2 {
           data: { message: "Connecting to job status stream..." },
         } as MessageEvent;
       }),
-      concatWith(statusSubject.asObservable()),
+
+      concatWith(
+        defer(() => from(this.getInitialJobStatus(jobId))),
+        interval(1000).pipe(
+          switchMap(() => from(this.pollJobStatus(jobId))),
+          takeWhile((event) => {
+            const status = (event as { data?: { status?: string } })?.data
+              ?.status;
+            return status !== "Completed" && status !== "Failed";
+          }, true),
+        ),
+        statusSubject.asObservable(),
+      ),
       finalize(() => {
         this.logger.log(`Stream closed for job ${jobId}`);
         void this.cleanupJobStream(jobId);
@@ -90,6 +101,78 @@ export class JobStatusServiceV2 {
       }),
     );
   }
+
+  private async getInitialJobStatus(jobId: number): Promise<MessageEvent> {
+    try {
+      const job = await this.prisma.publishJob.findUnique({
+        where: { id: jobId },
+      });
+
+      if (!job) {
+        throw new Error(`Publish job with ID ${jobId} not found.`);
+      }
+
+      return {
+        type: "update",
+        data: {
+          timestamp: new Date().toISOString(),
+          status: job.status,
+          progress: job.progress,
+          percentage: job.percentage || 0,
+          result: job.result ? JSON.stringify(job.result) : undefined,
+          done: job.status === "Completed" || job.status === "Failed",
+        },
+      } as unknown as MessageEvent;
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      this.logger.error(`Error getting initial job status: ${errorMessage}`);
+      throw error;
+    }
+  }
+
+  private async pollJobStatus(jobId: number): Promise<MessageEvent | null> {
+    try {
+      const job = await this.prisma.publishJob.findUnique({
+        where: { id: jobId },
+      });
+
+      if (!job) {
+        return null;
+      }
+
+      let messageType = "update";
+      if (job.status === "Completed") {
+        messageType = "finalize";
+      } else if (job.status === "Failed") {
+        messageType = "error";
+      }
+
+      return {
+        type: messageType,
+        data: {
+          timestamp: new Date().toISOString(),
+          status: job.status,
+          progress: job.progress,
+          percentage: job.percentage || 0,
+          result: job.result,
+          done: job.status === "Completed" || job.status === "Failed",
+        },
+      } as unknown as MessageEvent;
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      this.logger.error(`Error polling job status: ${errorMessage}`);
+      return null;
+    }
+  }
+
+  async getJobStatus(jobId: number): Promise<Job | null> {
+    return this.prisma.job.findUnique({
+      where: { id: jobId },
+    });
+  }
+
   // eslint-disable-next-line @typescript-eslint/require-await
   async cleanupJobStream(jobId: number): Promise<void> {
     const subject = this.jobStatusStreams.get(jobId);
@@ -98,17 +181,15 @@ export class JobStatusServiceV2 {
       this.jobStatusStreams.delete(jobId);
     }
   }
-  async updateJobStatus(jobId: number, statusUpdate: JobStatus): Promise<void> {
+  async updateJobStatus(
+    jobId: number,
+    statusUpdate: JobStatus,
+    isPublishJob = true,
+  ): Promise<void> {
     try {
       const timestamp = new Date().toISOString();
       this.logger.log(
         `[${timestamp}] Updating job #${jobId} status: ${statusUpdate.status} - ${statusUpdate.progress} (${statusUpdate.percentage}%)`,
-      );
-
-      const isPublishJob = Boolean(
-        await this.prisma.publishJob.findUnique({
-          where: { id: jobId },
-        }),
       );
 
       const sanitizedProgress = statusUpdate.progress
@@ -126,7 +207,6 @@ export class JobStatusServiceV2 {
 
       while (attempt < maxRetries && !success) {
         try {
-          // Update database based on job type
           await (isPublishJob
             ? this.prisma.publishJob.update({
                 where: { id: jobId },
@@ -165,7 +245,7 @@ export class JobStatusServiceV2 {
             this.logger.warn(
               `Failed to update job #${jobId} status (attempt ${attempt}/${maxRetries}): ${errorMessage}`,
             );
-            // Add exponential backoff between retries
+
             await new Promise((resolve) =>
               setTimeout(resolve, 100 * Math.pow(2, attempt)),
             );
@@ -173,7 +253,6 @@ export class JobStatusServiceV2 {
         }
       }
 
-      // Emit status update for real-time subscribers even if DB update fails
       this.emitJobStatusUpdate(jobId, {
         ...statusUpdate,
         progress: sanitizedProgress,
@@ -186,9 +265,8 @@ export class JobStatusServiceV2 {
         `Error in updateJobStatus for job #${jobId}: ${errorMessage}`,
       );
 
-      // Try to notify clients of the error
       const errorStatus: JobStatus = {
-        status: "In Progress", // Don't mark as failed to allow recovery
+        status: "In Progress",
         progress: `Update error: ${errorMessage.slice(0, 100)}... (continuing)`,
         percentage: statusUpdate.percentage,
       };
@@ -207,7 +285,6 @@ export class JobStatusServiceV2 {
     try {
       const subject = this.jobStatusStreams.get(jobId);
       if (subject) {
-        // Determine message type based on status
         let messageType = "update";
         if (statusUpdate.status === "Completed") {
           messageType = "finalize";
@@ -215,7 +292,6 @@ export class JobStatusServiceV2 {
           messageType = "error";
         }
 
-        // Include more detailed information in the event data
         const eventData = {
           timestamp: new Date().toISOString(),
           status: statusUpdate.status,
@@ -230,34 +306,29 @@ export class JobStatusServiceV2 {
             statusUpdate.status === "Failed",
         };
 
-        // Emit the status update
         subject.next({
           type: messageType,
           data: eventData,
         } as unknown as MessageEvent);
 
-        // If the job is done, send a final message and close the stream
         if (
           statusUpdate.status === "Completed" ||
           statusUpdate.status === "Failed"
         ) {
-          // Send a summary message
           subject.next({
             type: "summary",
             data: {
               message: `Job ${statusUpdate.status.toLowerCase()}`,
               finalStatus: statusUpdate.status,
-              duration: "Job duration information would be calculated here", // Would need start time to calculate
+              duration: "Job duration information would be calculated here",
             },
           } as unknown as MessageEvent);
 
-          // Close message
           subject.next({
             type: "close",
             data: { message: "Stream completed" },
           } as unknown as MessageEvent);
 
-          // Clean up after a short delay to ensure the message is sent
           setTimeout(() => {
             void this.cleanupJobStream(jobId);
           }, 1000);

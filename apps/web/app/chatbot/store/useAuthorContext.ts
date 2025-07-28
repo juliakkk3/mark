@@ -57,7 +57,6 @@ export const useAuthorContext = (): UseAuthorContextInterface => {
     shallow,
   );
 
-  // Get question states from question store
   const questionStates = useQuestionStore((state) => state.questionStates);
 
   const [currentQuestion, setCurrentQuestion] = useState(null);
@@ -69,30 +68,25 @@ export const useAuthorContext = (): UseAuthorContextInterface => {
     hasUploadedFiles: false,
   });
 
-  // Force state update
   const forceUpdate = useCallback(() => {
     if (setUpdatedAt) {
       setUpdatedAt(Date.now());
     }
   }, [setUpdatedAt]);
 
-  // Update current focused question
   useEffect(() => {
     if (questions && focusedQuestionId) {
       const focusedQuestion = questions.find((q) => q.id === focusedQuestionId);
       if (focusedQuestion) {
         setCurrentQuestion(focusedQuestion);
       } else if (questions.length > 0) {
-        // Fallback to first question if focused question not found
         setCurrentQuestion(questions[0]);
       }
     } else if (questions && questions.length > 0) {
-      // If no focused question but we have questions, set the first one
       setCurrentQuestion(questions[0]);
     }
   }, [questions, focusedQuestionId]);
 
-  // Update assignment metadata
   useEffect(() => {
     setAssignmentMeta({
       name: name || "Untitled Assignment",
@@ -107,28 +101,23 @@ export const useAuthorContext = (): UseAuthorContextInterface => {
     });
   }, [name, questions, learningObjectives, focusedQuestionId, fileUploaded]);
 
-  // Check if a question has rubrics defined
   const hasRubrics = useCallback((question) => {
     return question?.scoring?.rubrics && question.scoring.rubrics.length > 0;
   }, []);
 
-  // Generate a comprehensive context message for the current state
   const getContextMessage = useCallback(async () => {
     let contextContent = "MARK ASSISTANT CONTEXT (AUTHOR MODE):\n\n";
 
-    // Add basic assignment info
     contextContent += `Assignment: ${name || "Untitled Assignment"}\n`;
     contextContent += `Assignment ID: ${
       activeAssignmentId || "Not saved yet"
     }\n`;
     contextContent += `Number of Questions: ${Array.isArray(questions) ? questions.length : 0}\n`;
 
-    // Add learning objectives if available
     if (learningObjectives) {
       contextContent += `\nLEARNING OBJECTIVES:\n${learningObjectives}\n\n`;
     }
 
-    // Add uploaded files information
     if (Array.isArray(fileUploaded) && fileUploaded.length > 0) {
       contextContent += `\nUPLOADED CONTENT FILES (${fileUploaded.length}):\n`;
       fileUploaded.forEach((file) => {
@@ -137,7 +126,6 @@ export const useAuthorContext = (): UseAuthorContextInterface => {
       contextContent += "\n";
     }
 
-    // Add current assignment structure
     contextContent += `\nASSIGNMENT STRUCTURE:\n`;
     contextContent += `- Introduction: ${
       introduction ? "Defined" : "Not defined"
@@ -149,19 +137,15 @@ export const useAuthorContext = (): UseAuthorContextInterface => {
       gradingCriteriaOverview ? "Defined" : "Not defined"
     }\n`;
 
-    // Add question information
     if (Array.isArray(questions) && questions.length > 0) {
       contextContent += "\nQUESTIONS OVERVIEW:\n";
 
-      // First list all questions in order
       contextContent += "Question List:\n";
 
-      // Create a safe copy of questions
       const safeQuestions = [...questions].filter(
         (q) => q && typeof q === "object",
       );
 
-      // Only try to sort if we have a valid questionOrder array
       const orderedQuestions =
         Array.isArray(questionOrder) && questionOrder.length > 0
           ? safeQuestions.sort((a, b) => {
@@ -180,7 +164,6 @@ export const useAuthorContext = (): UseAuthorContextInterface => {
         } (${questionType})\n`;
       });
 
-      // Then add detailed info for focused question (if any)
       if (currentQuestion) {
         contextContent += `\nCURRENT FOCUSED QUESTION:\n`;
         contextContent += `Question ID: ${currentQuestion.id}\n`;
@@ -190,7 +173,6 @@ export const useAuthorContext = (): UseAuthorContextInterface => {
           currentQuestion.question || "No question text"
         }\n`;
 
-        // Add choices for multiple choice questions
         if (
           (currentQuestion.type === "SINGLE_CORRECT" ||
             currentQuestion.type === "MULTIPLE_CORRECT") &&
@@ -206,14 +188,12 @@ export const useAuthorContext = (): UseAuthorContextInterface => {
           });
         }
 
-        // Add true/false info
         if (currentQuestion.type === "TRUE_FALSE") {
           contextContent += `\nTrue/False Answer: ${
             currentQuestion.answer ? "True" : "False"
           }\n`;
         }
 
-        // Add rubrics info
         if (hasRubrics(currentQuestion)) {
           contextContent += "\nRubrics:\n";
           currentQuestion.scoring.rubrics.forEach((rubric, rIndex) => {
@@ -230,14 +210,12 @@ export const useAuthorContext = (): UseAuthorContextInterface => {
           });
         }
 
-        // Add variant info
         if (currentQuestion.variants && currentQuestion.variants.length > 0) {
           contextContent += `\nQuestion has ${currentQuestion.variants.length} variants.\n`;
         }
       }
     }
 
-    // Add author assistance guidelines
     contextContent += "\nAUTHOR CAPABILITIES:\n";
     contextContent +=
       "- Create new questions (multiple choice, text response, true/false, etc.)\n";
@@ -246,7 +224,6 @@ export const useAuthorContext = (): UseAuthorContextInterface => {
     contextContent += "- Create or modify scoring rubrics\n";
     contextContent += "- Generate questions based on learning objectives\n";
 
-    // Add behavioral guidelines
     contextContent += "\nREQUIRED BEHAVIOR:\n";
     contextContent +=
       "1. Follow instructional design best practices when helping with assignment creation\n";
@@ -280,7 +257,6 @@ export const useAuthorContext = (): UseAuthorContextInterface => {
     hasRubrics,
   ]);
 
-  // Get information about the current question
   const getCurrentQuestionInfo = useCallback(() => {
     if (!currentQuestion) return null;
 
@@ -299,7 +275,6 @@ export const useAuthorContext = (): UseAuthorContextInterface => {
     };
   }, [currentQuestion, hasRubrics]);
 
-  // Get information about all questions
   const getAllQuestionsInfo = useCallback(() => {
     if (!Array.isArray(questions)) return [];
 
@@ -311,7 +286,6 @@ export const useAuthorContext = (): UseAuthorContextInterface => {
     }));
   }, [questions]);
 
-  // Get generation capabilities
   const getGenerationCapabilities = useCallback(() => {
     return {
       canGenerateQuestions:
@@ -323,7 +297,6 @@ export const useAuthorContext = (): UseAuthorContextInterface => {
     };
   }, [learningObjectives, fileUploaded]);
 
-  // Return an object with all the context data for use in API calls
   const getContextData = useCallback(() => {
     return {
       name,

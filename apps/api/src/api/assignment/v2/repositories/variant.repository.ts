@@ -67,7 +67,6 @@ export class VariantRepository {
     data: VariantDto & { questionId: number },
   ): Promise<QuestionVariant> {
     try {
-      // Create type-safe data for Prisma
       const createData = this.prepareVariantCreateData(data);
 
       return this.prisma.questionVariant.create({
@@ -95,7 +94,6 @@ export class VariantRepository {
     data: VariantDto & { questionId: number },
   ): Promise<QuestionVariant> {
     try {
-      // Create type-safe data for Prisma
       const updateData = this.prepareVariantUpdateData(data);
 
       return this.prisma.questionVariant.update({
@@ -153,7 +151,6 @@ export class VariantRepository {
     if (variants.length === 0) return [];
 
     try {
-      // Use a transaction to ensure all variants are created together
       return await this.prisma.$transaction(
         variants.map((variantData) => {
           const createData = this.prepareVariantCreateData(variantData);
@@ -271,16 +268,13 @@ export class VariantRepository {
 
     if (typeof field === "string") {
       try {
-        // Check if it's already valid JSON
         JSON.parse(field);
         return field as Prisma.JsonValue;
       } catch {
-        // If it's not valid JSON, stringify it
         return JSON.stringify(field) as Prisma.JsonValue;
       }
     }
 
-    // For objects, arrays, and other types, stringify them properly
     return JSON.stringify(field) as Prisma.JsonValue;
   }
 
@@ -299,12 +293,10 @@ export class VariantRepository {
       try {
         return JSON.parse(field) as T;
       } catch {
-        // If parsing fails, return undefined
         return undefined;
       }
     }
 
-    // For objects and other non-string types, return as is
     return field as T;
   }
 

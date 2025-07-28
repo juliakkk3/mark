@@ -1,7 +1,8 @@
+/* eslint-disable */
 /**
  * API functions specific to assignment authors
  */
-import { getApiRoutes } from "@/config/constants";
+import { getApiRoutes, getBaseApiPath } from "@/config/constants";
 import type {
   AssignmentAttempt,
   BaseBackendResponse,
@@ -15,7 +16,147 @@ import type {
   REPORT_TYPE,
   Scoring,
 } from "@config/types";
+interface Notification {
+  id: number;
+  type: string;
+  title: string;
+  message: string;
+  createdAt: string;
+  read: boolean;
+  metadata: string | null;
+}
+/**
+ * Fetches user notifications from the backend.
+ * @param userId The ID of the user to fetch notifications for
+ * @param cookies Optional cookies string for authenticated requests
+ * @returns An array of notifications or empty array on error
+ */
+export async function getUserNotifications(
+  cookies?: string,
+): Promise<Notification[]> {
+  try {
+    const res = await fetch(`${getBaseApiPath("v1")}/notifications/user`, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+        ...(cookies ? { Cookie: cookies } : {}),
+      },
+    });
 
+    if (!res.ok) {
+      const errorBody = await res.json();
+      throw new Error(errorBody.message || "Failed to fetch notifications");
+    }
+
+    return await res.json();
+  } catch (err) {
+    return [];
+  }
+}
+
+/**
+ * Fetches the count of unread notifications for a user.
+ * @param userId The ID of the user to fetch unread count for
+ * @param cookies Optional cookies string for authenticated requests
+ * @returns Object containing the unread count or 0 on error
+ */
+export async function getUnreadNotificationCount(
+  cookies?: string,
+): Promise<{ count: number }> {
+  try {
+    const res = await fetch(
+      `${getBaseApiPath("v1")}/notifications/user/unread`,
+      {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          ...(cookies ? { Cookie: cookies } : {}),
+        },
+      },
+    );
+
+    if (!res.ok) {
+      const errorBody = await res.json();
+      throw new Error(
+        errorBody.message || "Failed to fetch unread notification count",
+      );
+    }
+
+    return await res.json();
+  } catch (err) {
+    return { count: 0 };
+  }
+}
+
+/**
+ * Marks a notification as read.
+ * @param notificationId The ID of the notification to mark as read
+ * @param cookies Optional cookies string for authenticated requests
+ * @returns True if successful, false otherwise
+ */
+export async function markNotificationAsRead(
+  notificationId: number,
+  cookies?: string,
+): Promise<boolean> {
+  try {
+    const res = await fetch(
+      `${getBaseApiPath("v1")}/notifications/mark-read/${notificationId}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(cookies ? { Cookie: cookies } : {}),
+        },
+      },
+    );
+
+    if (!res.ok) {
+      const errorBody = await res.json();
+      throw new Error(
+        errorBody.message || "Failed to mark notification as read",
+      );
+    }
+
+    return true;
+  } catch (err) {
+    return false;
+  }
+}
+
+/**
+ * Marks all notifications for a user as read.
+ * @param userId The ID of the user whose notifications should be marked as read
+ * @param cookies Optional cookies string for authenticated requests
+ * @returns True if successful, false otherwise
+ */
+export async function markAllNotificationsAsRead(
+  userId: string,
+  cookies?: string,
+): Promise<boolean> {
+  try {
+    const res = await fetch(
+      `${getBaseApiPath("v1")}/notifications/mark-all-read/${userId}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(cookies ? { Cookie: cookies } : {}),
+        },
+      },
+    );
+
+    if (!res.ok) {
+      const errorBody = await res.json();
+      throw new Error(
+        errorBody.message || "Failed to mark all notifications as read",
+      );
+    }
+
+    return true;
+  } catch (err) {
+    return false;
+  }
+}
 /**
  * Calls the backend to modify an assignment.
  */
@@ -43,7 +184,6 @@ export async function replaceAssignment(
     }
     return true;
   } catch (err) {
-    console.error(err);
     return false;
   }
 }
@@ -75,7 +215,6 @@ export async function updateAssignment(
     }
     return true;
   } catch (err) {
-    console.error(err);
     return false;
   }
 }
@@ -114,7 +253,6 @@ export async function createQuestion(
 
     return id;
   } catch (err) {
-    console.error(err);
     return undefined;
   }
 }
@@ -157,7 +295,6 @@ export function subscribeToJobStatus(
       }
     };
 
-    // Initial connection timeout (30 seconds)
     timeoutId = setTimeout(() => handleError("Connection timeout"), 30000);
 
     try {
@@ -168,36 +305,32 @@ export function subscribeToJobStatus(
         { withCredentials: true },
       );
 
-      // Abort the connection when the controller signal is aborted
       controller.signal.addEventListener("abort", () => {
         eventSource?.close();
       });
 
       eventSource.onopen = () => {
-        console.log("SSE connection established");
         clearTimeout(timeoutId);
-        // Set job processing timeout (e.g. 5 minutes)
+
         timeoutId = setTimeout(
           () => handleError("Job processing timeout"),
           300000,
         );
       };
 
-      // Listen for "update" events
       eventSource.addEventListener("update", (event: MessageEvent<string>) => {
         try {
           const data = JSON.parse(event.data) as PublishJobResponse;
-          // Report progress updates if available
+
           if (data.percentage !== undefined && onProgress) {
             onProgress(data.percentage, data.progress);
           }
-          // Update questions if present
+
           if (data?.result) {
             receivedQuestions = JSON.parse(
               data.result,
             ) as QuestionAuthorStore[];
             if (setQuestions) {
-              console.log("Received questions:", receivedQuestions);
               setQuestions(receivedQuestions);
             }
           }
@@ -212,7 +345,6 @@ export function subscribeToJobStatus(
         }
       });
 
-      // Listen for "finalize" events
       eventSource.addEventListener(
         "finalize",
         (event: MessageEvent<string>) => {
@@ -221,13 +353,11 @@ export function subscribeToJobStatus(
             if (data.percentage !== undefined && onProgress) {
               onProgress(data.percentage, data.progress);
             }
-            console.log("Final finalize:", data);
             if (data?.result) {
               receivedQuestions = JSON.parse(
                 data.result,
               ) as QuestionAuthorStore[];
               if (setQuestions) {
-                console.log("Received questions:", receivedQuestions);
                 setQuestions(receivedQuestions);
               }
             }
@@ -238,13 +368,12 @@ export function subscribeToJobStatus(
         },
       );
 
-      // Optional: Listen for "close" events
-      eventSource.addEventListener("close", (event: MessageEvent<string>) => {
-        console.log("SSE close event:", event.data);
-      });
+      eventSource.addEventListener(
+        "close",
+        (event: MessageEvent<string>) => {},
+      );
 
       eventSource.onerror = (err) => {
-        console.error("SSE error:", err);
         if (!isResolved) {
           if (eventSource?.readyState === EventSource.CLOSED) {
             handleError("Connection closed unexpectedly");
@@ -289,15 +418,12 @@ export async function publishAssignment(
       throw new Error(errorBody.message || "Failed to start publishing job");
     }
 
-    // Response should now contain jobId instead of questions
     const { jobId, message } = (await res.json()) as {
       jobId: number;
       message: string;
     };
     return { jobId, message };
-  } catch (err) {
-    console.error("Error starting publishing job:", err);
-  }
+  } catch (err) {}
 }
 
 /**
@@ -336,7 +462,6 @@ export async function replaceQuestion(
 
     return id;
   } catch (err) {
-    console.error(err);
     return undefined;
   }
 }
@@ -382,7 +507,6 @@ export async function generateQuestionVariant(
 
     return questions;
   } catch (err) {
-    console.error(err);
     return undefined;
   }
 }
@@ -414,7 +538,6 @@ export async function generateRubric(
     const rubric = (await res.json()) as Scoring | Choice[];
     return rubric;
   } catch (err) {
-    console.error(err);
     return undefined;
   }
 }
@@ -446,7 +569,6 @@ export async function expandMarkingRubric(
     const rubric = (await res.json()) as QuestionAuthorStore;
     return rubric;
   } catch (err) {
-    console.error(err);
     return undefined;
   }
 }
@@ -480,7 +602,6 @@ export async function deleteQuestion(
 
     return true;
   } catch (err) {
-    console.error(err);
     return false;
   }
 }
@@ -507,7 +628,6 @@ export async function getAttempts(
     const attempts = (await res.json()) as AssignmentAttempt[];
     return attempts;
   } catch (err) {
-    console.error(err);
     return undefined;
   }
 }
@@ -558,7 +678,6 @@ export async function uploadFiles(
       return { success: false };
     }
   } catch (err) {
-    console.error("Error uploading files:", err);
     return { success: false };
   }
 }
@@ -569,6 +688,7 @@ export async function uploadFiles(
 export async function getJobStatus(
   jobId: number,
   cookies?: string,
+  opts: { retries?: number; timeoutMs?: number } = {},
 ): Promise<
   | {
       status: string;
@@ -578,30 +698,37 @@ export async function getJobStatus(
     }
   | undefined
 > {
+  const { retries = 2, timeoutMs = 10_000 } = opts;
   const endpointURL = `${getApiRoutes().assignments}/jobs/${jobId}/status`;
 
-  try {
-    const res = await fetch(endpointURL, {
-      headers: {
-        "Content-Type": "application/json",
-        ...(cookies ? { Cookie: cookies } : {}),
-      },
-    });
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const abort = new AbortController();
+    const timer = setTimeout(() => abort.abort(), timeoutMs);
 
-    if (!res.ok) {
-      throw new Error("Failed to fetch job status");
+    try {
+      const res = await fetch(endpointURL, {
+        signal: abort.signal,
+        headers: {
+          "Content-Type": "application/json",
+          ...(cookies ? { Cookie: cookies } : {}),
+        },
+      });
+
+      clearTimeout(timer);
+
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+      return (await res.json()) as {
+        status: string;
+        progress: string;
+        progressPercentage: string;
+        questions?: QuestionAuthorStore[];
+      };
+    } catch (err) {
+      clearTimeout(timer);
+      if (attempt === retries) return undefined;
+      await new Promise((r) => setTimeout(r, 500 * 2 ** attempt));
     }
-
-    const data = (await res.json()) as {
-      status: string;
-      progress: string;
-      progressPercentage: string;
-      questions?: QuestionAuthorStore[];
-    };
-    return data;
-  } catch (err) {
-    console.error("Error fetching job status:", err);
-    return undefined;
   }
 }
 

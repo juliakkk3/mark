@@ -11,7 +11,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { use, useEffect, useState, type ComponentPropsWithoutRef } from "react";
 
-interface Props extends ComponentPropsWithoutRef<"section"> {}
+type Props = ComponentPropsWithoutRef<"section">;
 
 function SuccessPage(props: Props) {
   const {} = props;
@@ -23,6 +23,7 @@ function SuccessPage(props: Props) {
     setAuthorStore,
     activeAssignmentId,
     name,
+    setQuestionOrder,
   ] = useAuthorStore((state) => [
     state.setActiveAssignmentId,
     state.questions,
@@ -30,6 +31,7 @@ function SuccessPage(props: Props) {
     state.setAuthorStore,
     state.activeAssignmentId,
     state.name,
+    state.setQuestionOrder,
   ]);
   const [setAssignmentConfigStore] = useAssignmentConfig((state) => [
     state.setAssignmentConfigStore,
@@ -40,14 +42,12 @@ function SuccessPage(props: Props) {
   const fetchAssignment = async () => {
     const assignment = await getAssignment(activeAssignmentId);
     if (assignment) {
-      // Decode specific fields
       const decodedFields = decodeFields({
         introduction: assignment.introduction,
         instructions: assignment.instructions,
         gradingCriteriaOverview: assignment.gradingCriteriaOverview,
       });
 
-      // Merge decoded fields back into assignment
       const decodedAssignment = {
         ...assignment,
         ...decodedFields,
@@ -55,7 +55,6 @@ function SuccessPage(props: Props) {
 
       useAuthorStore.getState().setOriginalAssignment(decodedAssignment);
 
-      // Author store
       const mergedAuthorData = mergeData(
         useAuthorStore.getState(),
         decodedAssignment,
@@ -64,6 +63,11 @@ function SuccessPage(props: Props) {
       setAuthorStore({
         ...cleanedAuthorData,
       });
+      if (decodedAssignment.questionOrder) {
+        setQuestionOrder(decodedAssignment.questionOrder);
+      } else {
+        setQuestionOrder(questions.map((question) => question.id));
+      }
       const mergedAssignmentConfigData = mergeData(
         useAssignmentConfig.getState(),
         decodedAssignment,
@@ -80,7 +84,7 @@ function SuccessPage(props: Props) {
       setAssignmentConfigStore({
         ...cleanedAssignmentConfigData,
       });
-      // Merge assignment feedback config data.
+
       const mergedAssignmentFeedbackData = mergeData(
         useAssignmentFeedbackConfig.getState(),
         decodedAssignment,
@@ -106,7 +110,7 @@ function SuccessPage(props: Props) {
         const user = await getUser();
         setReturnUrl(user.returnUrl || "");
       } catch (err) {
-        console.error(err);
+        console.error("Error fetching user:", err);
       }
     };
 
@@ -119,14 +123,11 @@ function SuccessPage(props: Props) {
       <h1 className="text-2xl font-bold">
         Congratulations! Your assignment was updated
       </h1>
-      {/* <div className="flex items-center justify-center w-6 h-6 mr-2 bg-yellow-500 rounded-full">
-        <ExclamationCircleIcon className="w-4 h-6 text-white" />
-      </div> */}
-      {/* <div className="text-sm text-yellow-700">You have</div> */}
+
       <div className="justify-start items-start gap-3.5 inline-flex">
         <Link
           href={pathname.split("?")[0]}
-          className="px-4 py-2 bg-blue-700 hover:bg-blue-600 transition-colors rounded-md shadow justify-end items-center gap-2.5 flex"
+          className="px-4 py-2 bg-purple-700 hover:bg-purple-600 transition-colors rounded-md shadow justify-end items-center gap-2.5 flex"
         >
           <ExitIcon className="w-6 h-6 text-white" />
           <div className="text-white text-base font-medium">
@@ -136,7 +137,7 @@ function SuccessPage(props: Props) {
         {returnUrl && (
           <Link
             href={returnUrl}
-            className="px-4 py-2 bg-blue-700 hover:bg-blue-600 transition-colors rounded-md shadow justify-end items-center gap-2.5 flex"
+            className="px-4 py-2 bg-purple-700 hover:bg-purple-600 transition-colors rounded-md shadow justify-end items-center gap-2.5 flex"
           >
             <ExitIcon className="w-6 h-6 text-white" />
             <div className="text-white text-base font-medium">

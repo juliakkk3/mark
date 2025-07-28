@@ -1,16 +1,13 @@
-// src/llm/core/services/prompt-processor.service.ts
-import { Injectable, Inject } from "@nestjs/common";
-import { PromptTemplate } from "@langchain/core/prompts";
 import { HumanMessage } from "@langchain/core/messages";
+import { PromptTemplate } from "@langchain/core/prompts";
+import { Inject, Injectable } from "@nestjs/common";
 import { AIUsageType } from "@prisma/client";
-import { Logger } from "winston";
-
-import { IPromptProcessor } from "../interfaces/prompt-processor.interface";
-
-import { USAGE_TRACKER } from "../../llm.constants";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
-import { IUsageTracker } from "../interfaces/user-tracking.interface";
 import { decodeFields, decodeIfBase64 } from "src/helpers/decoder";
+import { Logger } from "winston";
+import { USAGE_TRACKER } from "../../llm.constants";
+import { IPromptProcessor } from "../interfaces/prompt-processor.interface";
+import { IUsageTracker } from "../interfaces/user-tracking.interface";
 import { LlmRouter } from "./llm-router.service";
 
 @Injectable()
@@ -36,11 +33,10 @@ export class PromptProcessorService implements IPromptProcessor {
   ): Promise<string> {
     try {
       const llm = this.router.get(llmKey ?? "gpt-4o");
-      // Decode any base64 encoded partialVariables if they exist
+
       if (prompt.partialVariables) {
         const stringVariables: { [key: string]: string | null } = {};
 
-        // Extract string variables that might need decoding
         for (const key in prompt.partialVariables) {
           const value = prompt.partialVariables[key];
           if (
@@ -51,10 +47,8 @@ export class PromptProcessorService implements IPromptProcessor {
           }
         }
 
-        // Decode the extracted string variables
         const decodedVariables = decodeFields(stringVariables);
 
-        // Update the original partialVariables with decoded values
         for (const key in decodedVariables) {
           prompt.partialVariables[key] = decodedVariables[key];
         }
@@ -63,7 +57,7 @@ export class PromptProcessorService implements IPromptProcessor {
       let input: string;
       try {
         input = await prompt.format({});
-        // Also check if the formatted input itself is base64 encoded
+
         input = decodeIfBase64(input) || input;
       } catch (formatError: unknown) {
         const errorMessage =
@@ -83,13 +77,10 @@ export class PromptProcessorService implements IPromptProcessor {
         throw formatError;
       }
 
-      // Invoke the LLM
       const result = await llm.invoke([new HumanMessage(input)]);
 
-      // Clean up the response
       const response = this.cleanResponse(result.content);
 
-      // Track usage
       await this.usageTracker.trackUsage(
         assignmentId,
         usageType,
@@ -99,9 +90,10 @@ export class PromptProcessorService implements IPromptProcessor {
 
       return response;
     } catch (error) {
-      // Create a detailed error log with full error information
       this.logger.error(
-        `Error processing prompt: ${error instanceof Error ? error.message : "Unknown error"}`,
+        `Error processing prompt: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`,
         {
           stack:
             error instanceof Error ? error.stack : "No stack trace available",
@@ -111,7 +103,6 @@ export class PromptProcessorService implements IPromptProcessor {
         },
       );
 
-      // Rethrow a more specific error
       const error_ =
         error instanceof Error
           ? error
@@ -131,15 +122,14 @@ export class PromptProcessorService implements IPromptProcessor {
     imageData: string,
     assignmentId: number,
     usageType: AIUsageType,
-    llmKey = "gpt-4o",
+    llmKey = "gpt-4.1-mini",
   ): Promise<string> {
     try {
-      const llm = this.router.get(llmKey ?? "gpt-4o");
-      // Decode any base64 encoded partialVariables if they exist
+      const llm = this.router.get(llmKey ?? "gpt-4.1-mini");
+
       if (prompt.partialVariables) {
         const stringVariables: { [key: string]: string | null } = {};
 
-        // Extract string variables that might need decoding
         for (const key in prompt.partialVariables) {
           const value = prompt.partialVariables[key];
           if (
@@ -150,30 +140,23 @@ export class PromptProcessorService implements IPromptProcessor {
           }
         }
 
-        // Decode the extracted string variables
         const decodedVariables = decodeFields(stringVariables);
 
-        // Update the original partialVariables with decoded values
         for (const key in decodedVariables) {
           prompt.partialVariables[key] = decodedVariables[key];
         }
       }
 
-      // Format the text content using the template
       let textContent = await prompt.format({});
-      // Also check if the formatted input itself is base64 encoded
+
       textContent = decodeIfBase64(textContent) || textContent;
 
-      // Check if imageData is base64 encoded (beyond the normal base64 encoding for images)
       const decodedImageData = decodeIfBase64(imageData) || imageData;
 
-      // Invoke the LLM with image
       const result = await llm.invokeWithImage(textContent, decodedImageData);
 
-      // Clean up the response
       const response = this.cleanResponse(result.content);
 
-      // Track usage
       await this.usageTracker.trackUsage(
         assignmentId,
         usageType,
@@ -184,7 +167,9 @@ export class PromptProcessorService implements IPromptProcessor {
       return response;
     } catch (error) {
       this.logger.error(
-        `Error processing prompt with image: ${error instanceof Error ? error.message : "Unknown error"}`,
+        `Error processing prompt with image: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`,
         {
           stack:
             error instanceof Error ? error.stack : "No stack trace available",
@@ -209,9 +194,9 @@ export class PromptProcessorService implements IPromptProcessor {
    */
   private cleanResponse(response: string): string {
     return response
-      .replaceAll("```json", "") // Remove json code blocks
-      .replaceAll("```", "") // Remove any remaining code blocks
-      .replaceAll("`", "") // Remove single backticks
-      .trim(); // Trim whitespace
+      .replaceAll("```json", "")
+      .replaceAll("```", "")
+      .replaceAll("`", "")
+      .trim();
   }
 }

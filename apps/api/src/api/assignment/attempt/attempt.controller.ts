@@ -278,7 +278,6 @@ export class AttemptControllerV1 {
   ): Promise<{ message: string }> {
     const { issueType, description } = body;
 
-    // Validate input
     if (!issueType || !description) {
       throw new BadRequestException("Issue type and description are required");
     }
@@ -293,7 +292,6 @@ export class AttemptControllerV1 {
       throw new BadRequestException("Invalid user ID");
     }
 
-    // Create the report
     await this.attemptService.createReport(
       Number(assignmentId),
       Number(attemptId),

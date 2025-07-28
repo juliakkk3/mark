@@ -16,8 +16,7 @@ export class UserSessionMiddleware implements NestMiddleware {
       request.userSession = JSON.parse(
         request.headers["user-session"] as string,
       ) as UserSession;
-    } catch (error) {
-      console.error("Invalid user-session header:", error);
+    } catch {
       throw new BadRequestException("Invalid user-session header");
     }
     next();

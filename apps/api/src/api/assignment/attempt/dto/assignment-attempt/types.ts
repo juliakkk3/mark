@@ -1,11 +1,5 @@
 import { QuestionDto } from "src/api/assignment/dto/update.questions.request.dto";
 
-export interface LearnerFileUpload {
-  filename: string;
-  content: string;
-  questionId: number;
-  githubUrl?: string;
-}
 export type slideMetaData = {
   slideNumber: number;
   slideText: string;

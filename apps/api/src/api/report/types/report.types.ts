@@ -1,10 +1,10 @@
-// report.types.ts
 export class ReportIssueDto {
   issueType: string;
   description: string;
   assignmentId?: number;
   attemptId?: number;
   severity?: "info" | "warning" | "error" | "critical";
+  role?: string;
   category?: string;
   portalName?: string;
   userEmail?: string;

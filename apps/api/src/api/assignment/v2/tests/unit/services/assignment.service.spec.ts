@@ -4,42 +4,35 @@
 /* eslint-disable @typescript-eslint/unbound-method */
 
 import { Test, TestingModule } from "@nestjs/testing";
-import { WINSTON_MODULE_PROVIDER } from "nest-winston";
-import { PrismaService } from "src/prisma.service";
-
 import { QuestionType, VariantType } from "@prisma/client";
-
-import { QuestionService } from "src/api/assignment/v2/services/question.service";
-import { LlmFacadeService } from "src/api/llm/llm-facade.service";
-
+import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { UpdateAssignmentRequestDto } from "src/api/assignment/dto/update.assignment.request.dto";
 import { UpdateAssignmentQuestionsDto } from "src/api/assignment/dto/update.questions.request.dto";
-import { AssignmentRepository } from "../../../repositories/assignment.repository";
-import { JobStatusServiceV2 } from "../../../services/job-status.service";
-import { TranslationService } from "../../../services/translation.service";
+import { QuestionService } from "src/api/assignment/v2/services/question.service";
+import { LlmFacadeService } from "src/api/llm/llm-facade.service";
+import { PrismaService } from "src/prisma.service";
 import {
   createMockAssignmentRepository,
-  createMockQuestionService,
-  createMockTranslationService,
-  createMockJobStatusService,
-  createMockLogger,
-  createMockLlmFacadeService,
-  createMockPrismaService,
-  createMockLearnerGetAssignmentResponseDto,
-  sampleLearnerSession,
-  createMockGetAssignmentResponseDto,
-  sampleAuthorSession,
   createMockAssignmentResponseDto,
-  createMockUpdateAssignmentDto,
-  createMockReplaceAssignmentDto,
-  createMockUpdateAssignmentQuestionsDto,
+  createMockGetAssignmentResponseDto,
+  createMockJobStatusService,
+  createMockLearnerGetAssignmentResponseDto,
+  createMockLlmFacadeService,
+  createMockLogger,
+  createMockPrismaService,
   createMockQuestionDto,
+  createMockQuestionService,
+  createMockReplaceAssignmentDto,
+  createMockTranslationService,
+  createMockUpdateAssignmentDto,
+  createMockUpdateAssignmentQuestionsDto,
+  sampleAuthorSession,
+  sampleLearnerSession,
 } from "../__mocks__/ common-mocks";
+import { AssignmentRepository } from "../../../repositories/assignment.repository";
 import { AssignmentServiceV2 } from "../../../services/assignment.service";
-
-/* ────────────────────────────────────────────────────────────────────────── */
-/*  Test-suite                                                                */
-/* ────────────────────────────────────────────────────────────────────────── */
+import { JobStatusServiceV2 } from "../../../services/job-status.service";
+import { TranslationService } from "../../../services/translation.service";
 
 describe("AssignmentServiceV2 – full unit-suite", () => {
   let service: AssignmentServiceV2;
@@ -49,9 +42,6 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
   let jobStatusService: ReturnType<typeof createMockJobStatusService>;
   let logger: ReturnType<typeof createMockLogger>;
 
-  /* ---------------------------------------------------------------------- */
-  /*  Test module setup                                                     */
-  /* ---------------------------------------------------------------------- */
   beforeEach(async () => {
     assignmentRepository = createMockAssignmentRepository();
     questionService = createMockQuestionService();
@@ -78,16 +68,10 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
 
   afterEach(() => jest.clearAllMocks());
 
-  /* ---------------------------------------------------------------------- */
-  /*  Basic existence                                                       */
-  /* ---------------------------------------------------------------------- */
   it("service should be defined", () => {
     expect(service).toBeDefined();
   });
 
-  /* ---------------------------------------------------------------------- */
-  /*  getAssignment                                                         */
-  /* ---------------------------------------------------------------------- */
   describe("getAssignment", () => {
     it("returns learner view without translation", async () => {
       const mockAssignment = createMockLearnerGetAssignmentResponseDto();
@@ -133,9 +117,6 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
     });
   });
 
-  /* ---------------------------------------------------------------------- */
-  /*  listAssignments                                                       */
-  /* ---------------------------------------------------------------------- */
   describe("listAssignments", () => {
     it("lists all assignments for a user", async () => {
       const list = [createMockAssignmentResponseDto()];
@@ -150,13 +131,10 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
     });
   });
 
-  /* ---------------------------------------------------------------------- */
-  /*  updateAssignment                                                      */
-  /* ---------------------------------------------------------------------- */
   describe("updateAssignment", () => {
     it("updates & triggers translation and grading-context update", async () => {
       const dto: UpdateAssignmentRequestDto = createMockUpdateAssignmentDto({
-        name: "Updated name", // translatable change
+        name: "Updated name",
       });
       jest
         .spyOn<any, any>(service as any, "shouldTranslateAssignment")
@@ -196,9 +174,6 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
     });
   });
 
-  /* ---------------------------------------------------------------------- */
-  /*  replaceAssignment                                                     */
-  /* ---------------------------------------------------------------------- */
   describe("replaceAssignment", () => {
     it("replaces assignment entirely", async () => {
       const dto = createMockReplaceAssignmentDto();
@@ -210,9 +185,6 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
     });
   });
 
-  /* ---------------------------------------------------------------------- */
-  /*  getAvailableLanguages                                                 */
-  /* ---------------------------------------------------------------------- */
   describe("getAvailableLanguages", () => {
     it("returns language list", async () => {
       const langs = ["en", "fr", "es"];
@@ -225,9 +197,6 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
     });
   });
 
-  /* ---------------------------------------------------------------------- */
-  /*  publishAssignment                                                     */
-  /* ---------------------------------------------------------------------- */
   describe("publishAssignment", () => {
     it("kicks off publishing and returns job info", async () => {
       const dto: UpdateAssignmentQuestionsDto =
@@ -243,7 +212,7 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
         1,
         "author-123",
       );
-      expect(spy).toHaveBeenCalledWith(1, 1, dto); // jobId always 1 in mock
+      expect(spy).toHaveBeenCalledWith(1, 1, dto);
       expect(response).toEqual({ jobId: 1, message: "Publishing started" });
     });
 
@@ -260,9 +229,6 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
     });
   });
 
-  /* ---------------------------------------------------------------------- */
-  /*  startPublishingProcess – happy path                                   */
-  /* ---------------------------------------------------------------------- */
   describe("startPublishingProcess (private) – happy path", () => {
     it("runs all steps when content changes", async () => {
       const assignmentId = 1;
@@ -283,10 +249,16 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
 
       expect(
         questionService.processQuestionsForPublishing,
-      ).toHaveBeenCalledWith(assignmentId, dto.questions, jobId);
+      ).toHaveBeenCalledWith(
+        assignmentId,
+        dto.questions,
+        expect.anything(),
+        expect.anything(),
+      );
       expect(translationService.translateAssignment).toHaveBeenCalledWith(
         assignmentId,
         jobId,
+        expect.anything(),
       );
       expect(questionService.updateQuestionGradingContext).toHaveBeenCalledWith(
         assignmentId,
@@ -302,9 +274,6 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
     });
   });
 
-  /* ---------------------------------------------------------------------- */
-  /*  startPublishingProcess – config-only                                  */
-  /* ---------------------------------------------------------------------- */
   it("skips translation & grading-context when only configuration changes", async () => {
     const assignmentId = 1;
     const jobId = 1;
@@ -313,7 +282,6 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
       numAttempts: 3,
     });
 
-    // config-only ➜ both helpers return false
     jest
       .spyOn<
         any,
@@ -324,7 +292,6 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
       .spyOn<any, any>(service as any, "haveQuestionContentsChanged")
       .mockReturnValue(false);
 
-    // make sure the assignment is already published
     const existingAssignment = createMockGetAssignmentResponseDto({
       published: true,
     });
@@ -336,9 +303,6 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
     expect(questionService.updateQuestionGradingContext).not.toHaveBeenCalled();
   });
 
-  /* ---------------------------------------------------------------------- */
-  /*  haveTranslatableAssignmentFieldsChanged                               */
-  /* ---------------------------------------------------------------------- */
   describe("haveTranslatableAssignmentFieldsChanged", () => {
     it.each([
       ["name", { name: "New name" }],
@@ -355,10 +319,8 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
     });
 
     it("returns false when only non-translatable fields change", () => {
-      // existing assignment with all translatable strings already set
       const existingAssignment = createMockGetAssignmentResponseDto();
 
-      // DTO touches only NON-translatable props — no name / intro / etc.
       const dto: UpdateAssignmentRequestDto = {
         name: existingAssignment.name,
         introduction: existingAssignment.introduction,
@@ -377,6 +339,7 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
         showAssignmentScore: false,
         showQuestionScore: false,
         showSubmissionFeedback: false,
+        showQuestions: false,
       };
 
       expect(
@@ -388,9 +351,6 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
     });
   });
 
-  /* ---------------------------------------------------------------------- */
-  /*  haveQuestionContentsChanged                                            */
-  /* ---------------------------------------------------------------------- */
   describe("haveQuestionContentsChanged", () => {
     it("detects question count change", () => {
       const existing = [createMockQuestionDto()];
@@ -483,9 +443,6 @@ describe("AssignmentServiceV2 – full unit-suite", () => {
     });
   });
 
-  /* ---------------------------------------------------------------------- */
-  /*  safeStringCompare                                                     */
-  /* ---------------------------------------------------------------------- */
   describe("safeStringCompare", () => {
     it.each([
       ["same strings", "hello", "hello", true],

@@ -1,11 +1,7 @@
 import { handleJumpToQuestion } from "@/app/Helpers/handleJumpToQuestion";
 import { useLearnerStore } from "@/stores/learner";
 import type { QuestionStore } from "@config/types";
-import {
-  useCallback,
-  useEffect,
-  type ComponentPropsWithoutRef,
-} from "react";
+import { useCallback, useEffect, type ComponentPropsWithoutRef } from "react";
 import Timer from "./Timer";
 
 interface Props extends ComponentPropsWithoutRef<"div"> {
@@ -33,16 +29,12 @@ function Overview({ questions }: Props) {
         "w-10 h-11 border rounded-md text-center cursor-pointer focus:outline-none flex flex-col items-center";
 
       if (index === activeQuestionNumber - 1) {
-        // Focused question: white background, violet border, violet text
         baseClasses += " bg-gray-100 border-violet-700 text-violet-600";
       } else if (question.status === "flagged") {
-        // Flagged question: violet-200 background
         baseClasses += " bg-gray-100 border-gray-400 text-gray-500";
       } else if (question.status === "edited") {
-        // Edited question: violet-100 background
         baseClasses += " bg-violet-100 border-gray-400 text-violet-800 ";
       } else {
-        // Unanswered question: white background
         baseClasses += " bg-gray-100 border-gray-400 text-gray-500";
       }
 
@@ -63,7 +55,6 @@ function Overview({ questions }: Props) {
 
       <h3 className="text-gray-600 leading-tight">Questions</h3>
 
-      {/* Grid for question numbers */}
       <div className="grid gap-2 grid-cols-[repeat(auto-fill,minmax(35px,1fr))] overflow-y-auto overflow-x-hidden scrollbar-hide">
         {questions.map((question: QuestionStore, index) => (
           <button
@@ -78,7 +69,6 @@ function Overview({ questions }: Props) {
               index,
             )} relative flex items-center justify-center`}
           >
-            {/* Add Notch for flagged questions */}
             {question.status === "flagged" && (
               <div
                 className="absolute top-0 right-0 w-4 h-4 bg-violet-500"

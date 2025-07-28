@@ -132,7 +132,6 @@ const FileCodeUploadSection = ({
         </p>
       </div>
 
-      {/* File upload section */}
       <div className="bg-white p-4 rounded-lg ">
         <FileUploadSection
           question={question}
@@ -142,13 +141,11 @@ const FileCodeUploadSection = ({
         />
       </div>
 
-      {/* Fancy divider */}
       <div className="flex items-center justify-center relative">
         <div className="border-t border-gray-300 w-full" />
         <span className="px-3 text-sm text-gray-500 absolute bg-white">OR</span>
       </div>
 
-      {/* GitHub selection button */}
       <div className="flex items-center justify-center">
         <div
           className={`bg-white py-4 flex flex-col items-center ${
@@ -170,7 +167,6 @@ const FileCodeUploadSection = ({
           </button>
         </div>
 
-        {/* Display selected GitHub files if any */}
         {learnerFileResponse && learnerFileResponse.length > 0 && (
           <AnimatePresence>
             <motion.div
@@ -185,46 +181,41 @@ const FileCodeUploadSection = ({
                 Selected GitHub Files
               </h4>
               <ul className="gap-2 text-sm text-gray-700 flex items-center flex-wrap">
-                {
-                  // if learnerfileresponse is not empty and it include gitubUrl then show the file
-
-                  learnerFileResponse.map((file) => {
-                    if (file.githubUrl) {
-                      return (
-                        <li
-                          key={file.filename}
-                          className="flex items-center gap-2 bg-gray-50 max-w-fit p-2 rounded hover:bg-gray-100 transition-colors"
+                {learnerFileResponse.map((file) => {
+                  if (file.githubUrl) {
+                    return (
+                      <li
+                        key={file.filename}
+                        className="flex items-center gap-2 bg-gray-50 max-w-fit p-2 rounded hover:bg-gray-100 transition-colors"
+                      >
+                        <button
+                          onClick={() =>
+                            openFileInNewTab(file.githubUrl, octokit)
+                          }
+                          className="flex items-center gap-2"
                         >
-                          <button
-                            onClick={() =>
-                              openFileInNewTab(file.githubUrl, octokit)
-                            }
-                            className="flex items-center gap-2"
-                          >
-                            <DocumentTextIcon className="h-4 w-4 text-gray-600" />
-                            <span className="truncate">{file.filename}</span>
-                          </button>
-                          <TrashIcon
-                            className="h-4 w-4 text-gray-600 cursor-pointer"
-                            onClick={() => {
-                              void handleRemoveFile(
-                                file.filename,
-                                file.githubUrl,
-                              );
-                            }}
-                          />
-                        </li>
-                      );
-                    }
-                  })
-                }
+                          <DocumentTextIcon className="h-4 w-4 text-gray-600" />
+                          <span className="truncate">{file.filename}</span>
+                        </button>
+                        <TrashIcon
+                          className="h-4 w-4 text-gray-600 cursor-pointer"
+                          onClick={() => {
+                            void handleRemoveFile(
+                              file.filename,
+                              file.githubUrl,
+                            );
+                          }}
+                        />
+                      </li>
+                    );
+                  }
+                })}
               </ul>
             </motion.div>
           </AnimatePresence>
         )}
       </div>
 
-      {/* Github modal */}
       {isGithubModalOpen && (
         <GithubUploadModal
           onClose={() => setGithubModalOpen(false)}

@@ -1,5 +1,5 @@
+/* eslint-disable */
 "use client";
-
 import { stripHtml } from "@/app/Helpers/strippers";
 import Dropdown from "@/components/Dropdown";
 import FileUploadModal from "@/components/FileUploadModal";
@@ -44,6 +44,7 @@ import {
   ArrowUpTrayIcon,
   CodeBracketIcon,
   DocumentArrowUpIcon,
+  DocumentArrowDownIcon,
 } from "@heroicons/react/24/outline";
 import {
   Bars3BottomLeftIcon,
@@ -67,6 +68,7 @@ import { shallow } from "zustand/shallow";
 import { FooterNavigation } from "../StepOne/FooterNavigation";
 import Question from "./Question";
 import { handleJumpToQuestionTitle } from "@/app/Helpers/handleJumpToQuestion";
+import ImportModal from "../ImportModal";
 
 interface Props {
   assignmentId: number;
@@ -86,11 +88,12 @@ const AuthorQuestionsPage: FC<Props> = ({
   const router = useRouter();
   useBeforeUnload(
     "Are you sure you want to leave this page? You will lose any unsaved changes.",
-  ); // Prompt the user before leaving the page
+  );
   const [focusedQuestionId, setFocusedQuestionId] = useAuthorStore((state) => [
     state.focusedQuestionId,
     state.setFocusedQuestionId,
   ]);
+  //questions are previously loaded into global state through backend call
   const [handleToggleTable, setHandleToggleTable] = useState(true); // State to toggle the table of contents
   const questions = useAuthorStore((state) => state.questions, shallow);
   const setQuestions = useAuthorStore((state) => state.setQuestions);
@@ -105,11 +108,12 @@ const AuthorQuestionsPage: FC<Props> = ({
   const [questionVariationNumber, setQuestionVariationNumber] =
     useState<number>(null);
   const setName = useAuthorStore((state) => state.setName);
-  const focusRef = useRef(focusedQuestionId); // Ref to store the focused question ID
-  const [collapseAll, setCollapseAll] = useState(false); // State to collapse all questions
-  const [activeId, setActiveId] = useState<number | null>(null); // State to store the active assignment ID
-  const [fileUploadModalOpen, setFileUploadModalOpen] = useState(false); // State to toggle the file upload modal
-  const [isReportModalOpen, setIsReportModalOpen] = useState(false); // State to toggle the report modal
+  const focusRef = useRef(focusedQuestionId);
+  const [collapseAll, setCollapseAll] = useState(false);
+  const [activeId, setActiveId] = useState<number | null>(null);
+  const [fileUploadModalOpen, setFileUploadModalOpen] = useState(false);
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const questionTypes = useMemo(
     () => [
       {
@@ -161,7 +165,7 @@ const AuthorQuestionsPage: FC<Props> = ({
           if (assignment) {
             setActiveAssignmentId(assignmentId);
             setName(assignment.name || "Untitled Assignment");
-
+            //the scoring object is unified to use same fields
             const unifyScoringRubrics = (
               scoring: Scoring,
               defaultQuestionText: string,
@@ -178,7 +182,6 @@ const AuthorQuestionsPage: FC<Props> = ({
                 };
               }
 
-              // If we already have rubrics, just refine them
               if (scoring.rubrics?.length) {
                 const refinedRubrics = scoring.rubrics.map((rubric: Rubric) => {
                   const rubricCriteria =
@@ -200,7 +203,6 @@ const AuthorQuestionsPage: FC<Props> = ({
                 };
               }
 
-              // Otherwise, if there's an old .criteria array, convert it to a single rubric
               if (scoring.criteria?.length) {
                 const criteriaWithId = scoring.criteria.map(
                   (c: Criteria, i: number) => ({
@@ -219,7 +221,6 @@ const AuthorQuestionsPage: FC<Props> = ({
                 };
               }
 
-              // Fallback if no rubrics or criteria
               return {
                 type: "CRITERIA_BASED",
                 rubrics: [
@@ -234,11 +235,12 @@ const AuthorQuestionsPage: FC<Props> = ({
             const questions: QuestionAuthorStore[] =
               assignment.questions?.map(
                 (question: QuestionAuthorStore, index: number) => {
+                  //unify scoring rubrics
                   const unifiedQuestionScoring = unifyScoringRubrics(
                     question.scoring,
                     question.question,
                   );
-
+                  //sort criteria by points
                   unifiedQuestionScoring.rubrics?.forEach((rubric: Rubric) => {
                     rubric.criteria.sort(
                       (a: Criteria, b: Criteria) => a.points - b.points,
@@ -309,7 +311,7 @@ const AuthorQuestionsPage: FC<Props> = ({
     if (
       JSON.stringify(currentQuestionOrder) !== JSON.stringify(newQuestionOrder)
     ) {
-      useAuthorStore.getState().setQuestionOrder(newQuestionOrder); // Only update if the order changes
+      useAuthorStore.getState().setQuestionOrder(newQuestionOrder);
     }
   }, [questions]);
 
@@ -453,7 +455,7 @@ const AuthorQuestionsPage: FC<Props> = ({
       assignmentId: assignmentId,
       numRetries: defaultQuestionRetries ?? -1,
       randomizedChoices: true,
-      index: questions.length + 1, // Set the index for the new question
+      index: questions.length + 1,
     });
     setFocusedQuestionId(questionId);
     toast.success("Question has been added!");
@@ -464,7 +466,7 @@ const AuthorQuestionsPage: FC<Props> = ({
    *
    * @param question - The question to be duplicated.
    */
-  let queue = Promise.resolve(); // Queue to handle the duplication of questions to avoid race conditions
+  let queue = Promise.resolve();
 
   const duplicateThisQuestion = (question: QuestionAuthorStore) => {
     queue = queue.then(() => {
@@ -482,7 +484,7 @@ const AuthorQuestionsPage: FC<Props> = ({
         answer: question.answer,
         scoring: question.scoring,
         numRetries: question.numRetries,
-        index: Number(question.index) + 1, // Set the index for the new question
+        index: Number(question.index) + 1,
         randomizedChoices: question.randomizedChoices,
       };
 
@@ -494,7 +496,7 @@ const AuthorQuestionsPage: FC<Props> = ({
       ];
 
       updatedQuestions.forEach((q, index) => {
-        q.index = index + 1; // Re-index questions to ensure proper order
+        q.index = index + 1;
       });
 
       setQuestions(updatedQuestions);
@@ -507,7 +509,6 @@ const AuthorQuestionsPage: FC<Props> = ({
   };
 
   const DragHandle = () => (
-    // DragHandle component
     <GripVertical height={16} width={16} className="cursor-move" />
   );
 
@@ -548,7 +549,7 @@ const AuthorQuestionsPage: FC<Props> = ({
       const style = {
         transform: CSS.Transform.toString(transform),
         transition,
-        opacity: isDragging ? 0 : 1, // Hide the original item while dragging
+        opacity: isDragging ? 0 : 1,
       };
 
       return (
@@ -559,7 +560,6 @@ const AuthorQuestionsPage: FC<Props> = ({
           id={`item-${question.id}`}
           {...attributes}
         >
-          {/* This is wrapper around the question component */}
           <div
             className={`relative cursor-default transition-all flex items-center justify-between rounded-md bg-white py-6 px-8 group border border-gray-200 w-full ${
               focusedQuestionId === question.id
@@ -571,13 +571,12 @@ const AuthorQuestionsPage: FC<Props> = ({
             <div className="absolute flex self-center max-w-8 w-8 px-2 left-0">
               <div
                 className="opacity-0 group-hover:opacity-100 transition-all"
-                {...listeners} // Attach the listeners only to the DragHandle
+                {...listeners}
               >
-                {/* DragHandle component */}
                 <DragHandle />
               </div>
             </div>
-            {/* Question component */}
+
             <Question
               question={question}
               onDelete={handleDelete}
@@ -677,6 +676,187 @@ const AuthorQuestionsPage: FC<Props> = ({
     toast.success("Question has been deleted!");
   };
 
+  /**
+   * Calculates total points for a question based on its type and content
+   *
+   * @param {QuestionAuthorStore} question - The question to calculate points for
+   * @returns {number} The calculated total points
+   */
+  const calculateTotalPoints = (question: QuestionAuthorStore): number => {
+    // For choice-based questions, calculate from choices
+    if (
+      question.type === "SINGLE_CORRECT" ||
+      question.type === "MULTIPLE_CORRECT" ||
+      question.type === "TRUE_FALSE"
+    ) {
+      if (question.choices && question.choices.length > 0) {
+        const totalFromChoices = question.choices.reduce((acc, choice) => {
+          return choice.points > 0 ? acc + choice.points : acc;
+        }, 0);
+
+        // For TRUE_FALSE, ensure at least 1 point if calculated total is 0
+        if (question.type === "TRUE_FALSE" && totalFromChoices === 0) {
+          return 1;
+        }
+
+        return totalFromChoices;
+      }
+
+      // Default points for choice-based questions without choices
+      return 1;
+    }
+
+    // For AI-graded questions (TEXT, URL, UPLOAD, LINK_FILE), calculate from rubrics
+    if (
+      question.type === "TEXT" ||
+      question.type === "URL" ||
+      question.type === "UPLOAD" ||
+      question.type === "LINK_FILE"
+    ) {
+      if (question.scoring?.rubrics && question.scoring.rubrics.length > 0) {
+        const totalFromRubrics = question.scoring.rubrics.reduce(
+          (acc, rubric) => {
+            if (rubric.criteria && rubric.criteria.length > 0) {
+              const maxRubricPoints = Math.max(
+                ...rubric.criteria.map((c) => c.points || 0),
+              );
+              return acc + maxRubricPoints;
+            }
+            return acc;
+          },
+          0,
+        );
+
+        if (totalFromRubrics > 0) {
+          return totalFromRubrics;
+        }
+      }
+
+      // Default points for AI-graded questions without rubrics (medium difficulty)
+      return question.type === "TEXT" ? 10 : 10;
+    }
+
+    // For other question types or fallback
+    return question.totalPoints || 1;
+  };
+
+  /**
+   * Handles importing questions from a file
+   *
+   * @param {QuestionAuthorStore[]} importedQuestions - The questions to import
+   * @param {Object} options - Import options including replaceExisting flag
+   */
+  const handleImportQuestions = (
+    importedQuestions: QuestionAuthorStore[],
+    options: { replaceExisting: boolean },
+  ) => {
+    try {
+      // Process imported questions with proper total points calculation
+      const processedQuestions = importedQuestions.map((q, index) => {
+        // Calculate total points for the question
+        const calculatedTotalPoints = calculateTotalPoints(q);
+
+        // Ensure proper scoring structure for AI-graded questions
+        let updatedScoring = q.scoring;
+        if (
+          q.type === "TEXT" ||
+          q.type === "URL" ||
+          q.type === "UPLOAD" ||
+          q.type === "LINK_FILE"
+        ) {
+          if (
+            !updatedScoring ||
+            !updatedScoring.rubrics ||
+            updatedScoring.rubrics.length === 0
+          ) {
+            updatedScoring = {
+              type: "CRITERIA_BASED",
+              rubrics: [
+                {
+                  rubricQuestion: q.question || "Rate the response",
+                  criteria: [
+                    {
+                      id: 0,
+                      points: calculatedTotalPoints,
+                      description: "Excellent response meeting all criteria",
+                    },
+                    {
+                      id: 1,
+                      points: Math.floor(calculatedTotalPoints * 0.7),
+                      description: "Good response meeting most criteria",
+                    },
+                    {
+                      id: 2,
+                      points: Math.floor(calculatedTotalPoints * 0.4),
+                      description:
+                        "Satisfactory response meeting some criteria",
+                    },
+                    {
+                      id: 3,
+                      points: 0,
+                      description: "Poor response not meeting criteria",
+                    },
+                  ],
+                },
+              ],
+            };
+          }
+        }
+
+        // For choice-based questions, remove scoring (they don't use rubrics)
+        if (
+          q.type === "SINGLE_CORRECT" ||
+          q.type === "MULTIPLE_CORRECT" ||
+          q.type === "TRUE_FALSE"
+        ) {
+          updatedScoring = {
+            type: "CRITERIA_BASED",
+            criteria: [],
+          };
+        }
+
+        return {
+          ...q,
+          id: generateTempQuestionId(), // Use existing ID generation function
+          assignmentId: assignmentId,
+          alreadyInBackend: false,
+          index: questions.length + index + 1,
+          totalPoints: calculatedTotalPoints,
+          scoring: updatedScoring,
+          numRetries: q.numRetries || defaultQuestionRetries || 1,
+          responseType: q.responseType,
+        };
+      });
+
+      // Add imported questions to existing ones or replace them based on options
+      const updatedQuestions = options.replaceExisting
+        ? processedQuestions
+        : [...questions, ...processedQuestions];
+
+      // Update indices for all questions
+      updatedQuestions.forEach((q, index) => {
+        q.index = index + 1;
+      });
+
+      setQuestions(updatedQuestions);
+      useAuthorStore
+        .getState()
+        .setQuestionOrder(updatedQuestions.map((q) => q.id));
+
+      // Focus on the first imported question
+      if (processedQuestions.length > 0) {
+        setFocusedQuestionId(processedQuestions[0].id);
+      }
+
+      toast.success(
+        `Successfully imported ${importedQuestions.length} question(s)!`,
+      );
+    } catch (error) {
+      console.error("Import failed:", error);
+      toast.error("Failed to import questions. Please try again.");
+    }
+  };
+
   return (
     <DndContext
       sensors={useSensors(useSensor(PointerSensor))}
@@ -716,7 +896,6 @@ const AuthorQuestionsPage: FC<Props> = ({
         >
           {questions.length > 0 ? (
             <>
-              {/* If there are questions, render the SortableList component, all the question components renders here */}
               <SortableList questions={questions} />
               <DragOverlay>
                 {activeId ? (
@@ -731,15 +910,14 @@ const AuthorQuestionsPage: FC<Props> = ({
             </>
           ) : (
             <div className="col-span-4 md:col-start-5 md:col-end-8 pb-16">
-              {/* If there are no questions, render the empty state */}
               <p className="text-center text-gray-500 text-2xl leading-5 my-12">
                 Begin writing the questions for your assignment below.
               </p>
             </div>
           )}
+
           <div className="mx-auto items-center justify-center mb-8 hover:no-underline typography-btn flex transition-all focus:none disabled:opacity-50 disabled:cursor-not-allowed text-gray-600 col-span-4 md:col-start-5 md:col-end-8 w-fit gap-x-2">
             <div className="bg-white w-fit whitespace-nowrap border-gray-200 border border-solid shadow-sm hover:shadow-md rounded-md flex justify-center items-center">
-              {/* Add Question button */}
               <button
                 type="button"
                 className="hover:no-underline text-gray-600 hover:text-gray-600 typography-btn px-4 py-2 border-r border-solid border-r-gray-200 border-l-0 border-t-0 border-b-0 focus:ring-offset-2 focus:ring-violet-600 focus:ring-2 focus:outline-none rounded-l-md focus:rounded-md bg-white hover:bg-gray-100 ring-offset-white "
@@ -761,6 +939,7 @@ const AuthorQuestionsPage: FC<Props> = ({
                   leaveFrom="transform opacity-100 scale-100"
                   leaveTo="transform opacity-0 scale-95"
                 >
+                  {/* menu for adding question button */}
                   <Menu.Items className="absolute left-0 z-10 w-52 mt-1 origin-top-left bg-white divide-y divide-gray-100 rounded-md shadow-sm hover:shadow-md transition-all ring-1 ring-black ring-opacity-5 focus:outline-none">
                     <div className="py-1">
                       {questionTypes.map((qt) => (
@@ -802,20 +981,31 @@ const AuthorQuestionsPage: FC<Props> = ({
               className="px-4 py-2.5 border border-gray-300 rounded-lg hover:shadow-md transition-all items-center gap-x-2 justify-center flex duration-300 ease-in-out w-full text-sm font-medium bg-violet-100 text-violet-800 hover:bg-violet-100 hover:text-violet-600"
             >
               <SparklesIcon className="w-4 h-4 text-violet-600" />
-              <span className="text-sm font-medium">
+              <span className="text-sm font-medium text-nowrap">
                 Generate Questions using AI (Beta)
+              </span>
+            </button>
+            <button
+              onClick={() => setIsImportModalOpen(true)}
+              className="px-4 py-2.5 border border-gray-300 rounded-lg hover:shadow-md transition-all items-center gap-x-2 justify-center flex duration-300 ease-in-out w-full text-sm font-medium bg-purple-100 text-purple-800 hover:bg-purple-100 hover:text-purple-600"
+            >
+              <DocumentArrowDownIcon className="w-4 h-4 text-purple-600" />
+              <span className="text-sm font-medium">
+                Import Questions (Beta){" "}
               </span>
             </button>
           </div>
         </div>
+        {/* next button */}
         {questions.length > 0 && (
           <div className="col-span-4 md:col-span-8 lg:col-span-12 md:col-start-3 md:col-end-11 lg:col-start-3 lg:col-end-11 row-start-3 flex flex-col justify-end mb-10">
-            <FooterNavigation nextStep="review" />
+            <FooterNavigation nextStep="config" />
           </div>
         )}
+
+        {/* side menu bar */}
         <div className="col-span-2 md:col-span-2 lg:col-span-2 md:col-start-11 md:col-end-13 lg:col-start-11 lg:col-end-13 hidden lg:block h-full row-start-1 text-nowrap">
           <div className="flex flex-col sticky top-0 gap-4 items-center px-4 pb-4">
-            {/* Collapse/Expand all button */}
             {questions.length > 0 && (
               <>
                 <button
@@ -829,7 +1019,6 @@ const AuthorQuestionsPage: FC<Props> = ({
                   {collapseAll ? "Expand Questions" : "Collapse Questions"}
                 </button>
                 <div className="flex flex-col w-full bg-white p-4 rounded-lg shadow-sm border border-gray-300">
-                  {/* Mass Variations Section */}
                   <span className="text-lg mb-2 text-wrap">
                     Mass Variations (Beta)
                   </span>
@@ -855,7 +1044,6 @@ const AuthorQuestionsPage: FC<Props> = ({
                     questions using AI. These variants are editable.
                   </p>
 
-                  {/* Add Mass Variants Button */}
                   <button
                     className="mt-4 px-4 py-2 bg-violet-50 text-white justify-center items-center text-wrap rounded-lg border hover:bg-violet-100 transition-colors duration-300 ease-in-out flex flex-col md:flex-row"
                     onClick={() => {
@@ -874,7 +1062,7 @@ const AuthorQuestionsPage: FC<Props> = ({
                     )}
                   </button>
                 </div>
-                {/* Generate Questions using AI button */}
+
                 <button
                   onClick={() => setFileUploadModalOpen(true)}
                   className="px-4 py-2 border border-gray-300 rounded-lg hover:shadow-md transition-all justify-center flex duration-300 ease-in-out w-full text-sm font-medium bg-white text-gray-700 hover:bg-violet-100 hover:text-violet-600"
@@ -888,27 +1076,46 @@ const AuthorQuestionsPage: FC<Props> = ({
                     </span>
                   </span>
                 </button>
+
+                <button
+                  onClick={() => setIsImportModalOpen(true)}
+                  className="px-4 py-2 border border-gray-300 rounded-lg hover:shadow-md transition-all justify-center flex duration-300 ease-in-out w-full text-sm font-medium bg-white text-gray-700 hover:bg-purple-100 hover:text-purple-600"
+                >
+                  <span className="flex items-center gap-2 text-wrap">
+                    <div className="flex items-center gap-1">
+                      <DocumentArrowDownIcon className="w-4 h-4 text-purple-600" />
+                    </div>
+                    <span className="text-sm font-medium">
+                      Import Questions (Beta)
+                    </span>
+                  </span>
+                </button>
               </>
             )}
           </div>
         </div>
       </div>
-      {
-        /* ReportModal component */
-        isReportModalOpen && (
-          <ReportModal
-            assignmentId={assignmentId}
-            isReportModalOpen={isReportModalOpen}
-            setIsReportModalOpen={setIsReportModalOpen}
-            isAuthor={true}
-          />
-        )
-      }
-      {/* FileUploadModal component */}
+      {isReportModalOpen && (
+        <ReportModal
+          assignmentId={assignmentId}
+          isReportModalOpen={isReportModalOpen}
+          setIsReportModalOpen={setIsReportModalOpen}
+          isAuthor={true}
+        />
+      )}
+
       {fileUploadModalOpen && (
         <FileUploadModal
           onClose={() => setFileUploadModalOpen(false)}
           questionId={focusedQuestionId}
+        />
+      )}
+
+      {isImportModalOpen && (
+        <ImportModal
+          isOpen={isImportModalOpen}
+          onClose={() => setIsImportModalOpen(false)}
+          onImport={handleImportQuestions}
         />
       )}
     </DndContext>
@@ -987,7 +1194,7 @@ const SortableNavItem = ({
       <div className="flex items-center justify-between max-w-[calc(100%-0.4rem)]">
         <div className="flex items-center max-w-[calc(100%-1rem)]">
           <div {...listeners}>
-            <DragHandle /> {/* DragHandle component */}
+            <DragHandle />
           </div>
           <span className="truncate block ml-2">
             {question.question.trim() === "" ||
@@ -1005,7 +1212,7 @@ const SortableNavItem = ({
               className="cursor-pointer rounded-sm text-violet-600 focus:ring-violet-600"
               checked={selectedQuestions.includes(question.id)}
               onChange={() => handleCheckboxChange(question.id)}
-              onClick={(e) => e.stopPropagation()} // Prevents the question from being focused when clicking on the checkbox
+              onClick={(e) => e.stopPropagation()}
             />
           </div>
         )}

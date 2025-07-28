@@ -74,7 +74,6 @@ export const useLearnerContext = (): UseLearnerContextInterface => {
     shallow,
   );
 
-  // Get attempts information from the overview store
   const { listOfAttempts, assignmentId, assignmentName } =
     useLearnerOverviewStore(
       (state) => ({
@@ -94,32 +93,27 @@ export const useLearnerContext = (): UseLearnerContextInterface => {
     attemptsRemaining?: number;
   } | null>(null);
 
-  // Determine if we're in graded or practice mode
   const isGradedAssignment = assignmentDetails?.graded === true;
 
-  // Determine if we're in feedback view mode
   const isFeedbackMode = showSubmissionFeedback === true;
 
-  // Find current attempt info
   const currentAttempt = listOfAttempts.find(
     (attempt) => attempt.id === activeAttemptId,
   );
 
-  // Calculate attempts remaining
   const calculateAttemptsRemaining = (): number => {
     if (
       !assignmentDetails ||
       !assignmentDetails.numAttempts ||
       assignmentDetails.numAttempts < 0
     ) {
-      return -1; // Unlimited attempts
+      return -1;
     }
 
     const usedAttempts = listOfAttempts.length;
     return Math.max(0, assignmentDetails.numAttempts - usedAttempts);
   };
 
-  // Update current question when active question changes
   useEffect(() => {
     if (questions && activeQuestionNumber) {
       const questionIndex = activeQuestionNumber - 1;
@@ -127,13 +121,11 @@ export const useLearnerContext = (): UseLearnerContextInterface => {
       if (questions[questionIndex]) {
         setCurrentQuestion(questions[questionIndex]);
       } else if (questions.length > 0) {
-        // Fallback to first question if index is out of bounds
         setCurrentQuestion(questions[0]);
       }
     }
   }, [questions, activeQuestionNumber]);
 
-  // Update assignment metadata
   useEffect(() => {
     if (assignmentDetails) {
       setAssignmentMeta({
@@ -146,11 +138,9 @@ export const useLearnerContext = (): UseLearnerContextInterface => {
     }
   }, [assignmentDetails, listOfAttempts]);
 
-  // Generate a comprehensive context message for the current state
   const getContextMessage = async (): Promise<ContextMessage> => {
     let contextContent = "MARK ASSISTANT CONTEXT:\n\n";
 
-    // Add detailed assignment info
     contextContent += `Assignment: ${
       assignmentDetails?.name || assignmentName || "Current assignment"
     }\n`;
@@ -164,7 +154,6 @@ export const useLearnerContext = (): UseLearnerContextInterface => {
       isFeedbackMode ? "Feedback Review" : "In Progress"
     }\n`;
 
-    // Add attempt information
     contextContent += `Current Attempt ID: ${activeAttemptId || "N/A"}\n`;
     if (assignmentDetails?.numAttempts && assignmentDetails.numAttempts > 0) {
       contextContent += `Attempts Allowed: ${assignmentDetails.numAttempts}\n`;
@@ -173,7 +162,6 @@ export const useLearnerContext = (): UseLearnerContextInterface => {
       contextContent += "Attempts Allowed: Unlimited\n";
     }
 
-    // Add time information if relevant
     if (expiresAt) {
       const expiresAtDate = new Date(expiresAt);
       const now = new Date();
@@ -188,7 +176,6 @@ export const useLearnerContext = (): UseLearnerContextInterface => {
     contextContent += "\n";
 
     if (isFeedbackMode) {
-      // FEEDBACK MODE
       contextContent += "MODE: FEEDBACK ANALYSIS\n";
       contextContent += `Overall Grade: ${
         grade !== null ? grade : totalPointsEarned
@@ -197,7 +184,6 @@ export const useLearnerContext = (): UseLearnerContextInterface => {
         assignmentDetails?.passingGrade || 50
       }%\n`;
 
-      // Check if student has passed
       const percentage =
         grade !== null
           ? (grade / (totalPointsPossible || 100)) * 100
@@ -211,7 +197,6 @@ export const useLearnerContext = (): UseLearnerContextInterface => {
       contextContent +=
         "The learner is reviewing their feedback. You can help explain assessment results, clarify rubric items, and suggest improvements for future assignments.\n\n";
 
-      // Add feedback summary
       if (questions && questions.length > 0) {
         contextContent += "FEEDBACK SUMMARY:\n";
 
@@ -230,7 +215,6 @@ export const useLearnerContext = (): UseLearnerContextInterface => {
           contextContent += `Type: ${q.type}\n`;
           contextContent += `Question: ${q.question}\n`;
 
-          // Add learner response
           if (q.learnerTextResponse) {
             contextContent += `Learner's text response: ${q.learnerTextResponse.replace(
               /<[^>]*>/g,
@@ -248,7 +232,6 @@ export const useLearnerContext = (): UseLearnerContextInterface => {
             }\n`;
           }
 
-          // Add feedback if available
           if (q.questionResponses && q.questionResponses.length > 0) {
             contextContent += "Feedback:\n";
             q.questionResponses.forEach((response: any) => {
@@ -262,7 +245,6 @@ export const useLearnerContext = (): UseLearnerContextInterface => {
         });
       }
 
-      // Add regrading instructions
       contextContent += "REGRADING INFORMATION:\n";
       contextContent +=
         "- The learner can request regrading if they believe their assessment was scored incorrectly\n";
@@ -271,7 +253,6 @@ export const useLearnerContext = (): UseLearnerContextInterface => {
       contextContent +=
         "- Clearly explain the regrading process to the learner\n\n";
     } else {
-      // IN-PROGRESS MODE
       contextContent += "MODE: ASSIGNMENT ASSISTANCE\n";
 
       if (isGradedAssignment) {
@@ -291,7 +272,6 @@ export const useLearnerContext = (): UseLearnerContextInterface => {
         contextContent += "- Offer constructive feedback on their work\n";
       }
 
-      // Add current question details if available
       if (currentQuestion) {
         contextContent += "\nCURRENT QUESTION:\n";
         contextContent += `Question ID: ${currentQuestion.id}\n`;
@@ -299,7 +279,6 @@ export const useLearnerContext = (): UseLearnerContextInterface => {
         contextContent += `Question Text: ${currentQuestion.question}\n`;
         contextContent += `Points: ${currentQuestion.totalPoints || 10}\n`;
 
-        // Add choices for multiple choice questions
         if (currentQuestion.choices && Array.isArray(currentQuestion.choices)) {
           contextContent += "Options:\n";
           currentQuestion.choices.forEach((choice: any, index: number) => {
@@ -307,7 +286,6 @@ export const useLearnerContext = (): UseLearnerContextInterface => {
           });
         }
 
-        // Add current learner response if any
         contextContent += "\nLearner's current response:\n";
 
         if (currentQuestion.learnerTextResponse) {
@@ -343,7 +321,6 @@ export const useLearnerContext = (): UseLearnerContextInterface => {
       }
     }
 
-    // Add issue reporting information
     contextContent += "\nISSUE REPORTING:\n";
     contextContent +=
       "- The learner can report technical issues, content problems, or grading concerns\n";
@@ -352,7 +329,6 @@ export const useLearnerContext = (): UseLearnerContextInterface => {
     contextContent +=
       "- Make sure to collect specific details about the issue\n\n";
 
-    // Add behavioral guidelines
     contextContent += "REQUIRED BEHAVIOR:\n";
     contextContent += "1. Answer ONLY questions related to this assignment\n";
     contextContent +=
@@ -378,7 +354,6 @@ export const useLearnerContext = (): UseLearnerContextInterface => {
     };
   };
 
-  // Get information about the current question
   const getCurrentQuestionInfo = () => {
     if (!currentQuestion) return null;
 

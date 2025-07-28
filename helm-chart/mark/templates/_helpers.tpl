@@ -66,7 +66,7 @@ Create the name of the service account to use
 api-gateway helpers
 ###############################
 */}}
-  
+
 {{/*
 Expand the name of the service
 */}}
@@ -84,7 +84,7 @@ app.kubernetes.io/name: {{ include "mark.api-gateway.name" . }}
 api helpers
 ###############################
 */}}
-  
+
 {{/*
 Expand the name of the service
 */}}
@@ -94,6 +94,7 @@ Expand the name of the service
 
 {{- define "mark.api.labels" -}}
 app.kubernetes.io/name: {{ include "mark.api.name" . }}
+kubectl.kubernetes.io/default-container: {{ include "mark.api.name" . }}
 {{ include "mark.selectorLabels" . }}
 {{- end }}
 
@@ -102,7 +103,7 @@ app.kubernetes.io/name: {{ include "mark.api.name" . }}
 ui helpers
 ###############################
 */}}
-  
+
 {{/*
 Expand the name of the service
 */}}
@@ -112,6 +113,7 @@ Expand the name of the service
 
 {{- define "mark.ui.labels" -}}
 app.kubernetes.io/name: {{ include "mark.ui.name" . }}
+kubectl.kubernetes.io/default-container: {{ include "mark.ui.name" . }}
 {{ include "mark.selectorLabels" . }}
 {{- end }}
 
@@ -120,7 +122,7 @@ app.kubernetes.io/name: {{ include "mark.ui.name" . }}
 lti-credentials-manager helpers
 ###############################
 */}}
-  
+
 {{/*
 Expand the name of the service
 */}}
@@ -130,6 +132,7 @@ Expand the name of the service
 
 {{- define "mark.lti-credentials-manager.labels" -}}
 app.kubernetes.io/name: {{ include "mark.lti-credentials-manager.name" . }}
+kubectl.kubernetes.io/default-container: {{ include "mark.lti-credentials-manager.name" . }}
 {{ include "mark.selectorLabels" . }}
 {{- end }}
 
@@ -208,4 +211,4 @@ Migration annotations
 "helm.sh/hook": pre-install,pre-upgrade
 "helm.sh/hook-weight": "-5"
 {{- end }}
-  
+

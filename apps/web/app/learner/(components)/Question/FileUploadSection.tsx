@@ -1,4 +1,3 @@
-// FileUploadSection.js
 import { readFile } from "@/app/Helpers/fileReader";
 import { openFileInNewTab } from "@/app/Helpers/openNewTabGithubFile";
 import { QuestionStore, QuestionType, ResponseType } from "@/config/types";
@@ -24,6 +23,7 @@ import CustomFileViewer from "./FileViewer";
 import GithubUploadModal from "./GithubUploadModal";
 import PresentationGrader from "./PresentationGrader";
 import VideoPresentationEditor from "./VideoPresentationEditor";
+import FileUploader from "@/components/FileUploader";
 
 const MAX_CHAR_LIMIT = 40000;
 
@@ -69,12 +69,6 @@ const FileUploadSection = ({
     } catch (error) {
       setError(error as string);
     }
-  };
-
-  const showFileContent = (file: learnerFileResponse) => {
-    setCurrentFileContent(file.content);
-    setFileBlob(file.blob);
-    setShowContent(true);
   };
 
   const closePreview = () => {
@@ -189,10 +183,10 @@ const FileUploadSection = ({
         };
       case "IMAGES":
         return {
-          "image/jpeg": [".jpg", ".jpeg"],
           "image/png": [".png"],
+          "image/jpeg": [".jpeg"],
           "image/gif": [".gif"],
-          "image/svg+xml": [".svg"],
+          "image/webp": [".webp"],
         };
       case "UPLOAD":
       case "REPORT":
@@ -210,7 +204,7 @@ const FileUploadSection = ({
           "application/x-ipynb+json": [".ipynb"],
         };
       default:
-        return {}; // No files allowed by default
+        return {};
     }
   };
 
@@ -254,69 +248,38 @@ const FileUploadSection = ({
                   </button>
                 </div>
               )}
-              <div {...getRootProps()} className="w-full">
-                <motion.div
-                  whileHover={{ scale: 1.0 }}
-                  className={`flex flex-col items-center justify-center border-2 border-dashed p-6 rounded-md cursor-pointer transition-colors ${
-                    isDragActive
-                      ? "border-blue-500 bg-blue-50"
-                      : "border-gray-300"
-                  }`}
-                >
-                  <input {...getInputProps()} />
-                  <IconCloudUpload size={50} className="text-gray-500 mb-4" />
-                  {isDragActive ? (
-                    <p className="text-blue-500">Drop the files here...</p>
-                  ) : (
-                    <p className="text-gray-800">
-                      Drag & drop some files here, or click to select files
-                    </p>
-                  )}
-                </motion.div>
-              </div>
+              <FileUploader
+                uploadType={"learner"}
+                context={{
+                  assignmentId,
+                  questionId,
+                }}
+                onUploadComplete={(file: learnerFileResponse) => {
+                  addFileUpload(file, questionId);
+                  changeSelectedFiles(questionId, [...selectedFiles, file]);
+                }}
+                onDeleteComplete={(key: string) => {
+                  const fileToDelete = learnerFileResponse.find(
+                    (file) => file.key === key,
+                  );
+                  if (fileToDelete) {
+                    removeFileUpload(fileToDelete, questionId);
+                    changeSelectedFiles(
+                      questionId,
+                      selectedFiles.filter((file) => file.filename !== key),
+                    );
+                  }
+                }}
+                showUploadedFiles={true}
+                uploadedFiles={learnerFileResponse}
+                acceptedFileTypes={getAcceptedFileTypes(
+                  questionType,
+                  responseType,
+                )}
+              />
             </div>
-            {learnerFileResponse.length > 0 ? (
-              <div className="border-l border-gray-200 pl-4 flex-2 w-full">
-                <ul className="text-gray-600">
-                  {learnerFileResponse.map((file) => (
-                    <li
-                      className="flex items-center justify-between bg-gray-100 rounded-md px-3 py-2 mb-2"
-                      key={file.filename}
-                    >
-                      <div className="flex items-center justify-between w-full">
-                        <span>{file.filename}</span>
-                        <div className="flex items-center space-x-2">
-                          <button
-                            onClick={() => {
-                              if (file.githubUrl !== "") {
-                                void openFileInNewTab(file.githubUrl, octokit);
-                              } else {
-                                setFilename(file.filename);
-                                void showFileContent(file);
-                              }
-                            }}
-                            className="text-blue-500 hover:text-blue-600"
-                            aria-label={`Preview file ${file.filename}`}
-                          >
-                            <IconEye size={20} />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteFile(file)}
-                            className="text-red-500 hover:text-red-600"
-                            aria-label={`Remove file ${file.filename}`}
-                          >
-                            <IconX size={20} />
-                          </button>
-                        </div>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
           </div>
 
-          {/* Github modal */}
           {isGithubModalOpen && responseType === "CODE" && (
             <GithubUploadModal
               onClose={() => setGithubModalOpen(false)}
@@ -391,7 +354,6 @@ const FileUploadSection = ({
             />
           )}
 
-          {/* Modal for file content preview */}
           {showContent && (
             <CustomFileViewer
               file={{

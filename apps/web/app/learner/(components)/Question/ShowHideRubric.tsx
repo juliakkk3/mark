@@ -14,9 +14,14 @@ interface SingleRubric {
 interface ShowHideRubricProps {
   rubrics: SingleRubric[];
   className?: string;
+  showPoints: boolean;
 }
 
-function ShowHideRubric({ rubrics, className }: ShowHideRubricProps) {
+function ShowHideRubric({
+  rubrics,
+  className,
+  showPoints,
+}: ShowHideRubricProps) {
   const [showRubric, setShowRubric] = useState(false);
 
   const toggleRubric = () => {
@@ -51,7 +56,7 @@ function ShowHideRubric({ rubrics, className }: ShowHideRubricProps) {
             transition={{ duration: 0.3, ease: "easeInOut" }}
             className="overflow-hidden"
           >
-            <LearnerRubricTable rubrics={rubrics} />
+            <LearnerRubricTable rubrics={rubrics} showPoints={showPoints} />
           </motion.div>
         )}
       </AnimatePresence>

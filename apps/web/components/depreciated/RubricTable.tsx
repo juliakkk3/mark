@@ -12,7 +12,6 @@ interface RubricTableProps {
 function RubricTableProps(props: RubricTableProps) {
   const { rubrics, onAddRow, onDeleteRow, setRubrics } = props;
 
-  // state for the pencil button
   const [inputEnabled, setInputEnabled] = useState(false);
 
   const handleButtonClick = (value: boolean) => {
@@ -27,7 +26,7 @@ function RubricTableProps(props: RubricTableProps) {
         <div className="sm:flex-auto">
           <h1 className="text-base font-semibold leading-6 text-gray-900 relative">
             Point Distributon for the Rubric
-            <span className="absolute -top-1 left-38 text-blue-400">*</span>
+            <span className="absolute -top-1 left-38 text-purple-400">*</span>
           </h1>
         </div>
       </div>
@@ -50,7 +49,6 @@ function RubricTableProps(props: RubricTableProps) {
                   >
                     <div className="flex items-center font-normal ml-8 text-0.5xl">
                       {" "}
-                      {/* Adding ml-2 to move the text */}
                       Criteria
                     </div>
                   </th>
@@ -60,7 +58,6 @@ function RubricTableProps(props: RubricTableProps) {
                   >
                     <div className="flex items-center font-normal ml-2 text-0.5xl">
                       {" "}
-                      {/* Adding ml-2 to move the text */}
                       Performance Descripiton
                     </div>
                   </th>
@@ -70,7 +67,6 @@ function RubricTableProps(props: RubricTableProps) {
                   >
                     <div className="flex items-center font-normal ml-1">
                       {" "}
-                      {/* Adding ml-2 to move the text */}
                       Point Range
                     </div>
                   </th>
@@ -80,7 +76,6 @@ function RubricTableProps(props: RubricTableProps) {
                   >
                     <div className="flex items-center font-normal text-0.5xl">
                       {" "}
-                      {/* Adding ml-2 to move the text */}
                       Weight (%)
                     </div>
                   </th>
@@ -95,7 +90,7 @@ function RubricTableProps(props: RubricTableProps) {
                           type="text"
                           className="w-full h-full border-transparent bg-gray-100 hover:bg-gray-300 text-sm placeholder-gray-400 hover:placeholder-white focus:outline-none focus:bg-gray-300 focus:placeholder-gray-600"
                           placeholder="Describe the key elements of a project charter."
-                          style={{ overflowWrap: "break-word" }} // Set overflow-wrap to 'break-word'
+                          style={{ overflowWrap: "break-word" }}
                           value={rubrics[index].criteria}
                           onChange={(event) => {
                             const newRubrics = [...rubrics];
@@ -113,7 +108,6 @@ function RubricTableProps(props: RubricTableProps) {
                       >
                         <textarea
                           className="w-[100%] h-[100%] border-transparent text-xs break-normal  hover:bg-gray-300 "
-                          // make the placeholder text automatically starts new line
                           placeholder="Expands and Mentions any key elements such as; Project Purpose, Project Scope, Project Timeline, Project TeamThe student must explain each section with considerable amount of detail."
                           value={rubrics[index].judgement}
                           onChange={(event) => {

@@ -312,7 +312,6 @@ export const useQuestionStore = createWithEqualityFn<QuestionState>()(
         return !!state.questionStates[questionId]?.toggleTitle;
       },
       clearQuestionState: (questionId, variantId) =>
-        // if variantId is provided delete the variant state only, otherwise delete the main question state
         set((state) => ({
           questionStates: {
             ...state.questionStates,
@@ -330,11 +329,10 @@ export const useQuestionStore = createWithEqualityFn<QuestionState>()(
             },
           },
         })),
-      // In useQuestionStore
+
       toggleLoading: (questionId, value, variantId) =>
         set((state) => {
           if (variantId !== undefined) {
-            // Set loading state for a specific variant
             return {
               questionStates: {
                 ...state.questionStates,
@@ -353,7 +351,6 @@ export const useQuestionStore = createWithEqualityFn<QuestionState>()(
               },
             };
           } else {
-            // Set loading state for the question and all its variants
             const questionState = {
               ...state.questionStates[questionId],
               isloading: value,
@@ -424,7 +421,7 @@ export const useQuestionStore = createWithEqualityFn<QuestionState>()(
         })),
     }),
     {
-      name: "QuestionStore", // Optional: Name your store for easier identification in DevTools
+      name: "QuestionStore",
     },
   ),
 );
@@ -818,7 +815,7 @@ export const useAuthorStore = createWithEqualityFn<
         removeQuestion: (questionId) =>
           set((state) => {
             const index = state.questions.findIndex((q) => q.id === questionId);
-            if (index === -1) return {}; // No changes
+            if (index === -1) return {};
             const updatedQuestions = state.questions.filter(
               (q) => q.id !== questionId,
             );
@@ -828,7 +825,7 @@ export const useAuthorStore = createWithEqualityFn<
         replaceQuestion: (questionId, newQuestion) =>
           set((state) => {
             const index = state.questions.findIndex((q) => q.id === questionId);
-            if (index === -1) return {}; // No changes
+            if (index === -1) return {};
             const updatedQuestions = [...state.questions];
             updatedQuestions[index] = newQuestion;
             return { questions: updatedQuestions };
@@ -837,19 +834,16 @@ export const useAuthorStore = createWithEqualityFn<
           set((state) => {
             const index = state.questions.findIndex((q) => q.id === questionId);
             if (index === -1) {
-              console.warn(`Question with ID ${questionId} not found.`);
-              return {}; // No changes
+              return {};
             }
 
             const existingQuestion = state.questions[index];
 
-            // Create a new object with the updated properties
             const updatedQuestion = {
               ...existingQuestion,
               ...modifiedData,
             };
 
-            // Explicitly handle special cases like nested objects
             if (modifiedData.scoring) {
               updatedQuestion.scoring = {
                 ...(existingQuestion.scoring || {}),
@@ -861,7 +855,6 @@ export const useAuthorStore = createWithEqualityFn<
               updatedQuestion.choices = [...modifiedData.choices];
             }
 
-            // Create a new array to ensure Zustand detects the change
             const updatedQuestions = [...state.questions];
             updatedQuestions[index] = updatedQuestion;
 
@@ -871,7 +864,6 @@ export const useAuthorStore = createWithEqualityFn<
             };
           });
 
-          // Log the updated state to confirm the change
           const newState = useAuthorStore.getState();
           const updatedQuestion = newState.questions.find(
             (q) => q.id === questionId,
@@ -970,11 +962,9 @@ export const useAuthorStore = createWithEqualityFn<
 
         setChoices: (questionId, choices, variantId) => {
           set((state) => {
-            // Create deep copies of the choices array to ensure proper updates
             const deepCopiedChoices = choices.map((choice) => ({ ...choice }));
 
             if (variantId) {
-              // Set choices for variant
               return {
                 questions: state.questions.map((q) => {
                   if (q.id === questionId) {
@@ -985,94 +975,93 @@ export const useAuthorStore = createWithEqualityFn<
                           choices: deepCopiedChoices,
                         };
                       }
-                      return { ...variant }; // Create new references for all variants
+                      return { ...variant };
                     });
                     return {
                       ...q,
                       variants: updatedVariants,
-                      updatedAt: Date.now(), // Add timestamp to force UI update
+                      updatedAt: Date.now(),
                     };
                   }
-                  return { ...q }; // Create new references for all questions
+                  return { ...q };
                 }),
-                updatedAt: Date.now(), // Update global timestamp as well
+                updatedAt: Date.now(),
               };
             } else {
-              // Set choices for main question
               return {
                 questions: state.questions.map((q) => {
                   if (q.id === questionId) {
                     return {
                       ...q,
                       choices: deepCopiedChoices,
-                      updatedAt: Date.now(), // Add timestamp to force UI update
+                      updatedAt: Date.now(),
                     };
                   }
-                  return { ...q }; // Create new references for all questions
+                  return { ...q };
                 }),
-                updatedAt: Date.now(), // Update global timestamp as well
+                updatedAt: Date.now(),
               };
             }
           });
 
-          // Log the updated state to confirm the change
           const newState = useAuthorStore.getState();
           const updatedQuestion = newState.questions.find(
             (q) => q.id === questionId,
           );
         },
-        toggleRandomizedChoicesMode: (questionId: number, variantId: number) =>
-          // Toggle randomized choices mode (boolean) for a question or variant (if variantId is provided)
-          {
-            set((state) => {
-              if (variantId) {
-                return {
-                  questions: state.questions.map((q) => {
-                    if (q.id === questionId) {
-                      const updatedVariants = q.variants.map((variant) => {
-                        if (variant.id === variantId) {
-                          return {
-                            ...variant,
-                            randomizedChoices: !variant.randomizedChoices,
-                          };
-                        }
-                        return variant;
-                      });
-                      return {
-                        ...q,
-                        variants: updatedVariants,
-                      };
-                    }
-                    return q;
-                  }),
-                };
-              } else {
-                return {
-                  questions: state.questions.map((q) => {
-                    if (q.id === questionId) {
-                      return {
-                        ...q,
-                        randomizedChoices: !q.randomizedChoices,
-                      };
-                    }
-                    return q;
-                  }),
-                };
-              }
-            });
+        toggleRandomizedChoicesMode: (
+          questionId: number,
+          variantId: number,
+        ) => {
+          set((state) => {
             if (variantId) {
-              return (
-                get()
-                  .questions.find((q) => q.id === questionId)
-                  ?.variants?.find((v) => v.id === variantId)
-                  ?.randomizedChoices || false
-              );
+              return {
+                questions: state.questions.map((q) => {
+                  if (q.id === questionId) {
+                    const updatedVariants = q.variants.map((variant) => {
+                      if (variant.id === variantId) {
+                        return {
+                          ...variant,
+                          randomizedChoices: !variant.randomizedChoices,
+                        };
+                      }
+                      return variant;
+                    });
+                    return {
+                      ...q,
+                      variants: updatedVariants,
+                    };
+                  }
+                  return q;
+                }),
+              };
+            } else {
+              return {
+                questions: state.questions.map((q) => {
+                  if (q.id === questionId) {
+                    return {
+                      ...q,
+                      randomizedChoices: !q.randomizedChoices,
+                    };
+                  }
+                  return q;
+                }),
+              };
             }
+          });
+          if (variantId) {
             return (
-              get().questions.find((q) => q.id === questionId)
+              get()
+                .questions.find((q) => q.id === questionId)
+                ?.variants?.find((v) => v.id === variantId)
                 ?.randomizedChoices || false
             );
-          },
+          }
+          return (
+            get().questions.find((q) => q.id === questionId)
+              ?.randomizedChoices || false
+          );
+        },
         addTrueFalseChoice: (questionId, isTrue, variantId) => {
           return set((state) => ({
             questions: state.questions.map((q) => {
@@ -1131,15 +1120,14 @@ export const useAuthorStore = createWithEqualityFn<
         },
         getTrueFalsePoints: (questionId) => {
           const question = get().questions.find((q) => q.id === questionId);
-          if (!question || !question.choices) return 1; // If no question or no choices exist, return 1
-          return question.choices[0]?.points || 1; // Return the points for the first choice
+          if (!question || !question.choices) return 1;
+          return question.choices[0]?.points || 1;
         },
 
         updatePointsTrueFalse: (questionId, points) => {
           set((state) => ({
             questions: state.questions.map((q) => {
               if (q.id === questionId) {
-                // If the question already has a choice array, update it, otherwise create new
                 if (q.choices) {
                   const updatedChoices = q.choices.map((choice) => ({
                     ...choice,
@@ -1166,7 +1154,7 @@ export const useAuthorStore = createWithEqualityFn<
             }),
           }));
         },
-        // Function to retrieve whether the question has only "True" or "False" choices
+
         isItTrueOrFalse: (questionId, variantId) => {
           const question = get().questions.find((q) => q.id === questionId);
           if (!question || !question.choices) return null;
@@ -1222,7 +1210,6 @@ export const useAuthorStore = createWithEqualityFn<
                 }),
               };
             } else {
-              // Update main question choices
               return {
                 questions: state.questions.map((q) => {
                   if (q.id === questionId) {
@@ -1246,7 +1233,6 @@ export const useAuthorStore = createWithEqualityFn<
         removeChoice: (questionId, choiceIndex, variantId) =>
           set((state) => {
             if (variantId) {
-              // Remove choice from variant
               return {
                 questions: state.questions.map((q) => {
                   if (q.id === questionId) {
@@ -1273,7 +1259,6 @@ export const useAuthorStore = createWithEqualityFn<
                 }),
               };
             } else {
-              // Remove choice from main question
               return {
                 questions: state.questions.map((q) => {
                   if (q.id === questionId) {
@@ -1315,7 +1300,6 @@ export const useAuthorStore = createWithEqualityFn<
         modifyChoice: (questionId, choiceIndex, modifiedData, variantId) =>
           set((state) => {
             if (variantId) {
-              // Modify choice in variant
               return {
                 questions: state.questions.map((q) => {
                   if (q.id === questionId) {
@@ -1344,7 +1328,6 @@ export const useAuthorStore = createWithEqualityFn<
                 }),
               };
             } else {
-              // Modify choice in main question
               return {
                 questions: state.questions.map((q) => {
                   if (q.id === questionId) {
@@ -1446,15 +1429,12 @@ export const useAuthorStore = createWithEqualityFn<
               (q) => q.id === questionId,
             );
             if (questionIndex === -1) {
-              console.warn(`Question with ID ${questionId} not found.`);
               return {};
             }
 
-            // Create deep copies of everything
             const updatedQuestions = [...state.questions];
             const question = { ...updatedQuestions[questionIndex] };
 
-            // Deep copy the new variant
             const deepCopiedVariant = {
               ...newVariant,
               choices: Array.isArray(newVariant.choices)
@@ -1477,7 +1457,6 @@ export const useAuthorStore = createWithEqualityFn<
                 : undefined,
             };
 
-            // Add the variant with proper array initialization if needed
             question.variants = [
               ...(question.variants || []),
               deepCopiedVariant,
@@ -1487,11 +1466,10 @@ export const useAuthorStore = createWithEqualityFn<
 
             return {
               questions: updatedQuestions,
-              updatedAt: Date.now(), // Force UI update
+              updatedAt: Date.now(),
             };
           });
 
-          // Log the updated state to confirm the change
           const newState = useAuthorStore.getState();
           const updatedQuestion = newState.questions.find(
             (q) => q.id === questionId,
@@ -1504,7 +1482,6 @@ export const useAuthorStore = createWithEqualityFn<
               (q) => q.id === questionId,
             );
             if (questionIndex === -1) {
-              console.warn(`Question with ID ${questionId} not found.`);
               return state;
             }
             const updatedQuestions = [...state.questions];
@@ -1526,32 +1503,28 @@ export const useAuthorStore = createWithEqualityFn<
               (q) => q.id === questionId,
             );
             if (questionIndex === -1) {
-              console.warn(`Question with ID ${questionId} not found.`);
               return {};
             }
 
             const updatedQuestions = [...state.questions];
             const question = { ...updatedQuestions[questionIndex] };
 
-            // Filter out the variant to be deleted
             question.variants = question.variants.filter(
               (v) => v.id !== variantId,
             );
 
             updatedQuestions[questionIndex] = question;
 
-            // Clean up any related UI state
             useQuestionStore
               .getState()
               .clearQuestionState(questionId, variantId);
 
             return {
               questions: updatedQuestions,
-              updatedAt: Date.now(), // Force UI update
+              updatedAt: Date.now(),
             };
           });
 
-          // Log the updated state to confirm the change
           const newState = useAuthorStore.getState();
           const updatedQuestion = newState.questions.find(
             (q) => q.id === questionId,
@@ -1632,7 +1605,7 @@ export const useAuthorStore = createWithEqualityFn<
       onRehydrateStorage: (state) => (storedState) => {
         const oneWeekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
         if (storedState?.updatedAt && storedState.updatedAt < oneWeekAgo) {
-          state?.deleteStore(); // Clear outdated data
+          state?.deleteStore();
         }
       },
     },

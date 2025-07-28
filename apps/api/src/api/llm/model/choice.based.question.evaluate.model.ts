@@ -63,7 +63,7 @@ export class ChoiceBasedQuestionEvaluateModel
     }
 
     let totalScore = pointsEarned - penaltyPoints;
-    totalScore = totalScore < 0 ? 0 : totalScore; // Ensure no negative score
+    totalScore = totalScore < 0 ? 0 : totalScore;
 
     return totalScore;
   }

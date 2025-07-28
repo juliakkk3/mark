@@ -24,11 +24,10 @@ function Component(props: Props) {
       <AssignmentTime />
       <AssignmentCompletion />
       <AssignmentFeedback />
-      <AssignmentQuestionOrder />
       <AssignmentQuestionDisplay />
+      <AssignmentQuestionOrder />
       <FooterNavigation />
     </main>
-    // </div>
   );
 }
 

@@ -1,7 +1,6 @@
 import { type ComponentPropsWithoutRef } from "react";
 
 interface Props extends ComponentPropsWithoutRef<"div"> {
-  //positive feedback, negative feedback, neutral feedback
   type?: "positive" | "neutral" | "negative";
 }
 

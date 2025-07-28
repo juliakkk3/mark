@@ -1,3 +1,4 @@
+/*eslint-disable*/
 /**
  * API functions specific to learners
  */
@@ -51,7 +52,6 @@ export async function createAttempt(
 
     return id;
   } catch (err) {
-    console.error(err);
     return undefined;
   }
 }
@@ -84,7 +84,6 @@ export async function getAttempt(
     const attempt = (await res.json()) as AssignmentAttemptWithQuestions;
     return attempt;
   } catch (err) {
-    console.error(err);
     return undefined;
   }
 }
@@ -116,7 +115,6 @@ export async function getCompletedAttempt(
     const attempt = (await res.json()) as AssignmentAttemptWithQuestions;
     return attempt;
   } catch (err) {
-    console.error(err);
     return undefined;
   }
 }
@@ -140,7 +138,7 @@ export async function submitQuestion(
         "Content-Type": "application/json",
         ...(cookies ? { Cookie: cookies } : {}),
       },
-      // remove empty fields
+
       body: JSON.stringify(requestBody, (key, value) => {
         if (value === "" || value === null || value === undefined) {
           return undefined;
@@ -156,7 +154,6 @@ export async function submitQuestion(
     const data = (await res.json()) as QuestionAttemptResponse;
     return data;
   } catch (err) {
-    console.error(err);
     return undefined;
   }
 }
@@ -174,7 +171,7 @@ export async function getLiveRecordingFeedback(
   try {
     const res = await fetch(endpointURL, {
       method: "POST",
-      body: JSON.stringify({ liveRecordingData }), // wrap the data
+      body: JSON.stringify({ liveRecordingData }),
       headers: {
         "Content-Type": "application/json",
         ...(cookies ? { Cookie: cookies } : {}),
@@ -193,13 +190,12 @@ export async function getLiveRecordingFeedback(
     };
     return data;
   } catch (err) {
-    console.error(err);
     return undefined;
   }
 }
 
 /**
- * Submits an assignment for a given assignment and attempt.
+ * Submits an assignment with progress tracking
  */
 export async function submitAssignment(
   assignmentId: number,
@@ -209,6 +205,11 @@ export async function submitAssignment(
   authorQuestions?: QuestionStore[],
   authorAssignmentDetails?: ReplaceAssignmentRequest,
   cookies?: string,
+  onProgress?: (
+    status: "processing" | "completed" | "failed",
+    progress: number,
+    message: string,
+  ) => void,
 ): Promise<SubmitAssignmentResponse | undefined> {
   const endpointURL = `${getApiRoutes().assignments}/${assignmentId}/attempts/${attemptId}`;
 
@@ -227,18 +228,189 @@ export async function submitAssignment(
         ...(cookies ? { Cookie: cookies } : {}),
       },
     });
+
     if (!res.ok) {
-      const errorBody = (await res.json()) as { message: string };
-      throw new Error(errorBody.message);
+      let errorMessage = `Submission failed with status: ${res.status}`;
+
+      try {
+        const errorBody = (await res.json()) as { message?: string };
+        if (errorBody.message) {
+          errorMessage = errorBody.message;
+          if (
+            errorMessage.includes("maximum context length") ||
+            errorMessage.includes("tokens")
+          ) {
+            errorMessage =
+              "Your submission is too long. Please reduce the length of your responses and try again.";
+          }
+        }
+        console.error("Submission error:", errorBody);
+        toast.error(errorMessage);
+      } catch (parseError) {
+        console.error("Failed to parse error response:", parseError);
+      }
+
+      throw new Error(errorMessage);
     }
-    const data = (await res.json()) as SubmitAssignmentResponse;
-    return data;
+
+    const responseData = (await res.json()) as SubmitAssignmentResponse;
+    console.log("PATCH response:", responseData);
+
+    const { gradingJobId, message } = responseData;
+
+    if (!gradingJobId) {
+      throw new Error("No grading job ID returned");
+    }
+
+    console.log(`Grading job created: ${gradingJobId}. ${message}`);
+
+    const sseUrl = `${getApiRoutes().assignments}/${assignmentId}/attempts/${attemptId}/grading/${gradingJobId}/status-stream`;
+    console.log("Connecting to SSE URL:", sseUrl);
+
+    return new Promise((resolve, reject) => {
+      const eventSource = new EventSource(sseUrl, {
+        withCredentials: true,
+      });
+
+      let timeout: NodeJS.Timeout;
+      let isCompleted = false;
+
+      const resetTimeout = () => {
+        if (timeout) clearTimeout(timeout);
+        timeout = setTimeout(() => {
+          if (!isCompleted) {
+            eventSource.close();
+            onProgress?.("failed", 0, "Grading timeout - no updates received");
+            reject(new Error("Grading timeout - no updates received"));
+          }
+        }, 300000); // 5 minutes
+      };
+
+      resetTimeout();
+
+      eventSource.onopen = () => {
+        console.log("Connected to grading status stream");
+        onProgress?.("processing", 0, "Connected to grading service...");
+      };
+
+      eventSource.onmessage = (event) => {
+        resetTimeout();
+
+        try {
+          const data = JSON.parse(event.data);
+
+          if (data.status === "Processing" || data.status === "Pending") {
+            const percentage = data.percentage || 0;
+            const progress = data.progress || "Processing...";
+            console.log(`Grading progress: ${progress} (${percentage}%)`);
+            onProgress?.("processing", percentage, progress);
+          } else if (data.status === "Completed" && !isCompleted) {
+            isCompleted = true;
+            console.log("Grading completed successfully");
+            onProgress?.("completed", 100, "Grading completed successfully!");
+
+            eventSource.close();
+            clearTimeout(timeout);
+
+            let result = data.result;
+            if (typeof result === "string") {
+              try {
+                result = JSON.parse(result);
+              } catch (e) {
+                console.error("Failed to parse result:", e);
+              }
+            }
+            resolve(result);
+          } else if (data.status === "Failed" && !isCompleted) {
+            isCompleted = true;
+            console.error("Grading failed:", data.progress);
+            onProgress?.("failed", 0, data.progress || "Grading failed");
+
+            eventSource.close();
+            clearTimeout(timeout);
+
+            setTimeout(() => {
+              toast.error(data.progress || "Grading failed");
+              reject(new Error(data.progress || "Grading failed"));
+            }, 2000);
+          }
+        } catch (error) {
+          console.error("Error parsing SSE data:", error);
+        }
+      };
+
+      eventSource.addEventListener("update", (event: any) => {
+        if (!isCompleted) {
+          resetTimeout();
+          try {
+            const data = JSON.parse(event.data);
+            console.log("Update event:", data);
+
+            if (data.progress && data.percentage !== undefined) {
+              onProgress?.("processing", data.percentage, data.progress);
+            }
+          } catch (error) {
+            console.error("Error parsing update event:", error);
+          }
+        }
+      });
+
+      eventSource.addEventListener("finalize", (event: any) => {
+        if (!isCompleted) {
+          try {
+            isCompleted = true;
+            const data = JSON.parse(event.data);
+            console.log("Grading finalized:", data);
+            onProgress?.("completed", 100, "Grading completed successfully!");
+
+            eventSource.close();
+            clearTimeout(timeout);
+
+            let result = data.result;
+            if (typeof result === "string") {
+              try {
+                result = JSON.parse(result);
+              } catch (e) {
+                console.error("Failed to parse result:", e);
+              }
+            }
+            resolve(result);
+          } catch (error) {
+            console.error("Error in finalize event:", error);
+            reject(error);
+          }
+        }
+      });
+
+      eventSource.onerror = (error) => {
+        if (!isCompleted) {
+          console.error("SSE error:", error);
+          eventSource.close();
+          clearTimeout(timeout);
+
+          if (eventSource.readyState === EventSource.CLOSED) {
+            onProgress?.("failed", 0, "Lost connection to grading service");
+            toast.error("Lost connection to grading service");
+            reject(new Error("Connection to grading service lost"));
+          } else {
+            reject(new Error("Grading stream error"));
+          }
+        } else {
+          console.log("SSE connection closed after completion");
+          eventSource.close();
+        }
+      };
+    });
   } catch (err) {
-    console.error(err);
-    return undefined;
+    console.error("Submit assignment error:", err);
+
+    if (err instanceof Error) {
+      throw err;
+    }
+
+    throw new Error("An unexpected error occurred during submission");
   }
 }
-
 /**
  * Get feedback for an assignment attempt
  */
@@ -263,7 +435,6 @@ export async function getFeedback(
     const data = (await res.json()) as AssignmentFeedback;
     return data;
   } catch (err) {
-    console.error(err);
     return undefined;
   }
 }
@@ -295,7 +466,6 @@ export async function submitFeedback(
 
     return true;
   } catch (err) {
-    console.error(err);
     return false;
   }
 }
@@ -324,7 +494,6 @@ export async function submitRegradingRequest(
 
     return true;
   } catch (err) {
-    console.error(err);
     return false;
   }
 }

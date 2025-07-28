@@ -1,20 +1,19 @@
 /* eslint-disable unicorn/no-null */
 // src/llm/features/grading/services/presentation-grading.service.ts
-import { Injectable, Inject, HttpException, HttpStatus } from "@nestjs/common";
-import { AIUsageType } from "@prisma/client";
 import { PromptTemplate } from "@langchain/core/prompts";
+import { HttpException, HttpStatus, Inject, Injectable } from "@nestjs/common";
+import { AIUsageType } from "@prisma/client";
 import { StructuredOutputParser } from "langchain/output_parsers";
-import { z } from "zod";
-
-import { PROMPT_PROCESSOR, MODERATION_SERVICE } from "../../../llm.constants";
-import { IPromptProcessor } from "../../../core/interfaces/prompt-processor.interface";
-import { IModerationService } from "../../../core/interfaces/moderation.interface";
-import { IPresentationGradingService } from "../interfaces/presentation-grading.interface";
-import { LearnerLiveRecordingFeedback } from "../../../../assignment/attempt/dto/assignment-attempt/types";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { PresentationQuestionEvaluateModel } from "src/api/llm/model/presentation.question.evaluate.model";
 import { PresentationQuestionResponseModel } from "src/api/llm/model/presentation.question.response.model";
 import { Logger } from "winston";
+import { z } from "zod";
+import { LearnerLiveRecordingFeedback } from "../../../../assignment/attempt/dto/assignment-attempt/types";
+import { IModerationService } from "../../../core/interfaces/moderation.interface";
+import { IPromptProcessor } from "../../../core/interfaces/prompt-processor.interface";
+import { MODERATION_SERVICE, PROMPT_PROCESSOR } from "../../../llm.constants";
+import { IPresentationGradingService } from "../interfaces/presentation-grading.interface";
 
 @Injectable()
 export class PresentationGradingService implements IPresentationGradingService {
@@ -82,14 +81,46 @@ export class PresentationGradingService implements IPresentationGradingService {
     const safeBodyLangExplanation =
       learnerResponse?.bodyLanguageExplanation ?? "Not provided.";
 
+    // Define output schema with AEEG structure
     const parser = StructuredOutputParser.fromZodSchema(
       z.object({
         points: z.number().describe("Points awarded based on the criteria"),
         feedback: z
           .string()
           .describe(
-            "Feedback for the learner based on their response to the criteria",
+            "Comprehensive feedback following the AEEG approach (Analyze, Evaluate, Explain, Guide)",
           ),
+        analysis: z
+          .string()
+          .describe(
+            "Detailed analysis of what is observed in the presentation data",
+          ),
+        evaluation: z
+          .string()
+          .describe(
+            "Evaluation of how well the presentation meets each assessment aspect",
+          ),
+        explanation: z
+          .string()
+          .describe(
+            "Clear reasons for the grade based on specific observations",
+          ),
+        guidance: z
+          .string()
+          .describe(
+            "Concrete suggestions for improvement in future presentations",
+          ),
+        rubricScores: z
+          .array(
+            z.object({
+              rubricQuestion: z.string(),
+              pointsAwarded: z.number(),
+              maxPoints: z.number(),
+              justification: z.string(),
+            }),
+          )
+          .describe("Individual scores for each rubric criterion")
+          .optional(),
       }),
     );
 
@@ -129,11 +160,47 @@ export class PresentationGradingService implements IPresentationGradingService {
 
     try {
       // Parse the LLM output to get points & feedback
-      const presentationQuestionResponseModel = await parser.parse(response);
-      return presentationQuestionResponseModel as PresentationQuestionResponseModel;
+      const parsedResponse = await parser.parse(response);
+      console.log("Parsed Response:", parsedResponse);
+
+      // Format rubric scores if available
+      let rubricDetails = "";
+      if (
+        parsedResponse.rubricScores &&
+        parsedResponse.rubricScores.length > 0
+      ) {
+        rubricDetails = "\n\n**Rubric Scoring:**\n";
+        for (const score of parsedResponse.rubricScores) {
+          rubricDetails += `${score.pointsAwarded}/${score.maxPoints} points\n`;
+          rubricDetails += `Justification: ${score.justification}\n\n`;
+        }
+      }
+
+      // Combine the AEEG components into comprehensive feedback
+      const aeegFeedback = `
+**Analysis:**
+${parsedResponse.analysis}
+
+**Evaluation:**
+${parsedResponse.evaluation}${rubricDetails}
+
+**Explanation:**
+${parsedResponse.explanation}
+
+**Guidance:**
+${parsedResponse.guidance}
+`.trim();
+
+      // Return the response with combined feedback
+      return {
+        points: parsedResponse.points,
+        feedback: aeegFeedback,
+      } as PresentationQuestionResponseModel;
     } catch (error) {
       this.logger.error(
-        `Error parsing presentation grading response: ${error instanceof Error ? error.message : "Unknown error"}`,
+        `Error parsing presentation grading response: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`,
       );
       throw new HttpException(
         "Failed to parse grading response",
@@ -149,10 +216,22 @@ export class PresentationGradingService implements IPresentationGradingService {
     liveRecordingData: LearnerLiveRecordingFeedback,
     assignmentId: number,
   ): Promise<string> {
-    // Define the parser
+    // Define the parser with AEEG structure
     const parser = StructuredOutputParser.fromZodSchema(
       z.object({
         feedback: z.string().nonempty("Feedback cannot be empty"),
+        analysis: z
+          .string()
+          .describe("Detailed analysis of the presentation elements"),
+        evaluation: z
+          .string()
+          .describe("Evaluation of presentation effectiveness"),
+        explanation: z
+          .string()
+          .describe("Clear explanation of strengths and areas for improvement"),
+        guidance: z
+          .string()
+          .describe("Specific recommendations for improvement"),
       }),
     );
 
@@ -207,10 +286,28 @@ export class PresentationGradingService implements IPresentationGradingService {
 
       // Parse the response
       const parsedResponse = await parser.parse(response);
-      return parsedResponse.feedback;
+
+      // Combine AEEG components if returning structured feedback
+      const aeegFeedback = `
+**Analysis:**
+${parsedResponse.analysis}
+
+**Evaluation:**
+${parsedResponse.evaluation}
+
+**Explanation:**
+${parsedResponse.explanation}
+
+**Guidance:**
+${parsedResponse.guidance}
+`.trim();
+
+      return parsedResponse.feedback || aeegFeedback;
     } catch (error) {
       this.logger.error(
-        `Error generating live recording feedback: ${error instanceof Error ? error.message : "Unknown error"}`,
+        `Error generating live recording feedback: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`,
       );
       throw new HttpException(
         "Failed to generate live recording feedback",
@@ -220,11 +317,11 @@ export class PresentationGradingService implements IPresentationGradingService {
   }
 
   /**
-   * Load the presentation grading template
+   * Load the presentation grading template with AEEG approach
    */
   private loadPresentationGradingTemplate(): string {
     return `
-    You are an expert educator evaluating a student's presentation or live recording.
+    You are an expert educator evaluating a student's presentation or live recording using the AEEG (Analyze, Evaluate, Explain, Guide) approach.
     
     QUESTION:
     {question}
@@ -247,25 +344,71 @@ export class PresentationGradingService implements IPresentationGradingService {
     Scoring Type: {scoring_type}
     Scoring Criteria: {scoring_criteria}
     
-    GRADING INSTRUCTIONS:
-    1. Carefully evaluate the presentation/recording against the scoring criteria.
-    2. Consider content quality, delivery, body language, and overall effectiveness.
-    3. Award points based on how well the presentation meets the criteria.
-    4. Provide detailed, constructive feedback that explains your evaluation.
-    5. Include specific examples from the transcript when relevant.
-    6. Suggest improvements for future presentations.
+    CRITICAL GRADING INSTRUCTIONS:
+    You MUST grade according to the EXACT rubric provided in the scoring criteria. If the scoring type is "CRITERIA_BASED" with rubrics:
+    1. Evaluate the presentation against EACH rubric question provided
+    2. Award points based ONLY on the criteria descriptions provided for each rubric
+    3. Do NOT use generic presentation criteria unless specifically mentioned in the rubric
+    4. For each rubric, select the criterion that best matches the student's performance and award those exact points
+    5. The total points awarded must equal the sum of points from all rubrics
+    6. Use ALL available presentation data (transcript, speech report, body language) to evaluate each rubric
     
-    Respond with a JSON object containing the points awarded and feedback according to the following format:
+    GRADING APPROACH (AEEG):
+    
+    1. ANALYZE: Carefully examine the presentation data and describe what you observe
+       - Review the transcript for content completeness and accuracy
+       - Examine speech patterns, pacing, and vocal delivery from the speech report
+       - Observe body language indicators and their impact on the presentation
+       - Note the overall structure and flow of the presentation
+       - Identify key points, examples, and arguments presented
+       - Focus analysis on aspects relevant to the rubric criteria
+    
+    2. EVALUATE: For each rubric question in the scoring criteria:
+       - Read the rubric question carefully
+       - Use ALL presentation data (transcript, speech, body language) to assess performance
+       - Compare the presentation against each criterion level
+       - Select the criterion that best matches the student's performance
+       - Award the exact points specified for that criterion
+       - Do NOT average or adjust points - use the exact values provided
+    
+    3. EXPLAIN: Provide clear reasons for the grade based on specific observations from the presentation
+       - For each rubric, explain why you selected that specific criterion level
+       - Reference specific moments from the transcript
+       - Include observations from speech and body language reports
+       - Connect all observations directly to the rubric descriptions
+       - Justify the total points as the sum of all rubric scores
+    
+    4. GUIDE: Offer concrete suggestions for improvement
+       - Provide specific techniques to address weaknesses identified in each rubric
+       - Suggest ways to improve speech patterns and vocal variety
+       - Recommend body language adjustments for better engagement
+       - Offer strategies for better structure and organization
+       - Include actionable tips specific to the rubric criteria
+    
+    GRADING INSTRUCTIONS:
+    - Be fair, consistent, and constructive in your evaluation
+    - Use ALL available data (transcript, speech, body language) in your assessment
+    - Balance honesty about weaknesses with recognition of strengths
+    - Ensure feedback is specific to the presentation data provided
+    - Use encouraging language while maintaining academic standards
+    
+    Respond with a JSON object containing:
+    - Points awarded (sum of all rubric scores)
+    - Comprehensive feedback incorporating all four AEEG components
+    - Separate fields for each AEEG component
+    - If scoring type is CRITERIA_BASED, include rubricScores array with score for each rubric
+    
+    Format your response according to:
     {format_instructions}
     `;
   }
 
   /**
-   * Load the live recording feedback template
+   * Load the live recording feedback template with AEEG approach
    */
   private loadLiveRecordingFeedbackTemplate(): string {
     return `
-    You are an expert educator evaluating a student's live recording or presentation.
+    You are an expert educator evaluating a student's live recording or presentation using the AEEG (Analyze, Evaluate, Explain, Guide) approach.
     
     QUESTION:
     {question_text}
@@ -277,18 +420,48 @@ export class PresentationGradingService implements IPresentationGradingService {
     Body Language Score: {live_recording_bodyLanguageScore}
     Body Language Explanation: {live_recording_bodyLanguageExplanation}
     
-    FEEDBACK INSTRUCTIONS:
-    1. Carefully analyze the presentation data provided.
-    2. Provide comprehensive, constructive feedback on:
-       - Content quality and relevance
-       - Speech clarity, pace, and engagement
-       - Body language and delivery
-       - Overall presentation effectiveness
-    3. Highlight strengths and areas for improvement.
-    4. Be specific, actionable, and supportive in your feedback.
-    5. Structure your feedback in a clear, organized manner.
+    FEEDBACK APPROACH (AEEG):
     
-    Respond with a JSON object containing your detailed feedback according to the following format:
+    1. ANALYZE: Carefully examine the presentation data and describe what you observe
+       - Study the transcript for main ideas and supporting details
+       - Review speech characteristics (pace, tone, clarity, fluency)
+       - Examine body language and its alignment with the message
+       - Note engagement level and presentation confidence
+       - Identify patterns in delivery and content organization
+    
+    2. EVALUATE: Assess the effectiveness of the presentation
+       - Judge content relevance and depth based on the question
+       - Evaluate speech quality and audience engagement potential
+       - Assess non-verbal communication effectiveness
+       - Consider overall coherence and persuasiveness
+       - Measure achievement of presentation objectives
+    
+    3. EXPLAIN: Provide clear explanations of your assessment
+       - Reference specific examples from the transcript
+       - Connect observations from speech and body language reports
+       - Highlight what worked well with evidence
+       - Clearly explain any shortcomings observed
+       - Provide context for your evaluation
+    
+    4. GUIDE: Offer concrete suggestions for improvement
+       - Recommend specific content enhancements
+       - Suggest vocal technique improvements
+       - Provide body language tips for better impact
+       - Offer strategies for better organization
+       - Include practical exercises for skill development
+    
+    FEEDBACK INSTRUCTIONS:
+    - Structure your feedback following the AEEG format
+    - Be specific, actionable, and supportive
+    - Balance constructive criticism with positive reinforcement
+    - Focus on growth and improvement opportunities
+    - Ensure all recommendations are practical and achievable
+    
+    Respond with a JSON object containing:
+    - Comprehensive feedback incorporating all AEEG components
+    - Separate fields for each AEEG component (analysis, evaluation, explanation, guidance)
+    
+    Format your response according to:
     {format_instructions}
     `;
   }

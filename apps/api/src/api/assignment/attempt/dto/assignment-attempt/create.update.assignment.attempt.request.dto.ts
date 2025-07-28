@@ -65,7 +65,6 @@ export class LearnerUpdateAssignmentAttemptRequestDto {
     description: "questions from author",
     required: false,
   })
-  // language as a string
   @IsString()
   @IsOptional()
   @ApiProperty({
@@ -80,12 +79,11 @@ export class LearnerUpdateAssignmentAttemptRequestDto {
     description: "assignment details from author",
     required: false,
   })
-  @ValidateNested() // Validate the nested object
+  @ValidateNested()
   @Type(() => authorAssignmentDetailsDTO)
   @IsOptional()
   authorAssignmentDetails?: authorAssignmentDetailsDTO;
 
-  // pre translated questions
   @ApiProperty({
     description: "Pre-translated questions",
     required: false,

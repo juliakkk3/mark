@@ -10,7 +10,6 @@ import {
   IsString,
 } from "class-validator";
 
-//making all those properties mandatory that are mandatory on UI side (to ensure backend validation of those as well)
 export class ReplaceAssignmentRequestDto {
   @ApiProperty({
     description: "The introduction of the assignment.",

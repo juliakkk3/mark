@@ -7,7 +7,7 @@ import { useAssignmentConfig } from "@/stores/assignmentConfig";
 import type { ComponentPropsWithoutRef, FC, MouseEvent } from "react";
 import SectionWithTitle from "../ReusableSections/SectionWithTitle";
 
-interface Props extends ComponentPropsWithoutRef<"div"> {}
+type Props = ComponentPropsWithoutRef<"div">;
 
 const Component: FC<Props> = () => {
   const [questionDisplay, setQuestionDisplay, errors] = useAssignmentConfig(

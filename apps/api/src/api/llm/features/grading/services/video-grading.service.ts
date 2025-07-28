@@ -1,17 +1,15 @@
-// src/llm/features/grading/services/video-presentation-grading.service.ts
-import { Injectable, Inject, HttpException, HttpStatus } from "@nestjs/common";
-import { AIUsageType } from "@prisma/client";
 import { PromptTemplate } from "@langchain/core/prompts";
+import { HttpException, HttpStatus, Inject, Injectable } from "@nestjs/common";
+import { AIUsageType } from "@prisma/client";
 import { StructuredOutputParser } from "langchain/output_parsers";
-import { z } from "zod";
-
-import { PROMPT_PROCESSOR, MODERATION_SERVICE } from "../../../llm.constants";
-import { IPromptProcessor } from "../../../core/interfaces/prompt-processor.interface";
-import { IModerationService } from "../../../core/interfaces/moderation.interface";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { VideoPresentationQuestionEvaluateModel } from "src/api/llm/model/video-presentation.question.evaluate.model";
 import { VideoPresentationQuestionResponseModel } from "src/api/llm/model/video-presentation.question.response.model";
 import { Logger } from "winston";
+import { z } from "zod";
+import { IModerationService } from "../../../core/interfaces/moderation.interface";
+import { IPromptProcessor } from "../../../core/interfaces/prompt-processor.interface";
+import { MODERATION_SERVICE, PROMPT_PROCESSOR } from "../../../llm.constants";
 import { IVideoPresentationGradingService } from "../interfaces/video-grading.interface";
 
 @Injectable()
@@ -51,7 +49,6 @@ export class VideoPresentationGradingService
       videoPresentationConfig,
     } = videoPresentationQuestionEvaluateModel;
 
-    // Validate the learner's response
     const validateLearnerResponse =
       await this.moderationService.validateContent(learnerResponse.transcript);
 
@@ -62,7 +59,6 @@ export class VideoPresentationGradingService
       );
     }
 
-    // Define output schema
     const parser = StructuredOutputParser.fromZodSchema(
       z.object({
         points: z.number().describe("Points awarded based on the criteria"),
@@ -76,7 +72,6 @@ export class VideoPresentationGradingService
 
     const formatInstructions = parser.getFormatInstructions();
 
-    // Create the prompt
     const prompt = new PromptTemplate({
       template: this.loadVideoPresentationGradingTemplate(),
       inputVariables: [],
@@ -100,7 +95,6 @@ export class VideoPresentationGradingService
       },
     });
 
-    // Process the prompt through the LLM
     const response = await this.promptProcessor.processPrompt(
       prompt,
       assignmentId,
@@ -108,13 +102,14 @@ export class VideoPresentationGradingService
     );
 
     try {
-      // Parse the response into the expected output format
       const videoPresentationQuestionResponseModel =
         await parser.parse(response);
       return videoPresentationQuestionResponseModel as VideoPresentationQuestionResponseModel;
     } catch (error) {
       this.logger.error(
-        `Error parsing video presentation grading response: ${error instanceof Error ? error.message : "Unknown error"}`,
+        `Error parsing video presentation grading response: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`,
       );
       throw new HttpException(
         "Failed to parse grading response",

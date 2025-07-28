@@ -19,7 +19,7 @@ const Component: FC<Props> = (props) => {
   const { value, setAllotedTimeMinutes } = props;
 
   const [isOpen, setIsOpen] = useState(false);
-  const [tempValue, setTempValue] = useState<number | null>(value); // for when the user is typing in the input field inside the dropdown
+  const [tempValue, setTempValue] = useState<number | null>(value);
   const parentRef = useRef<HTMLDivElement>(null);
   const handleClickOutside = (event: MouseEvent) => {
     if (
@@ -49,15 +49,10 @@ const Component: FC<Props> = (props) => {
           type="button"
           onClick={() => setIsOpen(true)}
           className={cn(
-            "w-full transition-all flex gap-x-2 justify-between items-center border relative border-gray-300 rounded-md h-12 pl-4 pr-3 py-2 focus:outline-none focus:border-transparent focus:ring-1 focus:ring-blue-600",
-            isOpen ? "rounded-t-md ring-blue-600 ring-1" : "rounded-md",
+            "w-full transition-all flex gap-x-2 justify-between items-center border relative border-gray-300 rounded-md h-12 pl-4 pr-3 py-2 focus:outline-none focus:border-transparent focus:ring-1 focus:ring-purple-600",
+            isOpen ? "rounded-t-md ring-purple-600 ring-1" : "rounded-md",
           )}
         >
-          {/* <p
-            className={
-              "whitespace-nowrap overflow-hidden overflow-ellipsis w-full text-sm text-left leading-5 transition-colors font-medium text-gray-700"
-            }
-          > */}
           {value ? (
             isOpen ? (
               <input
@@ -68,7 +63,6 @@ const Component: FC<Props> = (props) => {
                 value={tempValue ?? ""}
                 onKeyDown={(event) => {
                   if (event.key === "Enter") {
-                    // blur the input field to save the value then close the dropdown
                     event.currentTarget.blur();
                     toggleDropdown();
                   }
@@ -85,7 +79,6 @@ const Component: FC<Props> = (props) => {
           ) : (
             "No time limit"
           )}
-          {/* </p> */}
 
           <svg
             className={cn("transition", isOpen ? "rotate-180" : "")}
@@ -133,7 +126,6 @@ const Component: FC<Props> = (props) => {
               value={tempValue ?? ""}
               onKeyDown={(event) => {
                 if (event.key === "Enter") {
-                  // blur the input field so the dropdown closes
                   event.currentTarget.blur();
                 }
               }}

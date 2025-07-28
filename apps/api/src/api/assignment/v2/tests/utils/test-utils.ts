@@ -4,7 +4,7 @@
 /* eslint-disable unicorn/prevent-abbreviations */
 /* eslint-disable @typescript-eslint/no-unsafe-call */
 /* eslint-disable @typescript-eslint/no-unsafe-return */
-// src/test/test-utils.ts
+
 import { Test, TestingModule } from "@nestjs/testing";
 import { INestApplication } from "@nestjs/common";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
@@ -88,7 +88,7 @@ export const createMockPrismaService = () => ({
 export const createMockAuthMiddleware = (
   role: UserRole = UserRole.AUTHOR,
   userId = "user123",
-  groupId = "group1",
+  groupId = "string",
 ) => {
   return jest.fn().mockImplementation((request, _res, next) => {
     request.userSession = {

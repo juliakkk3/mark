@@ -18,13 +18,10 @@ export class QuestionVariantService {
     questions: QuestionDto[],
   ): Promise<void> {
     const attemptQuestionVariantsData = questions.map((question) => {
-      // Initialize variants array - empty if no variants
       const variants = question.variants || [];
 
-      // Combine with undefined (no variant) as the first option
       const questionAndVariants = [undefined, ...variants];
 
-      // Randomly select one variant (or no variant)
       const randomIndex = Math.floor(
         Math.random() * questionAndVariants.length,
       );
@@ -34,14 +31,12 @@ export class QuestionVariantService {
       let randomizedChoices: string | null = null;
 
       if (chosenVariant) {
-        // Using a variant
         variantId = chosenVariant.id ?? null;
         randomizedChoices = this.maybeShuffleChoices(
           this.getChoices(chosenVariant.choices),
           chosenVariant.randomizedChoices === true,
         );
       } else {
-        // Using the original question
         randomizedChoices = this.maybeShuffleChoices(
           this.getChoices(question.choices),
           question.randomizedChoices === true,
@@ -56,7 +51,6 @@ export class QuestionVariantService {
       };
     });
 
-    // Create all question-variant mappings in a single operation
     await this.prisma.assignmentAttemptQuestionVariant.createMany({
       data: attemptQuestionVariantsData,
     });
@@ -76,7 +70,6 @@ export class QuestionVariantService {
 
     let parsedChoices: Choice[];
 
-    // Parse choices if they're in string format
     if (typeof choices === "string") {
       try {
         const temporary = JSON.parse(choices) as Choice[];
@@ -95,7 +88,6 @@ export class QuestionVariantService {
       return null;
     }
 
-    // Shuffle if requested
     if (shouldShuffle) {
       parsedChoices = [...parsedChoices];
       parsedChoices.sort(() => Math.random() - 0.5);

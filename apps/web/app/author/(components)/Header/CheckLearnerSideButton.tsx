@@ -7,6 +7,7 @@ import { useAssignmentConfig } from "@/stores/assignmentConfig";
 import { useAuthorStore } from "@/stores/author";
 import { EyeIcon } from "@heroicons/react/24/solid";
 import type { ComponentPropsWithoutRef, FC } from "react";
+import { useAssignmentFeedbackConfig } from "@/stores/assignmentFeedbackConfig";
 
 interface Props extends ComponentPropsWithoutRef<"div"> {
   disabled?: boolean;
@@ -18,7 +19,17 @@ const CheckLearnerSideButton: FC<Props> = (props) => {
   const assignmentId = useAuthorStore((state) => state.activeAssignmentId);
   const assignmentConfigstate = useAssignmentConfig.getState();
   const authorState = useAuthorStore.getState();
-
+  const [
+    showSubmissionFeedback,
+    showQuestionScore,
+    showAssignmentScore,
+    showQuestions,
+  ] = useAssignmentFeedbackConfig((state) => [
+    state.showSubmissionFeedback,
+    state.showQuestionScore,
+    state.showAssignmentScore,
+    state.showQuestions,
+  ]);
   const assignmentConfig = {
     questionDisplay: assignmentConfigstate.questionDisplay,
     graded: assignmentConfigstate.graded,
@@ -29,12 +40,17 @@ const CheckLearnerSideButton: FC<Props> = (props) => {
     displayOrder: assignmentConfigstate.displayOrder,
     strictTimeLimit: assignmentConfigstate.strictTimeLimit,
     introduction: authorState.introduction ?? "",
+    showQuestions: showQuestions,
+    showAssignmentScore: showAssignmentScore,
+    showQuestionScore: showQuestionScore,
     instructions: authorState.instructions ?? "",
     gradingCriteriaOverview: authorState.gradingCriteriaOverview ?? "",
+    showSubmissionFeedback: showSubmissionFeedback,
+    numberOfQuestionsPerAttempt:
+      assignmentConfigstate.numberOfQuestionsPerAttempt,
     name: authorState.name,
     id: assignmentId,
   };
-
   function handleJumpToLearnerSide(
     questions: QuestionAuthorStore[],
     assignmentId: number,
@@ -44,7 +60,6 @@ const CheckLearnerSideButton: FC<Props> = (props) => {
     localStorage.setItem("assignmentConfig", JSON.stringify(assignmentConfig));
     window.open(`/learner/${assignmentId}?authorMode=true`, "_blank");
   }
-
   return (
     <Tooltip
       content={

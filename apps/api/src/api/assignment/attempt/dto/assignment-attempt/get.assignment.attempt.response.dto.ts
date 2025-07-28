@@ -2,9 +2,7 @@ import { Optional } from "@nestjs/common";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { QuestionResponse, QuestionType, ResponseType } from "@prisma/client";
 import { Type } from "class-transformer";
-import {
-  AttemptQuestionDto,
-} from "src/api/assignment/dto/update.questions.request.dto";
+import { AttemptQuestionDto } from "src/api/assignment/dto/update.questions.request.dto";
 import { Choice } from "../../../question/dto/create.update.question.request.dto";
 
 export class AssignmentAttemptResponseDto {
@@ -70,6 +68,12 @@ export class GetAssignmentAttemptResponseDto extends AssignmentAttemptResponseDt
   })
   showSubmissionFeedback: boolean;
   @ApiProperty({
+    description: "Show question",
+    type: Boolean,
+    required: false,
+  })
+  showQuestions: boolean;
+  @ApiProperty({
     description: "Show assignment score",
     type: Boolean,
     required: false,
@@ -122,7 +126,7 @@ export class AssignmentAttemptQuestions {
   @ApiPropertyOptional({
     description:
       'The choices for the question (if the Question Type is "SINGLE_CORRECT" or "MULTIPLE_CORRECT").',
-    type: [Choice], // Use an array of Choice
+    type: [Choice],
   })
   @Type(() => Choice)
   choices?: Choice[];
@@ -149,7 +153,6 @@ export class AssignmentAttemptQuestions {
   @Optional()
   questionResponses?: QuestionResponse[];
 
-  // response type
   @ApiPropertyOptional({
     description: "The response type for the question.",
     type: ResponseType,

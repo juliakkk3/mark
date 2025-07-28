@@ -58,6 +58,7 @@ enum ResponseType{
   PRESENTATION
   VIDEO
   AUDIO
+  IMAGES
   SPREADSHEET
   LIVE_RECORDING
   OTHER
@@ -83,6 +84,27 @@ model Job {
   updatedAt   DateTime  @updatedAt
   result       Json?    // Add this field to store generated questions
 }
+model GradingJob {
+  id           Int      @id @default(autoincrement())
+  attemptId    Int?     // Made optional for author preview mode
+  assignmentId Int
+  userId       String
+  status       String   // Pending, Processing, Completed, Failed
+  progress     String
+  percentage   Int?
+  result       Json?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  attempt      AssignmentAttempt? @relation(fields: [attemptId], references: [id])
+  assignment   Assignment         @relation(fields: [assignmentId], references: [id])
+
+  @@index([attemptId])
+  @@index([assignmentId])
+  @@index([userId])
+  @@index([status])
+}
 model publishJob {
   id          Int       @id @default(autoincrement())
   userId       String
@@ -106,7 +128,8 @@ model AIUsage {
   usageDetails      Json?       /// Optional field to store additional details about the AI usage
   createdAt         DateTime    @default(now()) /// Timestamp for when the AI was used
   updatedAt         DateTime    @updatedAt     /// Timestamp for when the usage record was last updated
-
+  userId            String? /// The ID of the user who used the AI feature
+  user              UserCredential? @relation(fields: [userId], references: [userId]) /// Relation to the UserCredential model
   @@unique([assignmentId, usageType]) /// Ensure each assignment has a unique usage record for each AI feature
 }
 
@@ -124,6 +147,43 @@ model UserCredential {
   githubToken String?  /// The GitHub token for the user
   createdAt   DateTime @default(now()) /// The DateTime at which the user was created
   updatedAt   DateTime @updatedAt /// The DateTime at which the user was last updated
+  chats       Chat[]   /// The list of chats associated with the user
+
+  AIUsage AIUsage[]
+}
+// Chat Models for tracking user conversations
+model Chat {
+  id           String         @id @default(uuid())
+  userId       String         // User ID of the participant
+  startedAt    DateTime       @default(now())
+  lastActiveAt DateTime       @updatedAt
+  title        String?        // Optional title for the chat
+  messages     ChatMessage[]  // Related messages
+  assignmentId Int?           // Optional related assignment
+  assignment   Assignment?    @relation(fields: [assignmentId], references: [id])
+  isActive     Boolean        @default(true) // Whether the chat is active
+  
+  @@index([userId, startedAt])
+  @@index([assignmentId])
+  UserCredential UserCredential[]
+}
+
+model ChatMessage {
+  id        Int      @id @default(autoincrement())
+  chatId    String
+  chat      Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  role      ChatRole // user, assistant, system
+  content   String   @db.Text
+  timestamp DateTime @default(now())
+  toolCalls Json?    // Optional JSON for storing tool calls
+  
+  @@index([chatId, timestamp])
+}
+
+enum ChatRole {
+  USER
+  ASSISTANT
+  SYSTEM
 }
 
 /// The Group model represents a particular group of assignments (having the same groupID)
@@ -159,6 +219,7 @@ model Assignment {
   passingGrade            Int? @default(50) /// The minimum grade required to pass the assignment
   displayOrder            AssignmentQuestionDisplayOrder? /// The order in which the assignment is displayed
   questionDisplay         QuestionDisplay?                @default(ONE_PER_PAGE) /// The display of questions in the assignment
+  numberOfQuestionsPerAttempt Int? /// Number of questions to be displayed per attempt
   questionOrder           Int[] /// An array of questionIds to infer in which order should they be displayed
   questions               Question[] /// The list of questions in the assignment
   groups                  AssignmentGroup[] /// List of groups associated with the assignment
@@ -166,6 +227,7 @@ model Assignment {
   showAssignmentScore     Boolean                         @default(true) /// Should the assignment score be shown to the learner after its submission
   showQuestionScore       Boolean                         @default(true) /// Should the question score be shown to the learner after its submission
   showSubmissionFeedback  Boolean                         @default(true) /// Should the AI provide feedback when the learner submits a question
+  showQuestions          Boolean                         @default(true) /// Should the questions be shown to the learner
   updatedAt               DateTime                        @default(now()) @updatedAt /// The DateTime at which the assignment was last updated
   languageCode            String?                         /// The language code for the assignment
   AIUsage AIUsage[]
@@ -173,8 +235,11 @@ model Assignment {
   RegradingRequest RegradingRequest[]
   Report Report[]
   AssignmentTranslation AssignmentTranslation[]
-
   GradingAudit GradingAudit[]
+
+  Chat Chat[]
+
+  GradingJob GradingJob[]
 }
 enum VariantType {
   REWORDED /// The variant is reworded
@@ -223,6 +288,8 @@ model AssignmentAttempt {
   RegradingRequest RegradingRequest[]
   comments         String?               /// Additional comments or notes for the assignment attempt from the system
   preferredLanguage String?
+
+  GradingJob GradingJob[]
 }
 
 model AssignmentAttemptQuestionVariant {
@@ -283,6 +350,10 @@ model AssignmentFeedback {
   aiGradingRating   Int?             /// Rating for AI grading (1-5 scale)
   assignmentRating  Int?             /// Rating for the overall assignment (1-5 scale)
   aiFeedbackRating  Int?             /// Rating for the feedback provided by AI (1-5 scale)
+  allowContact      Boolean          @default(false) /// Whether the user allows being contacted
+  firstName         String?          /// User's first name (required if allowContact is true)
+  lastName          String?          /// User's last name (required if allowContact is true)
+  email             String?          /// User's email (required if allowContact is true)
   createdAt         DateTime         @default(now()) /// Timestamp for when the feedback was created
   updatedAt         DateTime         @updatedAt       /// Timestamp for the last update to the feedback
 }
@@ -308,16 +379,44 @@ enum RegradingStatus {
 }
 /// The Report model represents user or system-generated reports for developers
 model Report {
-  id          Int        @id @default(autoincrement())
-  reporterId  String     /// ID of the user reporting the issue
-  assignmentId Int       /// ID of the associated assignment
-  attemptId  Int?       /// ID of the associated assignment attempt
-  assignment  Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
-  issueType   ReportType /// Type of the issue
-  description String     /// Detailed description of the issue
-  author    Boolean     @default(false) /// Is the reporter the author of the assignment
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  id                  Int            @id @default(autoincrement())
+  reporterId          String         // ID of the user reporting the issue
+  assignmentId        Int?           // Optional assignment ID
+  attemptId           Int?           // Optional attempt ID
+  assignment          Assignment?    @relation(fields: [assignmentId], references: [id], onDelete: SetNull)
+  issueType           ReportType     // Type of the issue
+  description         String         // Detailed description of the issue
+  author              Boolean        @default(false) // Is the reporter the author of the assignment
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+  status              ReportStatus   @default(OPEN) // Status of the report
+  issueNumber         Int?           // GitHub issue number for reference
+  statusMessage       String?        // Optional message explaining the current status
+  resolution          String?        // Resolution details when the issue is resolved
+  comments            String?        // Developer comments on the issue
+  closureReason      String?        // Reason for closing the issue
+  // Fields for duplicate/similar issue tracking
+  duplicateOfReportId Int?           // ID of a report this one is a duplicate of
+  duplicateOfReport   Report?        @relation("DuplicateReports", fields: [duplicateOfReportId], references: [id])
+  duplicates          Report[]       @relation("DuplicateReports")
+  
+  relatedToReportId   Int?           // ID of a report this one is related to
+  relatedToReport     Report?        @relation("RelatedReports", fields: [relatedToReportId], references: [id])
+  relatedReports      Report[]       @relation("RelatedReports")
+  
+  similarityScore     Float?         // Similarity score (0-1) with the parent report
+}
+// Add to schema.prisma
+model UserNotification {
+  id          Int      @id @default(autoincrement())
+  userId      String
+  type        String
+  title       String
+  message     String
+  metadata    String?  @db.Text
+  read        Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 /// Enum representing different types of reports

@@ -52,7 +52,6 @@ const ProgressBar: React.FC<ProgressBarProps> = ({
 
   return (
     <div className="w-full p-2 sm:p-4 bg-white rounded-lg shadow-md">
-      {/* Progress bar container */}
       <div className="relative mb-3 sm:mb-4">
         <div className="h-2 sm:h-3 rounded-full bg-gray-200 overflow-hidden">
           <motion.div
@@ -75,7 +74,6 @@ const ProgressBar: React.FC<ProgressBarProps> = ({
         </div>
       </div>
 
-      {/* Latest message */}
       <div className="relative h-5 sm:h-6 overflow-hidden">
         <AnimatePresence mode="wait">
           {latestMessage && (

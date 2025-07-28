@@ -16,7 +16,7 @@ import { toast } from "sonner";
 
 interface SectionProps {
   questionId: number;
-  variantId?: number; // Add variantId
+  variantId?: number;
   preview?: boolean;
   questionTitle: string;
   questionFromParent: QuestionAuthorStore;
@@ -39,6 +39,7 @@ interface SectionProps {
   ) => void;
   variantMode: boolean;
 }
+
 function Section({
   questionId,
   variantId,
@@ -61,6 +62,9 @@ function Section({
   const [loading, setLoading] = useState(false);
   const backspaceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [backspaceCount, setBackspaceCount] = useState(0);
+
+  const enterTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [enterCount, setEnterCount] = useState(0);
   if (!question) return null;
   const { choices, type } = question;
 
@@ -74,24 +78,67 @@ function Section({
     choices?.map((choice) => choice?.points?.toString() ?? "") || [],
   );
 
+  const textAreaRefs = useRef<(HTMLTextAreaElement | null)[]>([]);
+  const pointsTextAreaRefs = useRef<(HTMLTextAreaElement | null)[]>([]);
+  const feedbackTextAreaRefs = useRef<(HTMLTextAreaElement | null)[]>([]);
+
+  const resizeTextArea = (textArea: HTMLTextAreaElement | null) => {
+    if (textArea) {
+      textArea.style.height = "auto";
+      textArea.style.height = `${textArea.scrollHeight}px`;
+    }
+  };
+
+  useEffect(() => {
+    textAreaRefs.current = textAreaRefs.current.slice(0, choices?.length || 0);
+    pointsTextAreaRefs.current = pointsTextAreaRefs.current.slice(
+      0,
+      choices?.length || 0,
+    );
+    feedbackTextAreaRefs.current = feedbackTextAreaRefs.current.slice(
+      0,
+      choices?.length || 0,
+    );
+
+    textAreaRefs.current.forEach((ref) => {
+      resizeTextArea(ref);
+    });
+    pointsTextAreaRefs.current.forEach((ref) => {
+      resizeTextArea(ref);
+    });
+    feedbackTextAreaRefs.current.forEach((ref) => {
+      resizeTextArea(ref);
+    });
+  }, [choices?.length]);
+
   useEffect(() => {
     setLocalChoices(choices?.map((choice) => choice?.choice ?? "") || []);
     setLocalFeedback(choices?.map((choice) => choice?.feedback ?? "") || []);
     setLocalPoints(
       choices?.map((choice) => choice?.points?.toString() ?? "") || [],
     );
+
+    setTimeout(() => {
+      textAreaRefs.current.forEach((ref) => {
+        resizeTextArea(ref);
+      });
+      pointsTextAreaRefs.current.forEach((ref) => {
+        resizeTextArea(ref);
+      });
+      feedbackTextAreaRefs.current.forEach((ref) => {
+        resizeTextArea(ref);
+      });
+    }, 0);
   }, [choices]);
 
   const handleAddChoice = () => {
     addChoice(questionId, undefined, variantId);
   };
 
-  // When removing a choice
   const handleRemoveChoice = (choiceIndex: number) => {
     removeChoice(questionId, choiceIndex, variantId);
   };
 
-  // When modifying a choice
   const handleChoiceChange = (
     choiceIndex: number,
     updatedChoice: Partial<Choice>,
@@ -99,7 +146,6 @@ function Section({
     modifyChoice(questionId, choiceIndex, updatedChoice, variantId);
   };
 
-  // When setting choices
   const handleSetChoices = (choices: Choice[]) => {
     setChoices(questionId, choices, variantId);
   };
@@ -135,11 +181,54 @@ function Section({
     }
   };
 
+  const handleKeyDown = (
+    index: number,
+    column: string,
+    event: React.KeyboardEvent,
+  ) => {
+    if (event.key === "Enter") {
+      if (event.shiftKey) {
+        return;
+      }
+
+      event.preventDefault();
+
+      if (enterTimerRef.current) {
+        clearTimeout(enterTimerRef.current);
+      }
+
+      setEnterCount((prevCount) => prevCount + 1);
+
+      enterTimerRef.current = setTimeout(() => {
+        setEnterCount(0);
+      }, 1000);
+
+      if (enterCount === 1) {
+        focusNextInput(index, column);
+        setEnterCount(0);
+      }
+    } else if (event.key === "Backspace") {
+      handleBackspacePress(index, event);
+
+      setEnterCount(0);
+      if (enterTimerRef.current) {
+        clearTimeout(enterTimerRef.current);
+      }
+    } else {
+      setEnterCount(0);
+      if (enterTimerRef.current) {
+        clearTimeout(enterTimerRef.current);
+      }
+    }
+  };
+
   const handleBackspacePress = (
     choiceIndex: number,
     event: React.KeyboardEvent,
   ) => {
-    const value = (event.currentTarget as HTMLInputElement).value;
+    const value = (
+      event.currentTarget as HTMLTextAreaElement | HTMLInputElement
+    ).value;
 
     if (event.key === "Backspace" && value === "") {
       if (backspaceTimerRef.current) {
@@ -157,7 +246,7 @@ function Section({
 
         setTimeout(() => {
           const prevChoiceInput = document.getElementById(
-            `Choice-${questionId}-${choiceIndex - 1}`,
+            `choice-${questionId}-${choiceIndex - 1}`,
           );
           if (prevChoiceInput) {
             prevChoiceInput.focus();
@@ -179,7 +268,7 @@ function Section({
         if (nextInput) {
           nextInput.focus();
         }
-      }, 300); // Ensure input is rendered before focusing
+      }, 300);
     } else {
       handleAddChoice();
       setTimeout(() => {
@@ -205,7 +294,7 @@ function Section({
           points: choice.points,
           feedback: choice.feedback,
         }));
-        setChoices(questionId, parsedChoices, variantId); // Pass variantId
+        setChoices(questionId, parsedChoices, variantId);
         toast.success("Choices generated successfully!");
       } else {
         toast.error("No choices found in the generated response.");
@@ -232,7 +321,7 @@ function Section({
   };
 
   const handleConfirm = async () => {
-    setModalOpen(false); // Close the modal
+    setModalOpen(false);
     if (questionTitle?.trim() === "") {
       toast.error("Please enter a question title first.");
       return;
@@ -243,13 +332,12 @@ function Section({
     try {
       await fetchAiGenChoices(question);
     } catch (error) {
-      console.error("Failed to generate rubric:", error);
       toast.error("Failed to generate rubric. Please try again.");
     }
   };
 
   const handleCancel = () => {
-    setModalOpen(false); // Close the modal
+    setModalOpen(false);
   };
   const handleManualChoices = () => {
     if (!choices) {
@@ -261,7 +349,6 @@ function Section({
           { choice: "", isCorrect: false, points: -1 },
         ]);
       } else if (choices?.some((choice) => choice?.points === 0)) {
-        // if any choice has points 0, set points to -1
         const updatedChoices = choices?.map((choice) =>
           choice.points === 0 ? { ...choice, points: -1 } : choice,
         );
@@ -274,7 +361,6 @@ function Section({
           { choice: "", isCorrect: false, points: 0 },
         ]);
       } else if (choices?.some((choice) => choice?.points === -1)) {
-        // if any choice has points 0, set points to -1
         const updatedChoices = choices?.map((choice) =>
           choice.points === -1 ? { ...choice, points: 0 } : choice,
         );
@@ -294,7 +380,7 @@ function Section({
       <table className="min-w-full text-left border-collapse">
         <thead>
           <tr className="bg-white border-b">
-            <th className="p-3 typography-body text-gray-600 border-r w-10">
+            <th className="p-3 typography-body text-gray-600 border-r w-32">
               Options
             </th>
             <th className="p-3 typography-body text-gray-600 border-r w-32">
@@ -306,7 +392,7 @@ function Section({
             <th className="p-3 typography-body text-gray-600 ">
               <div className="flex items-center justify-between">
                 <span>Feedback</span>
-                {/* randomize button */}
+
                 <div className="flex items-center">
                   {!preview && criteriaMode && (
                     <Tooltip
@@ -342,14 +428,11 @@ function Section({
                   id={`row-${questionId}-${index}`}
                   className="border-b"
                 >
-                  <td
-                    className={`border-r text-center h-full p-2 gap-x-4 flex items-center`}
-                  >
+                  <td className={`p-3 border-r`}>
                     {loading ? (
                       <div className="animate-pulse bg-gray-200 h-5 w-full rounded"></div>
                     ) : (
-                      <>
-                        {/* arrows to order questions*/}
+                      <div className="flex items-center gap-2">
                         <div className="flex flex-col items-center space-y-1">
                           <button
                             type="button"
@@ -369,7 +452,6 @@ function Section({
                             <ChevronUpIcon className="h-4 w-4 text-gray-600" />
                           </button>
 
-                          {/* Down Arrow Button */}
                           <button
                             type="button"
                             onClick={() => {
@@ -407,7 +489,7 @@ function Section({
                             className="focus:ring-violet-500 text-violet-600"
                           />
                         )}
-                      </>
+                      </div>
                     )}
                   </td>
 
@@ -416,14 +498,17 @@ function Section({
                       <div className="animate-pulse bg-gray-200 h-5 w-full rounded"></div>
                     ) : (
                       <div className="flex items-center">
-                        <input
-                          type="text"
+                        <textarea
+                          ref={(el) => {
+                            pointsTextAreaRefs.current[index] = el;
+                          }}
                           id={`points-${questionId}-${index}`}
                           value={localPoints[index]}
                           onChange={(e) => {
                             const updatedPoints = [...localPoints];
                             updatedPoints[index] = e.target.value;
                             setLocalPoints(updatedPoints);
+                            resizeTextArea(e.target);
                           }}
                           onBlur={() =>
                             handleChoiceChange(index, {
@@ -431,15 +516,12 @@ function Section({
                             })
                           }
                           placeholder="Points"
-                          className="w-full border-none bg-transparent placeholder-gray-400 text-gray-900 focus:outline-none"
+                          className="w-full border-none bg-transparent placeholder-gray-400 text-gray-900 focus:outline-none resize-none overflow-hidden min-h-[24px]"
                           disabled={preview}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter") {
-                              focusNextInput(index, "points");
-                            } else {
-                              handleBackspacePress(index, event);
-                            }
-                          }}
+                          onKeyDown={(event) =>
+                            handleKeyDown(index, "points", event)
+                          }
+                          rows={1}
                         />
                         <div className="flex flex-col items-center space-y-1">
                           <button
@@ -483,14 +565,17 @@ function Section({
                     {loading ? (
                       <div className="animate-pulse bg-gray-200 h-5 w-full rounded"></div>
                     ) : (
-                      <input
-                        type="text"
+                      <textarea
+                        ref={(el) => {
+                          textAreaRefs.current[index] = el;
+                        }}
                         id={`choice-${questionId}-${index}`}
                         value={localChoices[index]}
                         onChange={(e) => {
                           const updatedChoices = [...localChoices];
                           updatedChoices[index] = e.target.value;
                           setLocalChoices(updatedChoices);
+                          resizeTextArea(e.target);
                         }}
                         onBlur={() =>
                           handleChoiceChange(index, {
@@ -498,31 +583,31 @@ function Section({
                           })
                         }
                         placeholder="Enter a choice."
-                        className="w-full border-none bg-transparent placeholder-gray-400 text-gray-900 focus:outline-none"
+                        className="w-full border-none bg-transparent placeholder-gray-400 text-gray-900 focus:outline-none resize-none overflow-hidden min-h-[24px]"
                         disabled={preview}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter") {
-                            focusNextInput(index, "choice");
-                          } else {
-                            handleBackspacePress(index, event);
-                          }
-                        }}
+                        onKeyDown={(event) =>
+                          handleKeyDown(index, "choice", event)
+                        }
+                        rows={1}
                       />
                     )}
                   </td>
-                  <td className="p-3 ">
+                  <td className="p-3">
                     {loading ? (
                       <div className="animate-pulse bg-gray-200 h-5 w-full rounded"></div>
                     ) : (
                       <div className="flex items-center gap-x-2">
-                        <input
-                          type="text"
+                        <textarea
+                          ref={(el) => {
+                            feedbackTextAreaRefs.current[index] = el;
+                          }}
                           id={`feedback-${questionId}-${index}`}
                           value={localFeedback[index]}
                           onChange={(e) => {
                             const updatedFeedback = [...localFeedback];
                             updatedFeedback[index] = e.target.value;
                             setLocalFeedback(updatedFeedback);
+                            resizeTextArea(e.target);
                           }}
                           onBlur={() =>
                             handleChoiceChange(index, {
@@ -530,15 +615,12 @@ function Section({
                             })
                           }
                           placeholder="Provide feedback for this choice."
-                          className="w-full border-none bg-transparent placeholder-gray-400 text-gray-900 focus:outline-none"
+                          className="w-full border-none bg-transparent placeholder-gray-400 text-gray-900 focus:outline-none resize-none overflow-hidden min-h-[24px]"
                           disabled={preview}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter") {
-                              focusNextInput(index, "feedback");
-                            } else {
-                              handleBackspacePress(index, event);
-                            }
-                          }}
+                          onKeyDown={(event) =>
+                            handleKeyDown(index, "feedback", event)
+                          }
+                          rows={1}
                         />
                         <button
                           type="button"
@@ -554,56 +636,62 @@ function Section({
               ))}
             </tbody>
             {!preview && (
-              <td colSpan={4} className="text-center">
-                <button
-                  type="button"
-                  disabled={disableAddChoice}
-                  className="w-full text-left text-sm text-gray-600 p-3 hover:bg-gray-100 flex items-center"
-                  onClick={handleAddChoice}
-                >
-                  <PlusIcon className="h-4 w-4 mr-2 text-gray-500" />
-                  Add Option
-                </button>
-              </td>
+              <tfoot>
+                <tr>
+                  <td colSpan={4}>
+                    <button
+                      type="button"
+                      disabled={disableAddChoice}
+                      className="w-full text-left text-sm text-gray-600 p-3 hover:bg-gray-100 flex items-center"
+                      onClick={handleAddChoice}
+                    >
+                      <PlusIcon className="h-4 w-4 mr-2 text-gray-500" />
+                      Add Option
+                    </button>
+                  </td>
+                </tr>
+              </tfoot>
             )}
           </>
         ) : (
-          <tr className="border-b border-gray-200 w-full">
-            <td colSpan={4} className="py-2 px-4 text-center">
-              <div className="flex justify-center items-center gap-x-4">
-                {loading ? (
-                  <td className="animate-pulse bg-gray-200 h-5 w-full rounded"></td>
-                ) : !preview ? (
-                  <>
-                    <button
-                      className="text-gray-500"
-                      onClick={handleAiClick}
-                      disabled={loading}
-                    >
-                      <SparklesIcon className="w-4 h-4 inline-block mr-2 stroke-violet-600 fill-violet-600" />
-                      Generate choices with AI
-                    </button>
-                    <span className="text-gray-500">OR</span>
-                    <button
-                      className="text-gray-500"
-                      onClick={() => {
-                        setCriteriaMode(questionId, "CUSTOM");
-                        handleManualChoices();
-                      }}
-                      disabled={loading}
-                    >
-                      <PencilIcon className="w-4 h-4 inline-block mr-2 stroke-gray-500" />
-                      Create choices from scratch
-                    </button>
-                  </>
-                ) : (
-                  <p className="text-gray-500 typography-body">
-                    No criteria set up yet.
-                  </p>
-                )}
-              </div>
-            </td>
-          </tr>
+          <tbody>
+            <tr className="border-b border-gray-200 w-full">
+              <td colSpan={4} className="py-2 px-4 text-center">
+                <div className="flex justify-center items-center gap-x-4">
+                  {loading ? (
+                    <div className="animate-pulse bg-gray-200 h-5 w-full rounded"></div>
+                  ) : !preview ? (
+                    <>
+                      <button
+                        className="text-gray-500"
+                        onClick={handleAiClick}
+                        disabled={loading}
+                      >
+                        <SparklesIcon className="w-4 h-4 inline-block mr-2 stroke-violet-600 fill-violet-600" />
+                        Generate choices with AI
+                      </button>
+                      <span className="text-gray-500">OR</span>
+                      <button
+                        className="text-gray-500"
+                        onClick={() => {
+                          setCriteriaMode(questionId, "CUSTOM");
+                          handleManualChoices();
+                        }}
+                        disabled={loading}
+                      >
+                        <PencilIcon className="w-4 h-4 inline-block mr-2 stroke-gray-500" />
+                        Create choices from scratch
+                      </button>
+                    </>
+                  ) : (
+                    <p className="text-gray-500 typography-body">
+                      No criteria set up yet.
+                    </p>
+                  )}
+                </div>
+              </td>
+            </tr>
+          </tbody>
         )}
       </table>
       <WarningAlert

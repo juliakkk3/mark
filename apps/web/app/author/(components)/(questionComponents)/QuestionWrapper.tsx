@@ -23,8 +23,9 @@ import React, {
 import { toast } from "sonner";
 import MultipleAnswerSection from "../Questions/QuestionTypes/MultipleAnswerSection";
 import RubricSwitcher from "./RubricSwitcher";
+import Tooltip from "@/components/Tooltip";
+import { cn } from "@/lib/strings";
 
-// Extend the props to accept an onChange callback.
 interface CheckboxWithTooltipProps {
   id: string;
   name: string;
@@ -49,10 +50,9 @@ const CheckboxWithTooltip: FC<CheckboxWithTooltipProps> = ({
       type="checkbox"
       id={id}
       name={name}
-      // If a controlled value is provided, use it. Otherwise, fall back to defaultChecked.
       checked={typeof checked !== "undefined" ? checked : defaultChecked}
       onChange={(e) => onChange && onChange(e.target.checked)}
-      className="h-4 w-4 text-blue-600 border-gray-300 rounded"
+      className="h-4 w-4 text-purple-600 border-gray-300 rounded"
     />
     <label htmlFor={id} className="font-medium">
       {label}
@@ -87,12 +87,10 @@ const TimeLimitInputWithTooltip: FC<TimeLimitInputWithTooltipProps> = ({
   max = 600,
   onChange,
 }) => {
-  // Use local state to allow the user to finish typing
   const [internalValue, setInternalValue] = useState<string>(
     value !== undefined ? String(value) : String(defaultValue),
   );
 
-  // Update local state if the parent value changes
   useEffect(() => {
     setInternalValue(
       value !== undefined ? String(value) : String(defaultValue),
@@ -114,7 +112,6 @@ const TimeLimitInputWithTooltip: FC<TimeLimitInputWithTooltipProps> = ({
         onChange={(e) => {
           setInternalValue(e.target.value);
         }}
-        // Only update the global state when the input loses focus
         onBlur={() => {
           const newValue = Number(internalValue);
           if (newValue > max) {
@@ -138,6 +135,7 @@ const TimeLimitInputWithTooltip: FC<TimeLimitInputWithTooltipProps> = ({
 };
 
 interface PresentationOptionsProps {
+  showRubricsToLearner?: boolean;
   questionType: string;
   responseType: "PRESENTATION" | "LIVE_RECORDING" | string;
   question: QuestionAuthorStore;
@@ -198,7 +196,7 @@ const PresentationOptions: FC<PresentationOptionsProps> = ({
               id="bodyLanguage"
               name="bodyLanguage"
               label="Evaluate Body Language"
-              tooltipText="Evaluate the presenter’s body language, including posture, gestures, and eye contact."
+              tooltipText="Evaluate the presenter's body language, including posture, gestures, and eye contact."
               onChange={(checked) =>
                 setEvaluateBodyLanguage(questionId, checked)
               }
@@ -230,7 +228,7 @@ const PresentationOptions: FC<PresentationOptionsProps> = ({
           id="timeManagement"
           name="timeManagement"
           label="Evaluate Time Management"
-          tooltipText="Evaluate the presenter’s ability to manage time effectively and stay within the allotted time frame."
+          tooltipText="Evaluate the presenter's ability to manage time effectively and stay within the allotted time frame."
           onChange={(checked) =>
             setEvaluateTimeManagement(questionId, checked, responseType)
           }
@@ -259,6 +257,8 @@ const PresentationOptions: FC<PresentationOptionsProps> = ({
 };
 
 interface QuestionWrapperProps extends ComponentPropsWithoutRef<"div"> {
+  showRubricsToLearner?: boolean;
+  showPoints?: boolean;
   questionId: number;
   questionTitle: string;
   setQuestionTitle: (questionTitle: string) => void;
@@ -287,6 +287,8 @@ interface QuestionWrapperProps extends ComponentPropsWithoutRef<"div"> {
 }
 
 const QuestionWrapper: FC<QuestionWrapperProps> = ({
+  showRubricsToLearner,
+  showPoints,
   questionId,
   questionTitle,
   setQuestionTitle,
@@ -359,7 +361,7 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
     variantMode ? variantId : undefined,
   );
   const toggleLoading = useQuestionStore((state) => state.toggleLoading);
-  const maxPointsEver = 100000; // Maximum points allowed
+  const maxPointsEver = 100000;
 
   useEffect(() => {
     const handleOutsideClick = (event: MouseEvent) => {
@@ -377,7 +379,6 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
     };
   }, [localQuestionTitle]);
 
-  // Handle changes to the question title and update the store
   const handleQuestionTitleChange = (value: string, toggle: boolean) => {
     if (!toggle) {
       setQuestionTitle(value);
@@ -397,28 +398,27 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
   const setEvaluateSlidesQuality = useAuthorStore(
     (state) => state.setEvaluateSlidesQuality,
   );
-  // Updates the criterion description at a given index.
+
   const handleCriteriaChange = (
     rubricIndex: number,
     criteriaIndex: number,
     value: string,
   ) => {
-    // Get the current rubrics from question.scoring.
     const rubrics = questionFromParent.scoring?.rubrics
       ? [...questionFromParent.scoring.rubrics]
       : [];
-    // Ensure the rubric at the specified index exists.
+
     if (!rubrics[rubricIndex]) {
       rubrics[rubricIndex] = { rubricQuestion: "", criteria: [] };
     }
     const newCriteriaArray = [...rubrics[rubricIndex].criteria];
-    // Update the description on the targeted criterion.
+
     newCriteriaArray[criteriaIndex] = {
       ...newCriteriaArray[criteriaIndex],
       description: value,
     };
     rubrics[rubricIndex].criteria = newCriteriaArray;
-    // Update state with the new rubrics.
+
     setQuestionScoring(
       questionId,
       {
@@ -430,7 +430,6 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
     handleUpdateQuestionState({ rubrics }, variantMode);
   };
 
-  // On blur, trim the descriptions and update state.
   const handleCriteriaBlur = (rubricIndex: number) => {
     const rubrics = questionFromParent.scoring?.rubrics
       ? [...questionFromParent.scoring.rubrics]
@@ -454,7 +453,6 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
     }
   };
 
-  // Adds a new criterion to a specified rubric.
   const handleShiftCriteria = (rubricIndex: number) => {
     const rubrics = questionFromParent.scoring?.rubrics
       ? [...questionFromParent.scoring.rubrics]
@@ -496,7 +494,6 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
     handleUpdateQuestionState({ rubrics }, variantMode);
   };
 
-  // Remove a criterion at a given index.
   const handleRemoveCriteria = (rubricIndex: number, criteriaIndex: number) => {
     const rubrics = questionFromParent.scoring?.rubrics
       ? [...questionFromParent.scoring.rubrics]
@@ -505,7 +502,7 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
       rubrics[rubricIndex].criteria = rubrics[rubricIndex].criteria.filter(
         (_, idx) => idx !== criteriaIndex,
       );
-      // Optionally, reassign IDs to the remaining criteria.
+
       rubrics[rubricIndex].criteria = rubrics[rubricIndex].criteria.map(
         (crit, idx) => ({
           ...crit,
@@ -661,7 +658,6 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
     }
   };
 
-  // Handle input changes for points (without sorting)
   const handlePointsInputChange = (
     rubricIndex: number,
     criteriaIndex: number,
@@ -693,7 +689,6 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
     }
   };
 
-  // Function to fetch rubric from the API
   const fetchRubric = async (
     question: QuestionAuthorStore,
     rubricIndex?: number,
@@ -746,7 +741,7 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
   };
 
   const handleConfirm = async (rubricIndex: number) => {
-    setModalOpen(false); // Close the modal
+    setModalOpen(false);
 
     if (questionTitle?.trim() === "") {
       toast.error("Please enter a Question Title first.");
@@ -762,7 +757,6 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
       toggleLoading(questionId, true, variantMode ? variantId : undefined);
       await fetchRubric(questionFromParent, rubricIndex, variantId);
     } catch (error) {
-      console.error("Failed to generate rubric:", error);
       toast.error("Failed to generate rubric. Please try again.");
     } finally {
       toggleLoading(questionId, false, variantMode ? variantId : undefined);
@@ -789,7 +783,6 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
       return;
     }
     try {
-      // remove variant from question if exist before expanding rubric
       const expandedQuestion = await expandMarkingRubric(
         questionFromParent,
         useAuthorStore.getState().activeAssignmentId,
@@ -800,7 +793,6 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
         modifyQuestion(questionId, expandedQuestion);
       }
     } catch (error) {
-      console.error("Failed to expand rubric:", error);
       toast.error("Failed to expand rubric. Please try again.");
     } finally {
       toggleLoading(questionId, false, variantMode ? variantId : undefined);
@@ -812,7 +804,6 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
       id={`question-title-${questionId}`}
       className="flex flex-col w-full gap-y-2"
     >
-      {/* Markdown editor for the question title */}
       {toggleTitle && !preview ? (
         <div ref={titleRef} className="w-full">
           <MarkdownEditor
@@ -857,6 +848,93 @@ const QuestionWrapper: FC<QuestionWrapperProps> = ({
               : localQuestionTitle}
           </MarkdownViewer>
           <div className="border-b border-gray-200 w-full" />
+        </div>
+      )}
+
+      {/* Show Rubrics to Learner toggle, only for certain question types */}
+      {["TEXT", "URL", "UPLOAD", "LINK_FILE"].includes(questionType) && (
+        // outside div for text and 2 buttons
+        <div className="flex flex-col justify-between gap-2 my-3">
+          <div>
+            <p className="text-gray-700  leading-7 text-lg font-semibold tracking-normal">
+              Rubric
+            </p>
+          </div>
+          {/* the section for 2 buttons */}
+          <div className="flex lg:flex-row flex-col gap-2">
+            <div className="flex items-center mr-4 gap-2 text-gray-600 text-nowrap">
+              <span className="text-gray-600 typography-body">
+                Show Rubrics to Learner
+              </span>
+              <Tooltip
+                content="Show rubrics to learners"
+                className="flex items-center"
+              >
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleUpdateQuestionState({
+                      showRubricsToLearner: !showRubricsToLearner,
+                    })
+                  }
+                  className={cn(
+                    "relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
+                    showRubricsToLearner ? "bg-violet-600" : "bg-gray-200",
+                  )}
+                  role="switch"
+                  aria-checked={showRubricsToLearner}
+                >
+                  <span
+                    aria-hidden="true"
+                    className={cn(
+                      "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
+                      showRubricsToLearner ? "translate-x-5" : "translate-x-0",
+                    )}
+                  />
+                </button>
+              </Tooltip>
+            </div>
+            {showRubricsToLearner && (
+              <div className="flex items-center mr-4 gap-2 text-gray-600 text-nowrap">
+                <span className="text-gray-600 typography-body">
+                  Display Rubric Points to Learners
+                </span>
+                <Tooltip
+                  content="Display rubric points to learners"
+                  className="flex items-center"
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      //ensure the value is most current
+                      const current = useAuthorStore
+                        .getState()
+                        .questions.find((q) => q.id === questionId);
+                      handleUpdateQuestionState({
+                        showRubricsToLearner:
+                          current?.scoring?.showRubricsToLearner ?? false,
+                        showPoints: !(current?.scoring?.showPoints ?? false),
+                      });
+                    }}
+                    className={cn(
+                      "relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
+                      showPoints ? "bg-violet-600" : "bg-gray-200",
+                    )}
+                    role="switch"
+                    aria-checked={showPoints}
+                  >
+                    <span
+                      aria-hidden="true"
+                      className={cn(
+                        "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
+                        showPoints ? "translate-x-5" : "translate-x-0",
+                      )}
+                    />
+                  </button>
+                </Tooltip>
+              </div>
+            )}
+          </div>
         </div>
       )}
 

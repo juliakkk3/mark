@@ -1,4 +1,3 @@
-// src/llm/features/rubric/interfaces/rubric.interface.ts
 import {
   QuestionDto,
   ScoringDto,

@@ -1,4 +1,3 @@
-// this is for /author page where we list all the assignments
 import { getAssignments } from "@/lib/talkToBackend";
 import Link from "next/link";
 

@@ -36,7 +36,7 @@ interface VideoRecorderState {
   chunksRef: Blob[];
   videoRef: HTMLVideoElement | null;
   streamRef: MediaStream | null;
-  // Setter actions
+
   setRecording: (recording: boolean) => void;
   setVideoBlob: (blob: Blob | null) => void;
   setVideoURL: (url: string) => void;
@@ -47,7 +47,7 @@ interface VideoRecorderState {
   setChunksRef: (chunks: Blob[]) => void;
   setVideoRef: (ref: HTMLVideoElement | null) => void;
   setStreamRef: (ref: MediaStream | null) => void;
-  // Methods
+
   reconnectCamera: () => Promise<void>;
   getSupportedMimeType: () => string;
   startRecordingImpl: (onRecordingComplete: (blob: Blob) => void) => void;
@@ -59,7 +59,6 @@ export const useVideoRecorderStore = createWithEqualityFn<VideoRecorderState>()(
   persist(
     devtools(
       (set, get) => ({
-        // Initial state
         recording: false,
         videoBlob: null,
         videoURL: "",
@@ -71,7 +70,6 @@ export const useVideoRecorderStore = createWithEqualityFn<VideoRecorderState>()(
         videoRef: null,
         streamRef: null,
 
-        // Setters
         setRecording: (recording) => set({ recording }),
         setVideoBlob: (blob) => set({ videoBlob: blob }),
         setVideoURL: (url) => set({ videoURL: url }),
@@ -83,7 +81,6 @@ export const useVideoRecorderStore = createWithEqualityFn<VideoRecorderState>()(
         setVideoRef: (ref) => set({ videoRef: ref }),
         setStreamRef: (ref) => set({ streamRef: ref }),
 
-        // Reconnect camera action
         reconnectCamera: async () => {
           try {
             const stream = await navigator.mediaDevices.getUserMedia({
@@ -97,14 +94,12 @@ export const useVideoRecorderStore = createWithEqualityFn<VideoRecorderState>()(
             }
             get().setCameraError(null);
           } catch (err: any) {
-            console.error("Error reconnecting camera:", err);
             get().setCameraError(
               "Error accessing camera. Please check your camera settings.",
             );
           }
         },
 
-        // Determine a supported MIME type for recording
         getSupportedMimeType: () => {
           const possibleTypes = [
             "video/webm; codecs=vp9",
@@ -117,13 +112,11 @@ export const useVideoRecorderStore = createWithEqualityFn<VideoRecorderState>()(
           );
         },
 
-        // Start recording implementation after countdown
         startRecordingImpl: (onRecordingComplete) => {
           if (!get().streamRef) {
-            console.error("No camera stream available to record.");
             return;
           }
-          // Reset chunks and record the start time
+
           get().setChunksRef([]);
           get().setRecordingStartTime(Date.now());
 
@@ -133,19 +126,16 @@ export const useVideoRecorderStore = createWithEqualityFn<VideoRecorderState>()(
 
           recorder.ondataavailable = (evt) => {
             if (evt.data.size > 0) {
-              // Append data safely by copying the existing array
               get().setChunksRef([...get().chunksRef, evt.data]);
             }
           };
 
           recorder.onstop = () => {
-            // Create final Blob from recorded chunks
             const blob = new Blob(get().chunksRef, { type: mimeType });
             const url = URL.createObjectURL(blob);
             get().setVideoBlob(blob);
             get().setVideoURL(url);
 
-            // Update the preview video element if available
             if (get().videoRef) {
               get().videoRef.srcObject = null;
               get().videoRef.src = url;
@@ -153,7 +143,7 @@ export const useVideoRecorderStore = createWithEqualityFn<VideoRecorderState>()(
               get().videoRef.muted = true;
               get().videoRef.load();
             }
-            // Notify parent via callback
+
             onRecordingComplete(blob);
           };
 
@@ -161,7 +151,6 @@ export const useVideoRecorderStore = createWithEqualityFn<VideoRecorderState>()(
           get().setRecording(true);
         },
 
-        // Start recording: initialize the stream and start countdown
         startRecording: async () => {
           if (get().cameraError) return;
 
@@ -177,7 +166,6 @@ export const useVideoRecorderStore = createWithEqualityFn<VideoRecorderState>()(
               await get().videoRef.play();
             }
           } catch (error) {
-            console.error("Error re-initializing camera:", error);
             get().setCameraError(
               "Error accessing camera. Please check your camera settings.",
             );
@@ -186,7 +174,6 @@ export const useVideoRecorderStore = createWithEqualityFn<VideoRecorderState>()(
           get().setCountdown(3);
         },
 
-        // Stop recording and clean up
         stopRecording: () => {
           if (get().mediaRecorderRef?.state === "recording") {
             get().mediaRecorderRef.stop();
@@ -201,7 +188,7 @@ export const useVideoRecorderStore = createWithEqualityFn<VideoRecorderState>()(
         },
       }),
 
-      { name: "video-recorder-store" },
+      { name: "video-recorder-store", trace: true, traceLimit: 25 },
     ),
     {
       name: "video-recorder-store",
@@ -218,7 +205,6 @@ export const useVideoRecorderStore = createWithEqualityFn<VideoRecorderState>()(
 );
 
 export const getAssignmentIdFromURL = (role: string): string | null => {
-  // Make sure we're in a browser (client-side)
   if (typeof window === "undefined") {
     return null;
   }
@@ -227,10 +213,10 @@ export const getAssignmentIdFromURL = (role: string): string | null => {
   const index = pathSegments.indexOf(role);
 
   if (index !== -1 && pathSegments.length > index + 1) {
-    return pathSegments[index + 1]; // The assignment ID
+    return pathSegments[index + 1];
   }
 
-  return null; // Return null if not found
+  return null;
 };
 
 const ASSIGNMENT_ID = getAssignmentIdFromURL("learner");
@@ -312,7 +298,6 @@ export const useGitHubStore = createWithEqualityFn<GitHubState>()(
 
           if (activeQuestionId === null) return;
 
-          // Save the current state to the specific questionId
           set({
             questionGitHubState: {
               ...questionGitHubState,
@@ -329,7 +314,7 @@ export const useGitHubStore = createWithEqualityFn<GitHubState>()(
           });
         },
       }),
-      { name: "github-store" },
+      { name: "github-store", trace: true, traceLimit: 25 },
     ),
     {
       name: "github-store",
@@ -357,12 +342,32 @@ export type LearnerState = {
 
 export type learnerFileResponse = {
   filename: string;
-  content: string;
-  githubUrl?: string;
-  path?: string;
-  repo?: RepoType;
+  imageUrl?: string;
+  imageData?: string;
+  imageBucket?: string;
+  imageKey?: string;
+  mimeType?: string;
   owner?: string;
-  blob?: Blob;
+  repo?: RepoType;
+  path?: string;
+
+  imageAnalysisResult?: {
+    width: number;
+    height: number;
+    aspectRatio: number;
+    fileSize: number;
+    dominantColors: any[];
+    detectedObjects: any[];
+    detectedText: any[];
+    sceneType: string;
+    rawDescription: string;
+  };
+
+  content?: string;
+  key?: string;
+  bucket?: string;
+  fileType?: string;
+  githubUrl?: string;
 };
 export type LearnerActions = {
   setTranscript: (questionId: number, transcript: string) => void;
@@ -383,6 +388,8 @@ export type LearnerActions = {
   addQuestion: (question: QuestionStore) => void;
   setQuestion: (question: Partial<QuestionStore>) => void;
   showSubmissionFeedback: boolean;
+  showQuestions: boolean;
+  setShowQuestions: (showQuestions: boolean) => void;
   setShowSubmissionFeedback: (ShowSubmissionFeedback: boolean) => void;
   setQuestions: (questions: Partial<QuestionStore>[]) => void;
   setTextResponse: (learnerTextResponse: string, questionId?: number) => void;
@@ -489,7 +496,7 @@ export const useLearnerOverviewStore = createWithEqualityFn<
           set({ languageModalTriggered: triggered }),
       }),
       {
-        name: `learner-overview-${ASSIGNMENT_ID}`, // storage name
+        name: `learner-overview-${ASSIGNMENT_ID}`,
         partialize: (state) => ({
           listOfAttempts: state.listOfAttempts,
           assignmentId: state.assignmentId,
@@ -499,9 +506,11 @@ export const useLearnerOverviewStore = createWithEqualityFn<
     ),
     {
       name: `learner-overview-${ASSIGNMENT_ID}`,
+      trace: true,
+      traceLimit: 25,
       enabled: process.env.NODE_ENV === "development",
       serialize: {
-        options: true, // Enable serialization to avoid large data crashes
+        options: true,
       },
     },
   ),
@@ -750,7 +759,7 @@ export const useLearnerStore = createWithEqualityFn<
             }
             set({ userPreferedLanguage: finalCode });
           } catch (e) {
-            console.warn("Failed to parse language");
+            set({ userPreferedLanguage: "en" });
           }
         },
 
@@ -759,7 +768,7 @@ export const useLearnerStore = createWithEqualityFn<
             const updatedQuestions = state.questions.map((q) => {
               if (q.id === questionId) {
                 const existingFiles = q.learnerFileResponse || [];
-                // Merge existing files with new files
+
                 const mergedFiles = [...existingFiles, ...newFiles];
                 return { ...q, learnerFileResponse: mergedFiles };
               }
@@ -787,6 +796,8 @@ export const useLearnerStore = createWithEqualityFn<
         },
         globalLanguage: "English",
         userPreferedLanguage: null,
+        showQuestions: true,
+        setShowQuestions: (showQuestions) => set({ showQuestions }),
         activeAttemptId: null,
         totalPointsEarned: 0,
         totalPointsPossible: 0,
@@ -857,7 +868,6 @@ export const useLearnerStore = createWithEqualityFn<
           }
         },
 
-        // Consolidate response updating logic
         setTextResponse: (learnerTextResponse, questionId) => {
           set((state) => ({
             questions: state.questions?.map((q) =>
@@ -886,7 +896,7 @@ export const useLearnerStore = createWithEqualityFn<
         },
 
         addChoice: (learnerChoiceIndex, questionId) => {
-          set((state) => {
+          (set((state) => {
             const updatedQuestions = state.questions.map((q) =>
               q.id === questionId
                 ? {
@@ -900,23 +910,23 @@ export const useLearnerStore = createWithEqualityFn<
             );
             return { questions: updatedQuestions };
           }),
-            get().setQuestionStatus(questionId);
+            get().setQuestionStatus(questionId));
         },
         removeChoice: (learnerChoiceIndex, questionId) => {
-          set((state) => {
+          (set((state) => {
             const updatedQuestions = state.questions.map((q) =>
               q.id === questionId
                 ? {
                     ...q,
                     learnerChoices: q.learnerChoices?.filter(
-                      (c) => c !== learnerChoiceIndex, // Remove by index
+                      (c) => c !== learnerChoiceIndex,
                     ),
                   }
                 : q,
             );
             return { questions: updatedQuestions };
           }),
-            get().setQuestionStatus(questionId);
+            get().setQuestionStatus(questionId));
         },
 
         setAnswerChoice: (learnerAnswerChoice, questionId) => {
@@ -941,14 +951,17 @@ export const useLearnerStore = createWithEqualityFn<
       }),
       {
         name: `learner-${ASSIGNMENT_ID}`,
+        trace: true,
+        traceLimit: 25,
         enabled: process.env.NODE_ENV === "development",
         serialize: {
-          options: true, // Enable serialization to avoid large data crashes
+          options: true,
         },
       },
     ),
     {
       name: `learner-${ASSIGNMENT_ID}`,
+
       partialize: (state) => ({
         questions: state.questions,
         activeAttemptId: state.activeAttemptId,
@@ -978,6 +991,8 @@ export const useAssignmentDetails = createWithEqualityFn<
       }),
       {
         name: "learner",
+        trace: true,
+        traceLimit: 25,
         enabled: process.env.NODE_ENV === "development",
       },
     ),
@@ -986,7 +1001,6 @@ export const useAssignmentDetails = createWithEqualityFn<
       partialize: (state) => ({
         assignmentDetails: state.assignmentDetails,
       }),
-      // storage: createJSONStorage(() => localStorage),
     },
   ),
   shallow,

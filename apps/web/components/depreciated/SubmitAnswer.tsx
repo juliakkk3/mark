@@ -14,7 +14,6 @@ const SubmitAnswerComponent: FC<Props> = ({
   questionId,
   questionType,
 }) => {
-  // State hooks for managing the answer, loading state, and success/failure
   const [answer, setAnswer] = useState<string | File | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [success, setSuccess] = useState<boolean | null>(null);
@@ -24,7 +23,6 @@ const SubmitAnswerComponent: FC<Props> = ({
 
     let responseBody = {};
 
-    // Prepare the request body based on the question type.
     switch (questionType) {
       case "TEXT":
         responseBody = { learnerTextResponse: answer };
@@ -37,7 +35,6 @@ const SubmitAnswerComponent: FC<Props> = ({
     }
 
     try {
-      // Check the question type and submit the appropriate response
       if (questionType === "UPLOAD" && answer instanceof File) {
         const isSuccess = await submitFileAnswer(
           assignmentId,
@@ -56,7 +53,6 @@ const SubmitAnswerComponent: FC<Props> = ({
         setSuccess(isSuccess);
       }
     } catch (error) {
-      console.error("Error submitting response:", error);
       setSuccess(false);
     } finally {
       setIsLoading(false);

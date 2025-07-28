@@ -10,13 +10,14 @@ import type {
   QuestionAttemptRequestWithId,
   QuestionStore,
   ReplaceAssignmentRequest,
+  SubmitAssignmentResponse,
 } from "@/config/types";
 import {
   getSupportedLanguages,
   getUser,
   submitAssignment,
 } from "@/lib/talkToBackend";
-import { editedQuestionsOnly } from "@/lib/utils";
+import { editedQuestionsOnly, getSubmitButtonStatus } from "@/lib/utils";
 import {
   useAssignmentDetails,
   useGitHubStore,
@@ -30,11 +31,19 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import Button from "../../../components/Button";
+import GradingProgressModal from "./GradingProgressModal";
 
 function LearnerHeader() {
   const pathname = usePathname();
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
+  const [gradingProgress, setGradingProgress] = useState({
+    isOpen: false,
+    progress: 0,
+    message: "Initializing...",
+    status: "idle" as "idle" | "processing" | "completed" | "failed",
+  });
+
   const [
     questions,
     setQuestion,
@@ -63,6 +72,7 @@ function LearnerHeader() {
   const [userPreferedLanguage, setUserPreferedLanguage] = useLearnerStore(
     (state) => [state.userPreferedLanguage, state.setUserPreferedLanguage],
   );
+  const buttonStatus = getSubmitButtonStatus(questions, submitting);
 
   const authorAssignmentDetails = getStoredData<ReplaceAssignmentRequest>(
     "assignmentConfig",
@@ -87,6 +97,7 @@ function LearnerHeader() {
   const getUserPreferedLanguageFromLTI = useLearnerStore(
     (state) => state.getUserPreferedLanguageFromLTI,
   );
+
   useEffect(() => {
     async function fetchData() {
       if (!assignmentId) return;
@@ -111,7 +122,7 @@ function LearnerHeader() {
           setUserPreferedLanguage(userPreferedLanguageFromLTI);
         }
       } catch (error) {
-        console.error(error);
+        toast.error("Failed to fetch data.");
       }
     }
 
@@ -120,9 +131,8 @@ function LearnerHeader() {
 
   const handleChangeLanguage = (selectedLanguage: string) => {
     if (selectedLanguage && selectedLanguage !== userPreferedLanguage) {
-      // Update the learner’s preferred language in the store.
       setUserPreferedLanguage(selectedLanguage);
-      // Optionally update the URL query without a full reload (using shallow routing).
+
       if (!isInQuestionPage && !isAttemptPage && !isSuccessPage)
         router.replace(`${pathname}?lang=${selectedLanguage}`, undefined);
     }
@@ -151,9 +161,23 @@ function LearnerHeader() {
     void handleSubmitAssignment();
   };
 
+  const handleProgressUpdate = (
+    status: "processing" | "completed" | "failed",
+    progress: number,
+    message: string,
+  ) => {
+    setGradingProgress({
+      isOpen: true,
+      progress,
+      message,
+      status,
+    });
+  };
+
   async function handleSubmitAssignment() {
-    const responsesForQuestions: QuestionAttemptRequestWithId[] = questions.map(
-      (q) => ({
+    let responsesForQuestions: QuestionAttemptRequestWithId[] = [];
+    try {
+      responsesForQuestions = questions.map((q) => ({
         id: q.id,
         learnerTextResponse: q.learnerTextResponse || "",
         learnerUrlResponse: q.learnerUrlResponse || "",
@@ -182,22 +206,25 @@ function LearnerHeader() {
                   )
                   .filter((choice) => choice !== undefined) || [],
         learnerAnswerChoice: q.learnerAnswerChoice ?? null,
-        learnerFileResponse: (q.learnerFileResponse || []).map((file) => {
-          const extension = file.filename.split(".").pop()?.toLowerCase() || "";
-          if (["jpg", "jpeg", "png", "gif", "svg"].includes(extension)) {
-            // change the content to Picture was uploaded
-            return {
-              ...file,
-              content: "Picture was uploaded, please ignore",
-            };
-          }
-          return file;
-        }),
+        learnerFileResponse: q.learnerFileResponse || [],
         learnerPresentationResponse: q.presentationResponse || [],
-      }),
-    );
+      }));
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error occurred";
+      toast.error(`Error processing responses: ${errorMessage}`);
+      console.error("Error processing responses:", error);
+      return;
+    }
 
     setSubmitting(true);
+    setGradingProgress({
+      isOpen: true,
+      progress: 0,
+      message: "Preparing submission...",
+      status: "processing",
+    });
+
     if (!assignmentId) {
       toast.error("Assignment ID is missing.");
       return;
@@ -206,63 +233,80 @@ function LearnerHeader() {
     if (activeAttemptId === null) {
       toast.error("Active attempt ID is missing.");
       setSubmitting(false);
+      setGradingProgress({ ...gradingProgress, isOpen: false });
       return;
     }
 
-    const res = await submitAssignment(
-      assignmentId,
-      activeAttemptId,
-      responsesForQuestions,
-      userPreferedLanguage,
-      role === "author" ? authorQuestions : undefined,
-      role === "author" ? authorAssignmentDetails : undefined,
-    );
-    setSubmitting(false);
-    if (!res) {
-      toast.error("Failed to submit assignment.");
+    let res: SubmitAssignmentResponse | undefined;
+    try {
+      res = await submitAssignment(
+        assignmentId,
+        activeAttemptId,
+        responsesForQuestions,
+        userPreferedLanguage,
+        role === "author" ? authorQuestions : undefined,
+        role === "author" ? authorAssignmentDetails : undefined,
+        undefined,
+        handleProgressUpdate,
+      );
+      console.log("Submission response:", res);
+
+      // Process the response immediately after getting it
+      if (res) {
+        const { grade, feedbacksForQuestions } = res;
+        setTotalPointsEarned(res.totalPointsEarned);
+        setTotalPointsPossible(res.totalPossiblePoints);
+        if (grade !== undefined) {
+          setGrade(grade * 100);
+        }
+        if (role === "learner") {
+          setShowSubmissionFeedback(res.showSubmissionFeedback);
+        }
+        for (const question of questions) {
+          const updatedQuestion = {
+            ...question,
+            learnerChoices: responsesForQuestions.find(
+              (q) => q.id === question.id,
+            )?.learnerChoices,
+          };
+          setQuestion(updatedQuestion);
+        }
+
+        for (const feedback of feedbacksForQuestions || []) {
+          setQuestion({
+            id: feedback.questionId,
+            questionResponses: [
+              {
+                id: feedback.id,
+                learnerAnswerChoice: responsesForQuestions.find(
+                  (q) => q.id === feedback.questionId,
+                )?.learnerAnswerChoice,
+                points: feedback.totalPoints ?? 0,
+                feedback: feedback.feedback || [],
+                learnerResponse: feedback.question,
+                questionId: feedback.questionId,
+                assignmentAttemptId: activeAttemptId,
+              },
+            ],
+          });
+        }
+        clearGithubStore();
+        useLearnerStore.getState().setActiveQuestionNumber(null);
+        router.push(`/learner/${assignmentId}/successPage/${res.id}`);
+
+        setTimeout(() => {
+          setGradingProgress({ ...gradingProgress, isOpen: false });
+          useLearnerStore.getState().setUserPreferedLanguage(null);
+          router.push(`/learner/${assignmentId}/successPage/${res.id}`);
+        }, 500);
+      }
+    } catch (error) {
       setSubmitting(false);
+      setTimeout(() => {
+        setGradingProgress({ ...gradingProgress, isOpen: false });
+      }, 2000);
       return;
     }
-    const { grade, feedbacksForQuestions } = res;
-    setTotalPointsEarned(res.totalPointsEarned);
-    setTotalPointsPossible(res.totalPossiblePoints);
-    if (grade !== undefined) {
-      setGrade(grade * 100);
-    }
-    setShowSubmissionFeedback(res.showSubmissionFeedback);
-    for (const question of questions) {
-      const updatedQuestion = {
-        ...question,
-        learnerChoices: responsesForQuestions.find((q) => q.id === question.id)
-          ?.learnerChoices,
-      };
-      setQuestion(updatedQuestion);
-    }
-
-    for (const feedback of feedbacksForQuestions || []) {
-      setQuestion({
-        id: feedback.questionId,
-        questionResponses: [
-          {
-            id: feedback.id,
-            learnerAnswerChoice: responsesForQuestions.find(
-              (q) => q.id === feedback.questionId,
-            )?.learnerAnswerChoice,
-            points: feedback.totalPoints ?? 0,
-            feedback: feedback.feedback || [],
-            learnerResponse: feedback.question,
-            questionId: feedback.questionId,
-            assignmentAttemptId: activeAttemptId,
-          },
-        ],
-      });
-    }
-    clearGithubStore();
-    useLearnerStore.getState().setActiveQuestionNumber(null);
-    setTimeout(() => {
-      useLearnerStore.getState().setUserPreferedLanguage(null);
-    }, 1000);
-    router.push(`/learner/${assignmentId}/successPage/${res.id}`);
   }
 
   useEffect(() => {
@@ -272,65 +316,88 @@ function LearnerHeader() {
   }, [userPreferedLanguage]);
 
   return (
-    <header className="border-b border-gray-300 w-full px-6 py-6 flex justify-between h-[100px]">
-      <div className="flex">
-        <div className="flex justify-center gap-x-6 items-center">
-          <SNIcon />
-          <Title className="text-lg font-semibold">
-            {assignmentDetails?.name || "Untitled Assignment"}
-          </Title>
+    <>
+      <header className="border-b border-gray-300 w-full px-6 py-6 flex justify-between h-[100px]">
+        <div className="flex">
+          <div className="flex justify-center gap-x-6 items-center">
+            <SNIcon />
+            <Title className="text-lg font-semibold">
+              {assignmentDetails?.name || "Untitled Assignment"}
+            </Title>
+          </div>
         </div>
-      </div>
 
-      <div className="flex items-center gap-x-4">
-        {!isSuccessPage && role === "learner" && (
-          <Dropdown
-            items={languages.map((lang) => ({
-              label: getLanguageName(lang),
-              value: lang,
-            }))}
-            selectedItem={userPreferedLanguage}
-            setSelectedItem={handleChangeLanguage}
-            placeholder="Select language"
-          />
-        )}
-        {isAttemptPage || isInQuestionPage ? (
-          <Button
-            className="btn-tertiary"
-            onClick={() => router.push(`/learner/${assignmentId}`)}
-          >
-            Return to Assignment Details
-          </Button>
-        ) : null}
-        {isInQuestionPage ? (
-          <Button
-            disabled={editedQuestionsOnly(questions).length === 0 || submitting}
-            className="disabled:opacity-70 btn-secondary"
-            onClick={CheckNoFlaggedQuestions}
-          >
-            {submitting ? <Spinner className="w-8" /> : "Submit assignment"}
-          </Button>
-        ) : null}
-      </div>
+        <div className="flex items-center gap-x-4">
+          {!isSuccessPage && role === "learner" && (
+            <Dropdown
+              items={languages.map((lang) => ({
+                label: getLanguageName(lang),
+                value: lang,
+              }))}
+              selectedItem={userPreferedLanguage}
+              setSelectedItem={handleChangeLanguage}
+              placeholder="Select language"
+            />
+          )}
+          {isAttemptPage || isInQuestionPage ? (
+            <Button
+              className="btn-tertiary"
+              onClick={() => router.push(`/learner/${assignmentId}`)}
+            >
+              Return to Assignment Details
+            </Button>
+          ) : null}
+          {isInQuestionPage ? (
+            <div className="relative group">
+              <Button
+                disabled={buttonStatus.disabled}
+                className="disabled:opacity-70 btn-secondary"
+                onClick={CheckNoFlaggedQuestions}
+              >
+                {submitting && !gradingProgress.isOpen ? (
+                  <Spinner className="w-8" />
+                ) : (
+                  "Submit assignment"
+                )}
+              </Button>
+              {buttonStatus.reason && (
+                <div className="absolute top-full mt-2 left-1/8 transform -translate-x-1/4 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10">
+                  <div className="bg-gray-800 text-white text-sm rounded-md px-3 py-2 whitespace-nowrap">
+                    {buttonStatus.reason}
+                    <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-b-4 border-l-transparent border-r-transparent border-b-gray-800"></div>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : null}
+        </div>
 
-      {returnUrl && pathname.includes("successPage") ? (
-        <Link
-          href={returnUrl}
-          className="px-6 py-3 bg-violet-100 hover:bg-violet-200 text-violet-800 border rounded-md transition flex items-center gap-2"
-        >
-          Return to Course
-        </Link>
-      ) : null}
-      {/* Modal for confirming submission when there are flagged questions */}
-      <WarningAlert
-        isOpen={toggleWarning}
-        onClose={handleCloseModal}
-        onConfirm={handleConfirmSubmission}
-        description={`You have ${
-          toggleEmptyWarning ? "unanswered" : "flagged"
-        } questions. Are you sure you want to submit?`}
+        {returnUrl && pathname.includes("successPage") ? (
+          <Link
+            href={returnUrl}
+            className="px-6 py-3 bg-violet-100 hover:bg-violet-200 text-violet-800 border rounded-md transition flex items-center gap-2"
+          >
+            Return to Course
+          </Link>
+        ) : null}
+
+        <WarningAlert
+          isOpen={toggleWarning}
+          onClose={handleCloseModal}
+          onConfirm={handleConfirmSubmission}
+          description={`You have ${
+            toggleEmptyWarning ? "unanswered" : "flagged"
+          } questions. Are you sure you want to submit?`}
+        />
+      </header>
+
+      <GradingProgressModal
+        isOpen={gradingProgress.isOpen}
+        progress={gradingProgress.progress}
+        message={gradingProgress.message}
+        status={gradingProgress.status}
       />
-    </header>
+    </>
   );
 }
 

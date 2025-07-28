@@ -19,10 +19,8 @@ export class LocalizationService {
   ): string {
     const translations: Record<string, any> = {
       en: {
-        // General messages
         noResponse: "You did not provide a response to this question.",
 
-        // True/False messages
         expectedTrueFalse:
           "Expected a true/false response, but did not receive one.",
         invalidTrueFalse: "Invalid true/false response.",
@@ -31,7 +29,6 @@ export class LocalizationService {
         true: "True",
         false: "False",
 
-        // Choice selection messages
         correctSelection:
           "**Correct selection:** {learnerChoice} (+{points} points)",
         incorrectSelection:
@@ -133,7 +130,6 @@ export class LocalizationService {
         allCorrectSelected:
           "**Vous avez sélectionné toutes les options correctes !**",
       },
-      // Add more languages as needed
     };
 
     const langDict = (translations[language] || translations["en"]) as Record<
@@ -203,12 +199,10 @@ export class LocalizationService {
    * @returns Normalized text
    */
   normalizeText(text: string): string {
-    return (
-      text
-        .trim()
-        .toLowerCase()
-        // Remove common punctuation that might differ in translations
-        .replaceAll(/[!,.،؛؟]/g, "")
-    );
+    return text
+      .trim()
+      .toLowerCase()
+
+      .replaceAll(/[!,.،؛؟]/g, "");
   }
 }

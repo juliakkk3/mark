@@ -27,15 +27,15 @@ spec:
   {{- end }}
   tls:
   - hosts:
-    - "mark.{{ .Values.baseDomain }}"
-    - "mark-api.{{ .Values.baseDomain }}"
+    - "{{ .Release.Name }}.{{ .Values.baseDomain }}"
+    - "{{ .Release.Name }}-api.{{ .Values.baseDomain }}"
     {{- if .Values.ingress.tls.secretName }}
     secretName: {{ .Values.ingress.tls.secretName | quote }}
     {{- else }}
     secretName: "{{ $fullName }}-tls"
     {{- end }}
   rules:
-  - host: "mark.{{ .Values.baseDomain }}"
+  - host: "{{ .Release.Name }}.{{ .Values.baseDomain }}"
     http:
       paths:
       - path: "/"
@@ -46,13 +46,13 @@ spec:
           {{- if semverCompare ">=1.19-0" .Capabilities.KubeVersion.GitVersion }}
           service:
             name: {{ .Release.Name }}-ui
-            port: 
+            port:
               number: {{ .Values.ui.service.port }}
           {{- else }}
           serviceName: {{ .Release.Name }}-ui
           servicePort: {{ .Values.ui.service.port }}
           {{- end }}
-  - host: "mark-api.{{ .Values.baseDomain }}"
+  - host: "{{ .Release.Name }}-api.{{ .Values.baseDomain }}"
     http:
       paths:
       - path: "/"
@@ -69,7 +69,7 @@ spec:
           serviceName: {{ .Release.Name }}-api-gateway
           servicePort: {{ .Values.apiGateway.service.port }}
           {{- end }}
-  - host: "mark.{{ .Values.baseDomain }}"
+  - host: "{{ .Release.Name }}.{{ .Values.baseDomain }}"
     http:
       paths:
       - path: "/lti/1.1"
@@ -107,7 +107,7 @@ spec:
   ingressClassName: {{ .Values.privateIngress.className }}
 {{- end }}
   rules:
-  - host: "private-mark-api.{{ .Values.baseDomain }}"
+  - host: "private-{{ .Release.Name }}-api.{{ .Values.baseDomain }}"
     http:
       paths:
       - path: "/"

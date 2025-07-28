@@ -1,20 +1,16 @@
 import { QuestionType, ResponseType } from "@prisma/client";
-import { LearnerFileUpload } from "src/api/assignment/attempt/dto/assignment-attempt/types";
+import { ScoringDto } from "src/api/assignment/dto/update.questions.request.dto";
+import { LearnerFileUpload } from "src/api/attempt/common/interfaces/attempt.interface";
 import {
   BaseQuestionEvaluateModel,
   QuestionAnswerContext,
 } from "./base.question.evaluate.model";
-import { ScoringDto } from "src/api/assignment/dto/update.questions.request.dto";
 
 export class FileUploadQuestionEvaluateModel
   implements BaseQuestionEvaluateModel
 {
   readonly question: string;
-  readonly learnerResponse: {
-    filename: string;
-    content: string;
-    questionId: number;
-  }[];
+  readonly learnerResponse: LearnerFileUpload[];
   readonly totalPoints: number;
   readonly scoringCriteriaType: string;
   readonly scoringCriteria: ScoringDto;

@@ -19,8 +19,8 @@ describe("ApiController", () => {
         {
           provide: WINSTON_MODULE_PROVIDER,
           useValue: {
-            child: jest.fn().mockReturnValue({}), // assuming 'child' method returns an object in real implementation.
-          } as Partial<Logger>, // Partial<Logger> makes Logger optional, so that it's not necessary to implement every method of Logger.
+            child: jest.fn().mockReturnValue({}),
+          } as Partial<Logger>,
         },
       ],
     }).compile();

@@ -29,7 +29,6 @@ export class AttemptFeedbackService {
     feedbackDto: AssignmentFeedbackDto,
     userSession: UserSession,
   ): Promise<AssignmentFeedbackResponseDto> {
-    // Validate the attempt exists
     const assignmentAttempt = await this.prisma.assignmentAttempt.findUnique({
       where: { id: attemptId },
     });
@@ -40,21 +39,18 @@ export class AttemptFeedbackService {
       );
     }
 
-    // Ensure assignment ID matches
     if (assignmentAttempt.assignmentId !== assignmentId) {
       throw new BadRequestException(
         "Assignment ID does not match the attempt.",
       );
     }
 
-    // Ensure user has permission for this attempt
     if (assignmentAttempt.userId !== userSession.userId) {
       throw new ForbiddenException(
         "You do not have permission to submit feedback for this attempt.",
       );
     }
 
-    // Check for existing feedback
     const existingFeedback = await this.prisma.assignmentFeedback.findFirst({
       where: {
         assignmentId: assignmentId,
@@ -64,13 +60,16 @@ export class AttemptFeedbackService {
     });
 
     if (existingFeedback) {
-      // Update existing feedback
       const updatedFeedback = await this.prisma.assignmentFeedback.update({
         where: { id: existingFeedback.id },
         data: {
           comments: feedbackDto.comments,
           aiGradingRating: feedbackDto.aiGradingRating,
           assignmentRating: feedbackDto.assignmentRating,
+          allowContact: feedbackDto.allowContact,
+          firstName: feedbackDto.firstName,
+          lastName: feedbackDto.lastName,
+          email: feedbackDto.email,
           updatedAt: new Date(),
         },
       });
@@ -80,7 +79,6 @@ export class AttemptFeedbackService {
         id: updatedFeedback.id,
       };
     } else {
-      // Create new feedback
       const feedback = await this.prisma.assignmentFeedback.create({
         data: {
           assignmentId: assignmentId,
@@ -89,6 +87,10 @@ export class AttemptFeedbackService {
           comments: feedbackDto.comments,
           aiGradingRating: feedbackDto.aiGradingRating,
           assignmentRating: feedbackDto.assignmentRating,
+          allowContact: feedbackDto.allowContact,
+          firstName: feedbackDto.firstName,
+          lastName: feedbackDto.lastName,
+          email: feedbackDto.email,
         },
       });
 
@@ -120,7 +122,6 @@ export class AttemptFeedbackService {
     });
 
     if (!feedback) {
-      // Return empty feedback object if none exists
       return {
         comments: "",
         aiGradingRating: undefined,

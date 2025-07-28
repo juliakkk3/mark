@@ -17,12 +17,10 @@ export class CustomScoringValidator implements ValidatorConstraintInterface {
       arguments_.object as CreateUpdateQuestionRequestDto;
     const totalPoints = dto.totalPoints;
 
-    // No validation needed because scoring is not required for TRUE/FALSE questions
     if (dto.type === QuestionType.TRUE_FALSE) {
       return false;
     }
 
-    // Scoring cannot be null otherwise
     if (!scoring) {
       arguments_.constraints[0] = "Scoring cannot be null.";
       return false;
@@ -31,7 +29,6 @@ export class CustomScoringValidator implements ValidatorConstraintInterface {
     const scoringType: ScoringType = scoring.type;
     const rubrics = scoring.rubrics;
 
-    // Rubrics can't be null except for AI_GRADED and shouldn't be empty
     if (
       (rubrics === null && scoringType !== ScoringType.AI_GRADED) ||
       (rubrics !== null && rubrics.length === 0)

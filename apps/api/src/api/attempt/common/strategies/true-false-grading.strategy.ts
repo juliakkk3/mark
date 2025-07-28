@@ -1,8 +1,11 @@
 /* eslint-disable @typescript-eslint/require-await */
-import { Injectable, BadRequestException } from "@nestjs/common";
+import { BadRequestException, Injectable } from "@nestjs/common";
 import { CreateQuestionResponseAttemptRequestDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.request.dto";
 import { CreateQuestionResponseAttemptResponseDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.response.dto";
-import { QuestionDto } from "src/api/assignment/dto/update.questions.request.dto";
+import {
+  Choice,
+  QuestionDto,
+} from "src/api/assignment/dto/update.questions.request.dto";
 import { GradingAuditService } from "../../services/question-response/grading-audit.service";
 import { GradingContext } from "../interfaces/grading-context.interface";
 import { LocalizationService } from "../utils/localization.service";
@@ -24,7 +27,6 @@ export class TrueFalseGradingStrategy extends AbstractGradingStrategy<boolean> {
     question: QuestionDto,
     requestDto: CreateQuestionResponseAttemptRequestDto,
   ): Promise<boolean> {
-    // For true/false questions, we expect to have a boolean answer choice
     if (
       requestDto.learnerAnswerChoice === null &&
       requestDto.learnerAnswerChoice === undefined
@@ -37,7 +39,6 @@ export class TrueFalseGradingStrategy extends AbstractGradingStrategy<boolean> {
       );
     }
 
-    // If the learnerAnswerChoice is a string, try to parse it
     if (typeof requestDto.learnerAnswerChoice === "string") {
       const parsedChoice = this.parseBooleanResponse(
         requestDto.learnerAnswerChoice as string,
@@ -63,7 +64,6 @@ export class TrueFalseGradingStrategy extends AbstractGradingStrategy<boolean> {
   async extractLearnerResponse(
     requestDto: CreateQuestionResponseAttemptRequestDto,
   ): Promise<boolean> {
-    // Handle case where the answer might be a string
     if (typeof requestDto.learnerAnswerChoice === "string") {
       const parsedChoice = this.parseBooleanResponse(
         requestDto.learnerAnswerChoice,
@@ -75,7 +75,6 @@ export class TrueFalseGradingStrategy extends AbstractGradingStrategy<boolean> {
       }
     }
 
-    // Handle boolean value
     return Boolean(requestDto.learnerAnswerChoice);
   }
 
@@ -87,22 +86,28 @@ export class TrueFalseGradingStrategy extends AbstractGradingStrategy<boolean> {
     learnerResponse: boolean,
     context: GradingContext,
   ): Promise<CreateQuestionResponseAttemptResponseDto> {
-    // Determine if the answer is correct
-    const correctAnswer = question.answer;
-
+    const choices: Choice[] = Array.isArray(question.choices)
+      ? question.choices
+      : (JSON.parse(question.choices as unknown as string) as Choice[]);
+    const correctAnswer = choices[0]?.choice?.trim().toLowerCase() === "true";
+    if (correctAnswer === undefined) {
+      throw new BadRequestException(
+        this.localizationService.getLocalizedString(
+          "missingCorrectAnswer",
+          context.language,
+        ),
+      );
+    }
+    if (correctAnswer === undefined) {
+      throw new BadRequestException(
+        this.localizationService.getLocalizedString(
+          "missingCorrectAnswer",
+          context.language,
+        ),
+      );
+    }
     const isCorrect = learnerResponse === correctAnswer;
-    console.log(
-      "Grading TF question",
-      question.id,
-      "Learner response:",
-      learnerResponse,
-      "Correct answer:",
-      correctAnswer,
-      "Is correct:",
-      isCorrect,
-    );
 
-    // Generate feedback
     const feedback = isCorrect
       ? this.localizationService.getLocalizedString(
           "correctTF",
@@ -124,11 +129,9 @@ export class TrueFalseGradingStrategy extends AbstractGradingStrategy<boolean> {
           },
         );
 
-    // Calculate points
     const correctPoints = question.totalPoints || question.choices[0].points;
     const pointsAwarded = isCorrect ? correctPoints : 0;
 
-    // Create response DTO
     const responseDto = new CreateQuestionResponseAttemptResponseDto();
     responseDto.totalPoints = pointsAwarded;
     responseDto.feedback = [
@@ -138,7 +141,6 @@ export class TrueFalseGradingStrategy extends AbstractGradingStrategy<boolean> {
       },
     ];
 
-    // Add metadata for auditing
     responseDto.metadata = {
       isCorrect,
       learnerResponse,
@@ -192,7 +194,6 @@ export class TrueFalseGradingStrategy extends AbstractGradingStrategy<boolean> {
       ja: { 正しい: true, 間違い: false, はい: true, いいえ: false },
     };
 
-    // Add numeric string mappings for all languages
     for (const lang of Object.keys(mapping)) {
       mapping[lang]["1"] = true;
       mapping[lang]["0"] = false;

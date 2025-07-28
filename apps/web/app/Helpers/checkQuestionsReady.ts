@@ -10,7 +10,6 @@ import type {
 } from "../../config/types";
 import { useDebugLog } from "../../lib/utils";
 
-// Define types for validation errors and results.
 interface ValidationError {
   message: string;
   step: number;
@@ -35,45 +34,43 @@ export const useQuestionsAreReadyToBePublished = (
   const assignmentConfig = useAssignmentConfig((state) => state);
   const introduction = useAuthorStore((state) => state.introduction);
 
-  // Helper: Validate basic question fields.
   const validateBasicFields = (
     q: Question,
     index: number,
   ): ValidationError | null => {
     if (!q.question?.trim()) {
-      return { message: `Question ${index + 1} text is empty.`, step: 3 };
+      return { message: `Question ${index + 1} text is empty.`, step: 0 };
     }
     if (!q.type?.trim()) {
-      return { message: `Question ${index + 1} type is missing.`, step: 3 };
+      return { message: `Question ${index + 1} type is missing.`, step: 0 };
     }
     if (q.totalPoints == null) {
       return {
         message: `Question ${index + 1} total points are missing.`,
-        step: 3,
+        step: 0,
       };
     }
     if (q.assignmentId == null) {
       return {
         message: `Question ${index + 1} assignment ID is missing.`,
-        step: 3,
+        step: 0,
       };
     }
     return null;
   };
 
-  // Helper: Validate choices array.
   const validateChoices = (
     choices: Choice[] | undefined,
     index: number,
     type: QuestionType,
   ): ValidationError | null => {
     if (!choices || !Array.isArray(choices) || choices.length === 0) {
-      return { message: `Question ${index + 1} has no choices.`, step: 3 };
+      return { message: `Question ${index + 1} has no choices.`, step: 0 };
     }
     if (choiceTypes.has(type) && choices.length < 2) {
       return {
         message: `Question ${index + 1} must have at least 2 choices.`,
-        step: 3,
+        step: 0,
       };
     }
     for (let i = 0; i < choices.length; i++) {
@@ -81,7 +78,7 @@ export const useQuestionsAreReadyToBePublished = (
       if (!choiceText?.trim()) {
         return {
           message: `Question ${index + 1} has an empty choice text.`,
-          step: 3,
+          step: 0,
         };
       }
       if (
@@ -91,7 +88,7 @@ export const useQuestionsAreReadyToBePublished = (
       ) {
         return {
           message: `Question ${index + 1} has a choice with invalid points.`,
-          step: 3,
+          step: 0,
         };
       }
     }
@@ -101,14 +98,13 @@ export const useQuestionsAreReadyToBePublished = (
           message: `Question ${
             index + 1
           } must have at least one correct choice.`,
-          step: 3,
+          step: 0,
         };
       }
     }
     return null;
   };
 
-  // Helper: Validate scoring configuration (rubrics and criteria).
   const validateScoring = (
     scoring: Scoring | undefined,
     index: number,
@@ -116,7 +112,7 @@ export const useQuestionsAreReadyToBePublished = (
     if (!scoring) {
       return {
         message: `Question ${index + 1} requires scoring configuration.`,
-        step: 3,
+        step: 0,
       };
     }
     if (
@@ -126,7 +122,7 @@ export const useQuestionsAreReadyToBePublished = (
     ) {
       return {
         message: `Question ${index + 1} scoring rubrics are missing.`,
-        step: 3,
+        step: 0,
       };
     }
     for (let r = 0; r < scoring.rubrics.length; r++) {
@@ -134,7 +130,7 @@ export const useQuestionsAreReadyToBePublished = (
       if (!rubric?.rubricQuestion?.trim()) {
         return {
           message: `Question ${index + 1} rubric ${r + 1} question is empty.`,
-          step: 3,
+          step: 0,
         };
       }
       if (
@@ -146,7 +142,7 @@ export const useQuestionsAreReadyToBePublished = (
           message: `Question ${index + 1} rubric ${
             r + 1
           } criteria are missing.`,
-          step: 3,
+          step: 0,
         };
       }
       for (let c = 0; c < rubric.criteria.length; c++) {
@@ -156,7 +152,7 @@ export const useQuestionsAreReadyToBePublished = (
             message: `Question ${index + 1} rubric ${r + 1} criteria ${
               c + 1
             } description is empty.`,
-            step: 3,
+            step: 0,
           };
         }
         if (
@@ -168,7 +164,7 @@ export const useQuestionsAreReadyToBePublished = (
             message: `Question ${index + 1} rubric ${r + 1} criteria ${
               c + 1
             } points are invalid.`,
-            step: 3,
+            step: 0,
           };
         }
       }
@@ -176,7 +172,6 @@ export const useQuestionsAreReadyToBePublished = (
     return null;
   };
 
-  // Helper: Validate variants if present.
   const validateVariants = (
     variants: QuestionVariants[],
     qType: QuestionType,
@@ -187,7 +182,13 @@ export const useQuestionsAreReadyToBePublished = (
       if (!variant.variantContent?.trim()) {
         return {
           message: `Question ${index + 1} variant ${v + 1} content is empty.`,
-          step: 3,
+          step: 0,
+        };
+      }
+      if (variant.scoring === undefined && textTypes.has(qType)) {
+        return {
+          message: `Question ${index + 1} variant ${v + 1} scoring is required.`,
+          step: 0,
         };
       }
       if (variant.scoring && textTypes.has(qType)) {
@@ -205,15 +206,15 @@ export const useQuestionsAreReadyToBePublished = (
             message: `Question ${index + 1} variant ${
               v + 1
             } choices are not in the correct format.`,
-            step: 3,
+            step: 0,
           };
         }
-        if (qType === "TRUE_FALSE" && variant.choices.length !== 2) {
+        if (qType === "TRUE_FALSE" && variant.choices.length !== 1) {
           return {
             message: `Question ${index + 1} variant ${
               v + 1
             } must have exactly 1 choices.`,
-            step: 3,
+            step: 0,
           };
         }
         const choiceError = validateChoices(variant.choices, index, qType);
@@ -232,7 +233,7 @@ export const useQuestionsAreReadyToBePublished = (
     let invalidQuestionId: number | null = null;
     const textTypes = new Set(["TEXT", "URL", "UPLOAD", "LINK_FILE"]);
     const choiceTypes = new Set(["SINGLE_CORRECT", "MULTIPLE_CORRECT"]);
-    // Loop through each question and validate.
+
     for (let i = 0; i < questions.length; i++) {
       const q = questions[i];
       debugLog(`Checking question ${i + 1}:`, q);
@@ -282,18 +283,17 @@ export const useQuestionsAreReadyToBePublished = (
       debugLog(`Question ${i + 1} passed all checks.`);
     }
 
-    // Global assignment checks.
     if (isValid) {
       if (!introduction?.trim() || introduction.trim() === "<p><br></p>") {
         message = `Introduction is empty.`;
         debugLog(message);
-        step = 1;
+        step = 3;
         isValid = false;
       }
       if (assignmentConfig.graded === null) {
         message = `Assignment type is required.`;
         debugLog(message);
-        step = 2;
+        step = 1;
         isValid = false;
       }
       if (
@@ -302,7 +302,7 @@ export const useQuestionsAreReadyToBePublished = (
       ) {
         message = `Please enter a valid number of attempts.`;
         debugLog(message);
-        step = 2;
+        step = 1;
         isValid = false;
       }
       if (
@@ -312,19 +312,22 @@ export const useQuestionsAreReadyToBePublished = (
       ) {
         message = `Passing grade must be between 1 and 100.`;
         debugLog(message);
-        step = 2;
+        step = 1;
         isValid = false;
       }
-      if (!assignmentConfig.displayOrder) {
+      if (
+        !assignmentConfig.displayOrder &&
+        assignmentConfig.numberOfQuestionsPerAttempt === null
+      ) {
         message = `Question order is required.`;
         debugLog(message);
-        step = 2;
+        step = 1;
         isValid = false;
       }
       if (!assignmentConfig.questionDisplay) {
         message = `Question display type is required.`;
         debugLog(message);
-        step = 2;
+        step = 1;
         isValid = false;
       }
     }

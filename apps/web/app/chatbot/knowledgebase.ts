@@ -1,4 +1,3 @@
-// knowledgeBase.ts
 import Fuse from "fuse.js";
 
 export interface KnowledgeBaseItem {

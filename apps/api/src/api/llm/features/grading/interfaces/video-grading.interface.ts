@@ -1,5 +1,3 @@
-// src/llm/features/grading/interfaces/video-presentation-grading.interface.ts
-
 import { VideoPresentationQuestionEvaluateModel } from "src/api/llm/model/video-presentation.question.evaluate.model";
 import { VideoPresentationQuestionResponseModel } from "src/api/llm/model/video-presentation.question.response.model";
 

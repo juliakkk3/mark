@@ -39,14 +39,12 @@ export class TranslationService {
     },
     language?: string,
   ): Promise<Map<number, QuestionDto>> {
-    // If no language is specified or it's English, no need to translate
     if (!language || language === "en") {
       return new Map<number, QuestionDto>();
     }
 
     const preTranslatedQuestions = new Map<number, QuestionDto>();
 
-    // Process each question response
     for (const response of responsesForQuestions) {
       const questionId: number = response.id;
       const variantMapping = assignmentAttempt.questionVariants.find(
@@ -55,13 +53,11 @@ export class TranslationService {
 
       let question: QuestionDto;
 
-      // Get the question with or without variant
       question = await (variantMapping &&
       variantMapping.questionVariant !== null
         ? this.getQuestionFromVariant(variantMapping)
         : this.questionService.findOne(questionId));
 
-      // Apply translation
       question = await this.applyTranslationToQuestion(
         question,
         language,
@@ -86,13 +82,11 @@ export class TranslationService {
     },
     assignmentQuestions: QuestionDto[],
   ): Promise<Map<string, Record<string, TranslatedContent>>> {
-    // Get IDs for questions and variants
     const questionIds = assignmentQuestions.map((q) => q.id);
     const variantIds = assignmentAttempt.questionVariants
       .map((qv) => qv.questionVariant?.id)
       .filter((id) => id !== undefined);
 
-    // Build query conditions
     const conditions = [];
     if (questionIds.length > 0) {
       conditions.push({ questionId: { in: questionIds } });
@@ -101,12 +95,10 @@ export class TranslationService {
       conditions.push({ variantId: { in: variantIds } });
     }
 
-    // If no questions or variants, return empty map
     if (conditions.length === 0) {
       return new Map();
     }
 
-    // Fetch all translations
     const translations = await this.prisma.translation.findMany({
       where: {
         OR: [
@@ -116,7 +108,6 @@ export class TranslationService {
       },
     });
 
-    // Build translation map for lookup
     const translationMap = new Map<string, Record<string, any>>();
 
     for (const t of translations) {
@@ -158,7 +149,6 @@ export class TranslationService {
 
     let translation: Translation | null = null;
 
-    // If there's a variant, try to fetch translation for the variant first
     if (
       variantMapping &&
       variantMapping.questionVariant !== null &&
@@ -172,7 +162,6 @@ export class TranslationService {
         },
       });
 
-      // If no variant translation, fall back to base question translation
       if (!translation) {
         translation = await this.prisma.translation.findFirst({
           where: {
@@ -183,7 +172,6 @@ export class TranslationService {
         });
       }
     } else {
-      // No variant, just get translation for the base question
       translation = await this.prisma.translation.findFirst({
         where: {
           questionId: question.id,
@@ -193,7 +181,6 @@ export class TranslationService {
       });
     }
 
-    // Apply translation if found
     if (translation) {
       question.question = translation.translatedText;
 
@@ -204,7 +191,7 @@ export class TranslationService {
               translation.translatedChoices,
             ) as Choice[];
           } catch {
-            question.choices = []; // Default to empty array on failure
+            question.choices = [];
           }
         } else if (Array.isArray(translation.translatedChoices)) {
           question.choices =
@@ -225,7 +212,7 @@ export class TranslationService {
     variantMapping: VariantMapping,
   ): Promise<QuestionDto> {
     const variant = variantMapping.questionVariant;
-    // Fetch the base question using questionId
+
     const baseQuestion = await this.questionService.findOne(variant.questionId);
 
     return {
@@ -260,7 +247,7 @@ export class TranslationService {
       } catch (error: unknown) {
         const errorMessage =
           error instanceof Error ? error.message : "Unknown error";
-        console.error(`Error parsing JSON field: ${errorMessage}`);
+
         return null;
       }
     }

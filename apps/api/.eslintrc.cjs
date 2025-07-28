@@ -17,6 +17,7 @@ module.exports = {
   rules: {
     "unicorn/prefer-top-level-await": "off",
     'unicorn/no-nested-ternary': 'off',
+    "unicorn/no-abusive-eslint-disable": "off",
     "unicorn/prevent-abbreviations": [
       "error",
       {

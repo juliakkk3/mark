@@ -1,21 +1,19 @@
-// src/llm/features/grading/services/url-grading.service.ts
-import { Injectable, Inject, HttpException, HttpStatus } from "@nestjs/common";
-import { AIUsageType } from "@prisma/client";
 import { PromptTemplate } from "@langchain/core/prompts";
+import { HttpException, HttpStatus, Inject, Injectable } from "@nestjs/common";
+import { AIUsageType } from "@prisma/client";
 import { StructuredOutputParser } from "langchain/output_parsers";
-import { z } from "zod";
-
-import {
-  PROMPT_PROCESSOR,
-  MODERATION_SERVICE,
-  RESPONSE_TYPE_SPECIFIC_INSTRUCTIONS,
-} from "../../../llm.constants";
-import { IPromptProcessor } from "../../../core/interfaces/prompt-processor.interface";
-import { IModerationService } from "../../../core/interfaces/moderation.interface";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { UrlBasedQuestionEvaluateModel } from "src/api/llm/model/url.based.question.evaluate.model";
 import { UrlBasedQuestionResponseModel } from "src/api/llm/model/url.based.question.response.model";
 import { Logger } from "winston";
+import { z } from "zod";
+import { IModerationService } from "../../../core/interfaces/moderation.interface";
+import { IPromptProcessor } from "../../../core/interfaces/prompt-processor.interface";
+import {
+  MODERATION_SERVICE,
+  PROMPT_PROCESSOR,
+  RESPONSE_TYPE_SPECIFIC_INSTRUCTIONS,
+} from "../../../llm.constants";
 import { IUrlGradingService } from "../interfaces/url-grading.interface";
 
 @Injectable()
@@ -53,7 +51,6 @@ export class UrlGradingService implements IUrlGradingService {
       responseType,
     } = urlBasedQuestionEvaluateModel;
 
-    // Validate the learner's response
     const validateLearnerResponse =
       await this.moderationService.validateContent(urlProvided);
     if (!validateLearnerResponse) {
@@ -63,25 +60,22 @@ export class UrlGradingService implements IUrlGradingService {
       );
     }
 
-    // Define output schema
     const parser = StructuredOutputParser.fromZodSchema(
       z.object({
         points: z.number().describe("Points awarded based on the criteria"),
         feedback: z
           .string()
           .describe(
-            "Feedback for the learner based on their response to the criteria",
+            "Feedback for the learner based on their response to the criteria, the feedback should include detailed explanation why you chose to provide the points you did",
           ),
       }),
     );
 
     const formatInstructions = parser.getFormatInstructions();
 
-    // Add response-specific instructions
     const responseSpecificInstruction: string =
       (RESPONSE_TYPE_SPECIFIC_INSTRUCTIONS[responseType] as string) ?? "";
 
-    // Create the prompt
     const prompt = new PromptTemplate({
       template: this.loadUrlGradingTemplate(),
       inputVariables: [],
@@ -104,7 +98,6 @@ export class UrlGradingService implements IUrlGradingService {
       },
     });
 
-    // Process the prompt through the LLM
     const response = await this.promptProcessor.processPrompt(
       prompt,
       assignmentId,
@@ -112,12 +105,13 @@ export class UrlGradingService implements IUrlGradingService {
     );
 
     try {
-      // Parse the response into the expected output format
       const urlBasedQuestionResponseModel = await parser.parse(response);
       return urlBasedQuestionResponseModel as UrlBasedQuestionResponseModel;
     } catch (error) {
       this.logger.error(
-        `Error parsing LLM response: ${error instanceof Error ? error.message : "Unknown error"}`,
+        `Error parsing LLM response: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`,
       );
       throw new HttpException(
         "Failed to parse grading response",
@@ -161,8 +155,9 @@ export class UrlGradingService implements IUrlGradingService {
     1. Carefully evaluate the URL submission against the scoring criteria.
     2. Consider the URL's relevance, functionality, and content quality.
     3. Award points based on how well the submission meets the criteria.
-    4. Provide detailed, constructive feedback that explains your evaluation.
-    5. Suggest improvements for any issues identified.
+    4. Provide detailed feedback that explains your evaluation and why you awarded the specific points.
+    5. Include specific examples from the URL content that influenced your grading.
+    6. Suggest improvements for any issues identified.
     
     LANGUAGE: {language}
     

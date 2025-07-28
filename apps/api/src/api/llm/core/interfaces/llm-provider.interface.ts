@@ -1,9 +1,10 @@
 import { AIMessage, HumanMessage } from "@langchain/core/messages";
-// src/llm/core/interfaces/llm-provider.interface.ts
+
 export interface LlmRequestOptions {
   temperature?: number;
   maxTokens?: number;
   modelName?: string;
+  imageDetail?: "auto" | "low" | "high";
 }
 
 export interface LlmResponse {

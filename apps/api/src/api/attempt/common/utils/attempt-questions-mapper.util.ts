@@ -6,7 +6,8 @@ import {
   ResponseType,
   Translation,
 } from "@prisma/client";
-import { PrismaService } from "../../../../prisma.service";
+import { JsonValue } from "@prisma/client/runtime/library";
+import { AssignmentAttemptQuestions } from "src/api/assignment/attempt/dto/assignment-attempt/get.assignment.attempt.response.dto";
 import {
   AttemptQuestionDto,
   Choice,
@@ -14,8 +15,7 @@ import {
   UpdateAssignmentQuestionsDto,
   VideoPresentationConfig,
 } from "src/api/assignment/dto/update.questions.request.dto";
-import { AssignmentAttemptQuestions } from "src/api/assignment/attempt/dto/assignment-attempt/get.assignment.attempt.response.dto";
-import { JsonValue } from "@prisma/client/runtime/library";
+import { PrismaService } from "../../../../prisma.service";
 
 /**
  * Extended Choice type to include optional id property
@@ -116,19 +116,16 @@ export class AttemptQuestionsMapper {
     prisma: PrismaService,
     language?: string,
   ): Promise<AssignmentAttemptQuestions[]> {
-    // Determine question order
     const questionOrder: number[] = assignmentAttempt.questionOrder?.length
       ? assignmentAttempt.questionOrder
       : assignment.questionOrder?.length
         ? assignment.questionOrder
         : questions.map((q) => q.id);
 
-    // Create a map for quick question lookup
     const questionById = new Map<number, EnhancedAttemptQuestionDto>(
       questions.map((q) => [q.id, q]),
     );
 
-    // Process question variants
     const questionVariantsArray = assignmentAttempt.questionVariants ?? [];
     const questionsWithVariants = questionVariantsArray
       .map((qv) => {
@@ -139,7 +136,6 @@ export class AttemptQuestionsMapper {
           return null;
         }
 
-        // Merge variant data with original question
         const questionText = variant?.variantContent ?? originalQ.question;
         const scoring = variant?.scoring ?? originalQ.scoring;
         const maxWords = variant?.maxWords ?? originalQ.maxWords;
@@ -171,12 +167,10 @@ export class AttemptQuestionsMapper {
       })
       .filter((q): q is EnhancedAttemptQuestionDto => q !== null);
 
-    // Build a map of questions with their variants
     const questionVariantsMap = new Map<number, EnhancedAttemptQuestionDto>(
       questionsWithVariants.map((question) => [question.id, question]),
     );
 
-    // Merge original questions with their variants
     const mergedQuestions = questions.map((originalQ) => {
       const variantQ = questionVariantsMap.get(originalQ.id);
       if (variantQ) {
@@ -185,24 +179,22 @@ export class AttemptQuestionsMapper {
       return { ...originalQ, variantId: undefined };
     });
 
-    // Add responses to questions
     const questionsWithResponses = this.constructQuestionsWithResponses(
       mergedQuestions,
       assignmentAttempt.questionResponses,
     );
 
-    // Order questions according to the determined order
     const finalQuestions = questionOrder
       .map((qId) => questionsWithResponses.find((q) => q.id === qId))
       .filter((q): q is AssignmentAttemptQuestions => q !== undefined);
 
-    // Apply translations if needed
     if (language && language !== "en") {
       await this.applyTranslations(finalQuestions, prisma, language);
     }
 
     return finalQuestions;
-  } /**
+  }
+  /**
    * Build questions with translations for an assignment attempt
    *
    * @param assignmentAttempt - The assignment attempt with its relations
@@ -218,14 +210,11 @@ export class AttemptQuestionsMapper {
     translations: Map<string, Record<string, TranslatedContent>>,
     language: string,
   ): Promise<EnhancedAttemptQuestionDto[]> {
-    // Get question order from attempt or assignment
     const questionOrder =
       assignmentAttempt.questionOrder || assignment.questionOrder || [];
 
-    // Get question variants from the attempt
     const questionVariantsArray = assignmentAttempt.questionVariants ?? [];
 
-    // Process each question with its variant (if any)
     const processedQuestions = questionVariantsArray
       .map((qv) => {
         const variant = qv.questionVariant;
@@ -235,17 +224,14 @@ export class AttemptQuestionsMapper {
 
         if (!originalQ) return null;
 
-        // Determine which translation to use
         const variantKey = `variant-${variant?.id}`;
         const questionKey = `question-${qv.questionId}`;
 
-        // Get variant translations if available
         const variantTranslations =
           variant && translations.has(variantKey)
             ? translations.get(variantKey) || {}
             : {};
 
-        // Get question translations if no variant or if we want to include both
         const questionTranslations = translations.has(questionKey)
           ? translations.get(questionKey) || {}
           : {};
@@ -268,34 +254,32 @@ export class AttemptQuestionsMapper {
           })(),
         };
 
-        // Get the translation for the requested language, prioritizing variant translations
         const variantTranslation = variantTranslations[language];
         const questionTranslation = questionTranslations[language];
         const primaryTranslation =
           variantTranslation || questionTranslation || translationFallback;
 
-        // Process choices with randomization if needed
         const baseChoices = this.parseChoices(
           variant ? variant.choices || originalQ.choices : originalQ.choices,
         );
 
         let finalChoices = baseChoices || [];
 
-        // Apply choice reordering if randomized
         if (qv.randomizedChoices) {
           const randomizedChoicesArray = this.parseChoices(
             qv.randomizedChoices,
           );
 
-          // Create a permutation map to reorder choices
-          const permutation = randomizedChoicesArray.map((rChoice) => {
-            if (rChoice.id !== undefined) {
-              return baseChoices.findIndex((bc) => bc.id === rChoice.id);
-            }
-            return baseChoices.findIndex((bc) => bc.choice === rChoice.choice);
-          });
+          const permutation = randomizedChoicesArray
+            .map((rc) => {
+              const index =
+                rc.id === undefined
+                  ? baseChoices.findIndex((bc) => bc.choice === rc.choice)
+                  : baseChoices.findIndex((bc) => bc.id === rc.id);
+              return index;
+            })
+            .filter((index) => index !== -1);
 
-          // Apply permutation to base choices
           const orderedBaseChoices = permutation.map(
             (index) => baseChoices[index],
           );
@@ -304,7 +288,6 @@ export class AttemptQuestionsMapper {
             finalChoices = orderedBaseChoices;
           }
 
-          // Also apply permutation to translated choices
           this.reorderTranslatedChoices(
             variantTranslations,
             permutation,
@@ -333,16 +316,14 @@ export class AttemptQuestionsMapper {
               ),
         );
 
-        // Also sanitize choices in all translations
         const sanitizedTranslations =
           this.sanitizeTranslationsChoices(mergedTranslations);
 
-        // Construct the final question object
         return {
           id: originalQ.id,
           question: primaryTranslation.translatedText || originalQ.question,
           choices: sanitizedChoices,
-          translations: sanitizedTranslations, // Use sanitized merged translations
+          translations: sanitizedTranslations,
           maxWords: variant?.maxWords ?? originalQ?.maxWords,
           maxCharacters: variant?.maxCharacters ?? originalQ?.maxCharacters,
           scoring:
@@ -361,7 +342,6 @@ export class AttemptQuestionsMapper {
       })
       .filter((q): q is EnhancedAttemptQuestionDto => q !== null);
 
-    // Add questions that don't have variants
     const questionsWithoutVariants = assignment.questions
       .filter(
         (q) => !questionVariantsArray.some((qv) => qv.questionId === q.id),
@@ -374,14 +354,12 @@ export class AttemptQuestionsMapper {
 
         const translationForLanguage = questionTranslations[language];
 
-        // Sanitize choices for this question too
         const sanitizedChoices = this.sanitizeChoicesForDisplay(
           translationForLanguage?.translatedChoices
             ? this.parseChoices(translationForLanguage.translatedChoices)
             : this.parseChoices(originalQ.choices),
         );
 
-        // Sanitize translations
         const sanitizedTranslations =
           this.sanitizeTranslationsChoices(questionTranslations);
 
@@ -390,7 +368,7 @@ export class AttemptQuestionsMapper {
           question:
             translationForLanguage?.translatedText || originalQ.question,
           choices: sanitizedChoices,
-          translations: sanitizedTranslations, // Sanitized translations
+          translations: sanitizedTranslations,
           maxWords: originalQ.maxWords,
           maxCharacters: originalQ.maxCharacters,
           scoring: originalQ.scoring,
@@ -407,10 +385,8 @@ export class AttemptQuestionsMapper {
         } as unknown as EnhancedAttemptQuestionDto;
       });
 
-    // Combine all questions
     const allQuestions = [...processedQuestions, ...questionsWithoutVariants];
 
-    // Order questions according to questionOrder if specified
     const finalQuestions =
       questionOrder.length > 0
         ? questionOrder
@@ -427,18 +403,17 @@ export class AttemptQuestionsMapper {
    * @param choices - The original choices array
    * @returns A new array with only id and choice properties
    */
-  private static sanitizeChoicesForDisplay(choices: Choice[]): {
-    id: number | null;
-    choice: string;
-  }[] {
-    if (!choices || typeof choices === "string") {
-      return [];
-    }
+  private static sanitizeChoicesForDisplay(
+    choices: Choice[] | undefined | null | string,
+  ): { id: number | null; choice: string }[] {
+    if (!choices || typeof choices === "string") return [];
 
-    return choices.map((choice) => ({
-      id: choice.id === undefined ? null : choice.id,
-      choice: choice.choice,
-    }));
+    return choices
+      .filter((c): c is Choice => !!c && typeof c.choice === "string")
+      .map((c) => ({
+        id: c.id === undefined ? null : c.id,
+        choice: c.choice,
+      }));
   }
 
   /**
@@ -476,7 +451,6 @@ export class AttemptQuestionsMapper {
     questionResponses: QuestionResponse[],
   ): AssignmentAttemptQuestions[] {
     return questions.map((question) => {
-      // Find responses for this question
       const correspondingResponses = questionResponses
         .filter((response) => response.questionId === question.id)
         .map((response) => ({
@@ -491,7 +465,6 @@ export class AttemptQuestionsMapper {
           gradedAt: null,
         }));
 
-      // Parse choices if they are in string format
       const choices = this.parseChoices(question.choices);
 
       return {
@@ -560,13 +533,20 @@ export class AttemptQuestionsMapper {
 
     if (typeof choices === "string") {
       try {
-        return JSON.parse(choices) as ExtendedChoice[];
+        choices = JSON.parse(choices);
       } catch {
         return [];
       }
     }
 
-    return Array.isArray(choices) ? (choices as ExtendedChoice[]) : [];
+    if (Array.isArray(choices)) {
+      return choices as ExtendedChoice[];
+    }
+
+    if (typeof choices === "object" && choices !== null) {
+      return Object.values(choices) as ExtendedChoice[];
+    }
+    return [];
   }
 
   /**
@@ -610,7 +590,7 @@ export class AttemptQuestionsMapper {
         const reorderedTranslatedChoices = permutation.map(
           (index) => origTranslatedChoices[index],
         );
-        // Don't stringify, keep as array
+
         translationObject.translatedChoices = reorderedTranslatedChoices;
       }
     }

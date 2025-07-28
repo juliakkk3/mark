@@ -1,10 +1,14 @@
 import {
   HttpException,
   HttpStatus,
+  Inject,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { Prisma, } from "@prisma/client";
+import { Prisma } from "@prisma/client";
+import { WINSTON_MODULE_PROVIDER } from "nest-winston";
+import { LlmFacadeService } from "src/api/llm/llm-facade.service";
+import { Logger } from "winston";
 import { PrismaService } from "../../../prisma.service";
 import { LearnerLiveRecordingFeedback } from "../attempt/dto/assignment-attempt/types";
 import {
@@ -15,14 +19,19 @@ import {
 } from "../dto/update.questions.request.dto";
 import { BaseQuestionResponseDto } from "./dto/base.question.response.dto";
 import { CreateUpdateQuestionRequestDto } from "./dto/create.update.question.request.dto";
-import { LlmFacadeService } from "src/api/llm/llm-facade.service";
 
 @Injectable()
 export class QuestionService {
+  private logger: Logger;
   constructor(
     private readonly prisma: PrismaService,
     private readonly llmFacadeService: LlmFacadeService,
-  ) {}
+    @Inject(WINSTON_MODULE_PROVIDER) private parentLogger: Logger,
+  ) {
+    this.logger = parentLogger.child({
+      context: "QuestionService",
+    });
+  }
 
   async create(
     assignmentId: number,
@@ -37,13 +46,16 @@ export class QuestionService {
           JSON.stringify(createQuestionRequestDto.choices),
         ) as Prisma.InputJsonValue)
       : Prisma.JsonNull;
+
+    const dataToSave = {
+      assignmentId: assignmentId,
+      ...createQuestionRequestDto,
+      scoring,
+      choices,
+    };
+
     const result = await this.prisma.question.create({
-      data: {
-        assignmentId: assignmentId,
-        ...createQuestionRequestDto,
-        scoring,
-        choices,
-      },
+      data: dataToSave,
     });
 
     return {
@@ -221,7 +233,6 @@ export class QuestionService {
       assignmentId,
     );
 
-    // Return structured object
     return { feedback };
   }
   /**
@@ -273,8 +284,6 @@ export class QuestionService {
       }
     }
 
-    // 3. If we reach here, we need to generate a new translation
-    //    (either it never existed or it was deleted due to text changes).
     const translatedQuestion =
       await this.llmFacadeService.generateQuestionTranslation(
         assignmentId,
@@ -282,32 +291,18 @@ export class QuestionService {
         language,
       );
 
-    // If needed, you can uncomment and handle choices as well:
-    // let translatedChoices: Choice[] | undefined;
-    // if (question.choices) {
-    //   translatedChoices = await this.llmFacadeService.generateChoicesTranslation(
-    //     question.choices as unknown as Choice[],
-    //     language
-    //   );
-    // }
-
-    // 4. Save the new translation
     await this.prisma.translation.create({
       data: {
         questionId,
-        variantId: undefined, // Because this translation is for the question itself
+        variantId: undefined,
         languageCode,
         translatedText: translatedQuestion,
         untranslatedText: question.question,
-        // translatedChoices: translatedChoices
-        //   ? (translatedChoices as unknown as Prisma.JsonValue)
-        //   : undefined,
       },
     });
 
     return {
       translatedQuestion,
-      // translatedChoices
     };
   }
 

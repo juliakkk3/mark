@@ -51,7 +51,6 @@ export class QuestionRepository {
         },
       });
 
-      // Parse JSON fields and map to DTOs
       return questions.map((question) => this.mapToQuestionDto(question));
     } catch (error: unknown) {
       const errorMessage =
@@ -78,7 +77,6 @@ export class QuestionRepository {
         throw new Error("Question ID is required for upsert operation");
       }
 
-      // Convert DTO to appropriate Prisma types
       const updateData: Prisma.QuestionUpdateInput = {
         totalPoints: questionData.totalPoints,
         type: questionData.type,
@@ -121,12 +119,13 @@ export class QuestionRepository {
           : undefined,
       };
 
-      // Handle upsert operation with properly typed data
-      return this.prisma.question.upsert({
+      const returnValue = await this.prisma.question.upsert({
         where: { id },
         update: updateData,
         create: createData,
       });
+      // Handle upsert operation with properly typed data
+      return returnValue;
     } catch (error: unknown) {
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error";
@@ -172,7 +171,6 @@ export class QuestionRepository {
    */
   async createMany(questions: QuestionDto[]): Promise<Question[]> {
     try {
-      // Use a transaction to ensure all questions are created together
       return await this.prisma.$transaction(
         questions.map((questionData) => {
           const {
@@ -191,14 +189,12 @@ export class QuestionRepository {
             translations,
           } = questionData;
 
-          // Prepare JSON fields
           const choices = this.prepareJsonField(questionData.choices);
           const scoring = this.prepareJsonField(questionData.scoring);
           const videoPresentationConfig = this.prepareJsonField(
             questionData.videoPresentationConfig,
           );
 
-          // Define translations properly for Prisma
           const translationsData =
             translations && Array.isArray(translations)
               ? {
@@ -224,7 +220,6 @@ export class QuestionRepository {
                 }
               : undefined;
 
-          // Create question with type-safe input
           const data: Prisma.QuestionCreateInput = {
             totalPoints,
             type,
@@ -269,7 +264,6 @@ export class QuestionRepository {
     question: Question & { variants?: QuestionVariant[] },
   ): QuestionDto {
     try {
-      // Process variants if they exist
       const processedVariants: VariantDto[] = question.variants
         ? question.variants.map((variant) => {
             return {
@@ -280,7 +274,6 @@ export class QuestionRepository {
           })
         : [];
 
-      // Create the DTO with parsed data
       return {
         ...question,
         choices: this.parseJsonField<Choice[]>(question.choices),
@@ -300,7 +293,6 @@ export class QuestionRepository {
         errorStack,
       );
 
-      // Return a basic version instead of throwing
       return {
         ...question,
         variants: [],
@@ -324,12 +316,10 @@ export class QuestionRepository {
       try {
         return JSON.parse(field) as T;
       } catch {
-        // If parsing fails, return undefined (or could return the original string if appropriate)
         return undefined;
       }
     }
 
-    // For objects and other non-string types, return as is
     return field as T;
   }
 
@@ -380,16 +370,13 @@ export class QuestionRepository {
 
     if (typeof field === "string") {
       try {
-        // Check if it's already valid JSON
         JSON.parse(field);
         return field as Prisma.JsonValue;
       } catch {
-        // If it's not valid JSON, stringify it
         return JSON.stringify(field) as Prisma.JsonValue;
       }
     }
 
-    // For objects, arrays, and other types, stringify them properly
     return JSON.stringify(field) as Prisma.JsonValue;
   }
 }

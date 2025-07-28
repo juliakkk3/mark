@@ -66,14 +66,12 @@ export class GithubService {
     const data: GitHubTokenResponse =
       (await response.json()) as GitHubTokenResponse;
     if (!response.ok) {
-      console.error("GitHub Response:", data);
       throw new BadRequestException(
         data.error || "Failed to retrieve GitHub access token",
       );
     }
 
     if (!data.access_token) {
-      console.error("GitHub Token Error:", data);
       throw new BadRequestException(
         data.error || "Access token not returned from GitHub",
       );
@@ -82,7 +80,7 @@ export class GithubService {
       if (!userId) {
         throw new BadRequestException("User ID is required");
       }
-      // check if userCredential exists
+
       const userCredential = await this.prisma.userCredential.findUnique({
         where: {
           userId,
@@ -103,8 +101,7 @@ export class GithubService {
               githubToken: data.access_token,
             },
           }));
-    } catch (prismaError) {
-      console.error("Prisma error:", prismaError);
+    } catch {
       throw new HttpException(
         "Database error",
         HttpStatus.INTERNAL_SERVER_ERROR,

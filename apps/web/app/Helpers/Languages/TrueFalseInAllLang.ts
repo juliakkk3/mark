@@ -1,4 +1,3 @@
-// Object mapping language codes to their True/False translations.
 export const trueFalseTranslations: Record<
   string,
   { true: string; false: string }

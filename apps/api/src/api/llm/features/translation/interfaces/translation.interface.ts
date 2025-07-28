@@ -1,11 +1,10 @@
-// src/llm/features/translation/interfaces/translation.interface.ts
 import { Choice } from "../../../../assignment/dto/update.questions.request.dto";
 
 export interface ITranslationService {
   /**
    * Detect the language of text
    */
-  // This code block has been revised ✅
+
   getLanguageCode(text: string): Promise<string>;
 
   /**

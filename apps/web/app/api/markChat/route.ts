@@ -1,4 +1,3 @@
-// Import function handlers from your existing code
 import { searchKnowledgeBase } from "@/app/chatbot/lib/markChatFunctions";
 /* eslint-disable */ import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
@@ -10,7 +9,6 @@ const client = new OpenAI({
   dangerouslyAllowBrowser: true,
 });
 
-// Define tools for the AI model using Zod schemas
 const commonTools = {
   searchKnowledgeBase: {
     description:
@@ -24,7 +22,6 @@ const commonTools = {
       try {
         return await searchKnowledgeBase(query);
       } catch (error) {
-        console.error("Error searching knowledge base:", error);
         return "I couldn't search the knowledge base due to an error. Please try again.";
       }
     },
@@ -46,7 +43,6 @@ const commonTools = {
     execute: async ({ issueType, description, assignmentId }) => {
       try {
       } catch (error) {
-        console.error("Error reporting issue:", error);
         return "I couldn't report the issue due to an error. Please try again.";
       }
     },
@@ -65,7 +61,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Enhanced system prompts with role-specific instructions
     const systemPrompts = {
       author: `You are Mark, an AI assistant for assignment authors on an educational platform. Follow these rules:
 1. Focus on helping authors create high-quality educational content and assessments
@@ -91,17 +86,14 @@ IMPORTANT CAPABILITIES:
 - You have access to the current assignment context including questions, responses, and feedback`,
     };
 
-    // Extract any system context messages for additional information
     const systemContextMessages = conversation.filter(
       (msg: any) => msg.role === "system" && msg.id?.includes("context"),
     );
 
-    // Regular conversation messages (exclude system context)
     const regularMessages = conversation.filter(
       (msg: any) => msg.role !== "system" || !msg.id?.includes("context"),
     );
 
-    // Prepare messages for OpenAI
     const messages = [
       {
         role: "system",
@@ -119,7 +111,6 @@ IMPORTANT CAPABILITIES:
       { role: "user", content: userText },
     ];
 
-    // Prepare tools based on user role
     const tools =
       userRole === "learner"
         ? [
@@ -387,7 +378,6 @@ IMPORTANT CAPABILITIES:
             },
           ];
 
-    // Use the chat completions method
     const response = await client.chat.completions.create({
       model: "gpt-4o-mini",
       messages,
@@ -402,7 +392,6 @@ IMPORTANT CAPABILITIES:
       return NextResponse.json({ reply: "No response from AI." });
     }
 
-    // Handle function calls
     if (choice.finish_reason === "tool_calls") {
       const toolCalls = choice.message.tool_calls;
       if (toolCalls) {
@@ -411,7 +400,6 @@ IMPORTANT CAPABILITIES:
             const functionName = toolCall.function.name;
             const args = JSON.parse(toolCall.function.arguments);
             try {
-              // Dynamically call the appropriate function based on the tool name
               const result =
                 (await commonTools[functionName]?.execute(args)) ||
                 (await (userRole === "learner"
@@ -424,7 +412,6 @@ IMPORTANT CAPABILITIES:
                 result,
               };
             } catch (error) {
-              console.error(`Error calling function ${functionName}:`, error);
               return {
                 tool_call_id: toolCall.id,
                 function_name: functionName,
@@ -434,7 +421,6 @@ IMPORTANT CAPABILITIES:
           }),
         );
 
-        // Return the function results
         return NextResponse.json({
           reply: choice.message.content || "Function call processed.",
           functionResults,
@@ -443,11 +429,9 @@ IMPORTANT CAPABILITIES:
       }
     }
 
-    // Return the regular AI response
     const reply = choice.message?.content || "No content.";
     return NextResponse.json({ reply });
   } catch (err) {
-    console.error("markChatHandler error:", err);
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }

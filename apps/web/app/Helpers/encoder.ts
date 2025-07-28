@@ -7,7 +7,7 @@ export function encodeFields(fields: { [key: string]: string | null }): {
     if (fields[key]) {
       encodedFields[key] = Buffer.from(fields[key]).toString("base64");
     } else {
-      encodedFields[key] = null; // Preserve `null` values
+      encodedFields[key] = null;
     }
   }
 

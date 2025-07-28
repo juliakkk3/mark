@@ -5,6 +5,7 @@ import type {
   Assignment,
   AssignmentDetails,
   QuestionStore,
+  ReplaceAssignmentRequest,
 } from "@/config/types";
 import { generateTempQuestionId } from "@/lib/utils";
 import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
@@ -31,10 +32,19 @@ const ClientLearnerLayout: React.FC<ClientLearnerLayoutProps> = ({
     "assignmentConfig",
     {},
   ) as AssignmentDetails;
-  const questions = getStoredData("questions", []) as QuestionStore[];
+  const allQuestions = getStoredData("questions", []) as QuestionStore[];
+  const numberOfQuestionsPerAttempt =
+    assignmentDetails?.numberOfQuestionsPerAttempt || null;
+  const questions: QuestionStore[] =
+    numberOfQuestionsPerAttempt && numberOfQuestionsPerAttempt > 0
+      ? allQuestions
+          .sort(() => 0.5 - Math.random())
+          .slice(0, numberOfQuestionsPerAttempt)
+      : allQuestions;
   useEffect(() => {
     setAssignmentDetails({
       ...assignmentDetails,
+      showQuestions: assignmentDetails.showQuestions || false,
       introduction: assignmentDetails.introduction || "",
       graded: assignmentDetails.graded || false,
       published: assignmentDetails.published || false,
@@ -44,14 +54,17 @@ const ClientLearnerLayout: React.FC<ClientLearnerLayoutProps> = ({
           ? Date.parse(assignmentDetails.updatedAt)
           : assignmentDetails.updatedAt || Date.now(),
       passingGrade: assignmentDetails.passingGrade || 0,
+      showSubmissionFeedback: assignmentDetails.showSubmissionFeedback || false,
+      showQuestionScore: assignmentDetails.showQuestionScore || false,
+      showAssignmentScore: assignmentDetails.showAssignmentScore || false,
     });
   }, [assignmentDetails, setAssignmentDetails]);
-  // Render the questions page
+
   return (
     <main className="flex flex-col h-[calc(100vh-100px)]">
       <QuestionPage
         attempt={{
-          id: generateTempQuestionId(), // genereate a random number for the attempt id
+          id: generateTempQuestionId(),
           assignmentId,
           submitted: false,
           questions,

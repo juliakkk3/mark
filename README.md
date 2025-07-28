@@ -63,33 +63,27 @@ The Mark System is built on a modular, domain-driven architecture that separates
 Mark System V2 represents a significant evolution from the original architecture, with improvements in:
 
 1. **Repository Pattern Implementation**:
-
    - Centralized data access logic
    - Improved testability and maintainability
 
 2. **Service Modularity**:
-
    - Specialized service components
    - Clear boundaries of responsibility
 
 3. **Enhanced Error Handling**:
-
    - Structured logging with stack traces
    - Error categorization and recovery strategies
 
 4. **Concurrency Management**:
-
    - Rate limiting with Bottleneck
    - Queue management for high-load operations
 
 5. **Intelligent Processing**:
-
    - Content change detection
    - Avoiding redundant operations
    - Batch processing for efficiency
 
 6. **Progress Tracking**:
-
    - Detailed job status reporting
    - Percentage-based completion indicators
 
@@ -317,7 +311,6 @@ class ELK,Metrics,Socket monitoringLayer
 class NATS,GHAPI externalLayer
 
 ```
-
 
 ## Acknowledgments
 

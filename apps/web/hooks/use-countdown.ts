@@ -19,7 +19,6 @@ const useCountdown = (expiresAt: number): CountdownResult => {
 
   const resetCountdown = (newExpiresAt: number) => {
     if (newExpiresAt === expiresAt) {
-      // that means the countdown is already set to the new value (false positive)
       return;
     }
     debugLog("resetting countdown", new Date(newExpiresAt).toLocaleString());
@@ -32,10 +31,8 @@ const useCountdown = (expiresAt: number): CountdownResult => {
     const interval = setInterval(() => {
       const now = Date.now();
       if (now >= expiresAt) {
-        // if the current time is past the expiration time
         clearInterval(interval);
         setTimerExpired(true);
-        // setCountdown(0);
       } else {
         setCountdown(expiresAt - now);
       }

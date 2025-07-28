@@ -35,7 +35,12 @@ export class UpdateAssignmentAttemptResponseDto extends BaseAssignmentAttemptRes
   })
   @IsOptional()
   showSubmissionFeedback: boolean;
-
+  @ApiProperty({
+    description: "Show question",
+    type: Boolean,
+    required: false,
+  })
+  showQuestions: boolean;
   @ApiProperty({
     description: "The total points earned by the learner.",
     type: Number,
@@ -51,7 +56,6 @@ export class UpdateAssignmentAttemptResponseDto extends BaseAssignmentAttemptRes
   })
   totalPossiblePoints: number;
 
-  // message
   @ApiProperty({
     description: "The message to the learner.",
     type: String,

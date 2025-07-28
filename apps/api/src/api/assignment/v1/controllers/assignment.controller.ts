@@ -28,18 +28,8 @@ import {
 } from "@nestjs/swagger";
 import { ReportType, ResponseType } from "@prisma/client";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
-import {
-  concatWith,
-  interval,
-  Observable,
-  of,
-} from "rxjs";
-import {
-  catchError,
-  finalize,
-  map,
-  mergeMap,
-} from "rxjs/operators";
+import { concatWith, interval, Observable, of } from "rxjs";
+import { catchError, finalize, map, mergeMap } from "rxjs/operators";
 import { JobStatusServiceV1 } from "src/api/Job/job-status.service";
 import { LlmFacadeService } from "src/api/llm/llm-facade.service";
 import {
@@ -152,7 +142,7 @@ export class AssignmentControllerV1 {
       updateAssignmentRequestDto,
     );
   }
-  // Streaming real-time updates with proper completion handling
+
   @Get("jobs/:jobId/status-stream")
   @ApiOperation({ summary: "Stream publish job status" })
   @ApiParam({ name: "jobId", required: true, description: "Job ID" })
@@ -172,12 +162,10 @@ export class AssignmentControllerV1 {
         } as MessageEvent),
       ),
       finalize(() => {
-        console.log(`Stream closed for job ${jobId}`);
         this.jobStatusService.cleanupJobStream(jobId);
       }),
-      // Error handling
+
       catchError((error: Error) => {
-        console.error(`Stream error for job ${jobId}:`, error);
         return of({
           type: "error",
           data: {
@@ -242,7 +230,7 @@ export class AssignmentControllerV1 {
       generateQuestionVariantDto,
     );
   }
-  // controller to get available languages
+
   @Get(":id/languages")
   @Roles(UserRole.LEARNER, UserRole.AUTHOR)
   @ApiOperation({ summary: "Get available languages" })
@@ -258,7 +246,6 @@ export class AssignmentControllerV1 {
     return { languages };
   }
 
-  // controller to test language detection
   @Post("test-language-detection")
   @ApiOperation({ summary: "Test language detection" })
   @ApiBody({
@@ -533,7 +520,6 @@ export class AssignmentControllerV1 {
       assignmentId: assignmentIdNumber,
     } = body;
 
-    // Validate basic requirements
     if (!fileContents && !learningObjectives) {
       throw new BadRequestException(
         "Either file contents or learning objectives are required",
@@ -543,13 +529,11 @@ export class AssignmentControllerV1 {
       throw new BadRequestException("Invalid assignment ID");
     }
 
-    // Validate user ID
     const userId = request.userSession.userId;
     if (typeof userId !== "string" || userId.trim() === "") {
       throw new BadRequestException("Invalid user ID");
     }
 
-    // Validate questions to generate
     const totalQuestions =
       (Number(questionsToGenerate.multipleChoice) || 0) +
       (Number(questionsToGenerate.multipleSelect) || 0) +
@@ -565,14 +549,12 @@ export class AssignmentControllerV1 {
       );
     }
 
-    // Validate response types if advanced question types are selected
     if (
       (questionsToGenerate.url > 0 ||
         questionsToGenerate.upload > 0 ||
         questionsToGenerate.linkFile > 0) &&
       !questionsToGenerate.responseTypes
     ) {
-      // Provide default response types if not specified
       questionsToGenerate.responseTypes = {
         TEXT: [ResponseType.OTHER],
         URL: [ResponseType.OTHER],
@@ -581,7 +563,6 @@ export class AssignmentControllerV1 {
       };
     }
 
-    // Create job and process content
     const job = await this.assignmentService.createJob(
       assignmentIdNumber,
       userId,

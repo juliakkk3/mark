@@ -5,12 +5,53 @@ import mammoth from "mammoth";
 import Papa, { ParseResult } from "papaparse";
 import pdfToText from "react-pdftotext";
 import { remark } from "remark";
+import * as XLSX from "xlsx";
 
+/**
+ * Reads an Excel file (XLSX or XLS) using SheetJS.
+ */
+export const readExcel = (
+  file: File,
+  questionId: number,
+): Promise<FileContent> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        const workbook = XLSX.read(reader.result, {
+          type: "array",
+          cellStyles: true,
+          cellFormula: true,
+          cellDates: true,
+          cellNF: true,
+          sheetStubs: true,
+        });
+        const result = workbook.SheetNames.map((sheetName) => {
+          const worksheet = workbook.Sheets[sheetName];
+          const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+          return {
+            sheetName,
+            data: jsonData,
+          };
+        });
+
+        const content = JSON.stringify(result);
+        const sanitized = sanitizeContent(
+          content,
+          file.name.split(".").pop() || "",
+        );
+        resolve({ filename: file.name, content: sanitized, questionId });
+      } catch (error) {
+        reject(`Error reading Excel file: ${String(error)}`);
+      }
+    };
+    reader.onerror = reject;
+    reader.readAsArrayBuffer(file);
+  });
 const escapeCurlyBraces = (content: string): string =>
   content.replace(/{/g, "\\{").replace(/}/g, "\\}");
 
 const sanitizeContent = (content: string, extension: string): string => {
-  // Escape curly braces for non-code files to avoid LLM prompt issues
   const needsEscaping = ["txt", "docx", "md", "csv", "pptx", "pdf"].includes(
     extension,
   );
@@ -22,12 +63,15 @@ interface FileContent {
   questionId: number;
 }
 
-// Extended interface to support binary files via a Blob.
 export interface ExtendedFileContent extends FileContent {
   blob?: Blob;
+  url?: string;
+  extension?: string;
+  metadata?: Record<string, any>;
+  type?: string;
+  arrayBuffer?: ArrayBuffer;
 }
 
-// Helper function that reads a File as an ArrayBuffer and then decodes it to text.
 const readFileAsTextFromBuffer = (file: File): Promise<string> =>
   new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -64,7 +108,6 @@ export const readPdf = async (
   questionId: number,
 ): Promise<FileContent> => {
   try {
-    // pdfToText accepts a File object directly.
     const content = await pdfToText(file);
     return { filename: file.name, content, questionId };
   } catch (error: unknown) {
@@ -189,7 +232,6 @@ export const readIpynb = (
       const sanitized = sanitizeContent(cellContents, "ipynb");
       return { filename: file.name, content: sanitized, questionId };
     } catch (error) {
-      console.error("Error parsing notebook:", error);
       throw new Error(`Error parsing Jupyter Notebook: ${String(error)}`);
     }
   });
@@ -219,15 +261,12 @@ export const readPptx = async (
   questionId: number,
 ): Promise<FileContent> => {
   try {
-    // Load the PPTX file as a zip archive.
     const zip = await JSZip.loadAsync(file);
 
-    // Find all slide XML files (e.g. ppt/slides/slide1.xml, slide2.xml, etc.)
     const slideFilenames = Object.keys(zip.files).filter((filename) =>
       /^ppt\/slides\/slide\d+\.xml$/.test(filename),
     );
 
-    // Sort slide filenames by their numeric order.
     slideFilenames.sort((a, b) => {
       const matchA = a.match(/slide(\d+)\.xml/);
       const matchB = b.match(/slide(\d+)\.xml/);
@@ -236,20 +275,15 @@ export const readPptx = async (
       return numA - numB;
     });
 
-    // Initialize a string to hold all extracted slide text.
     let presentationText = "";
 
-    // Process each slide file.
     for (const slideFilename of slideFilenames) {
       try {
-        // Get the XML content of the slide.
         const slideXml = await zip.file(slideFilename)?.async("string");
         if (slideXml) {
-          // Parse the XML.
           const parser = new DOMParser();
           const xmlDoc = parser.parseFromString(slideXml, "application/xml");
 
-          // Extract text from <a:t> elements.
           const textElements = xmlDoc.getElementsByTagName("a:t");
           let slideText = "";
           for (let i = 0; i < textElements.length; i++) {
@@ -259,17 +293,13 @@ export const readPptx = async (
           }
           slideText = slideText.trim();
 
-          // Append the slide text (if any) and separate slides with newlines.
           if (slideText) {
             presentationText += slideText + "\n\n";
           }
         }
-      } catch (err) {
-        console.error(`Error processing ${slideFilename}:`, err);
-      }
+      } catch (err) {}
     }
 
-    // Sanitize the extracted text to escape curly braces if needed.
     const sanitized = sanitizeContent(presentationText, "pptx");
 
     return { filename: file.name, content: sanitized, questionId };
@@ -288,7 +318,6 @@ export const readImage = (
   new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => {
-      // You can change this to store a placeholder or any other content if needed.
       resolve({
         filename: file.name,
         content: reader.result as string,
@@ -296,7 +325,7 @@ export const readImage = (
       });
     };
     reader.onerror = reject;
-    // Read the file as a base64 encoded string.
+
     reader.readAsDataURL(file);
   });
 
@@ -307,8 +336,6 @@ export const readFile = async (
   file: File,
   questionId: number,
 ): Promise<ExtendedFileContent> => {
-  // supported file types txt, pdf, md, docx, csv, pptx, ipynb, py, js, sh, html, css, sql, ts, tsx,
-  // and now images (jpg, jpeg, png, gif, svg)
   const extension = file.name.split(".").pop()?.toLowerCase();
   switch (extension) {
     case "txt":
@@ -325,7 +352,10 @@ export const readFile = async (
       return readPptx(file, questionId);
     case "ipynb":
       return readIpynb(file, questionId);
-    // For code and other text-based files:
+    case "xlsx":
+    case "xls":
+      return readExcel(file, questionId);
+
     case "py":
     case "js":
     case "sh":
@@ -335,7 +365,7 @@ export const readFile = async (
     case "tsx":
     case "ts":
       return readPlainText(file, questionId, extension);
-    // Process image files:
+
     case "jpg":
     case "jpeg":
     case "png":

@@ -1,4 +1,3 @@
-// src/llm/core/services/moderation.service.ts
 import { Injectable, HttpException, HttpStatus } from "@nestjs/common";
 import { OpenAIModerationChain } from "langchain/chains";
 import { sanitize } from "isomorphic-dompurify";
@@ -36,8 +35,7 @@ export class ModerationService implements IModerationService {
       this.logger.error(
         `Error validating content: ${error instanceof Error ? error.message : "Unknown error"}`,
       );
-      // In case of error with the moderation API, default to allowing the content
-      // This can be changed depending on the preference for false positives vs false negatives
+
       return true;
     }
   }
@@ -56,7 +54,7 @@ export class ModerationService implements IModerationService {
       this.logger.error(
         `Error sanitizing content: ${error instanceof Error ? error.message : "Unknown error"}`,
       );
-      // In case of error, return the original content as a fallback
+
       return content;
     }
   }

@@ -1,16 +1,11 @@
 import type { Config } from "tailwindcss";
 
-// import uiTwConfig from "@mark/ui/tailwind.config";
 const config: Config = {
-  // presets: [uiTwConfig],
   content: [
-    // ...(uiTwConfig.content as string[]),
-    // "**/*.{ts,tsx}",
     "./components/**/*.{js,ts,jsx,tsx,mdx}",
     "./app/**/*.{js,ts,jsx,tsx,mdx}",
   ],
   safelist: [
-    // for getFeedbackColors in utils.ts
     "bg-green-100",
     "border-green-500",
     "text-green-700",
@@ -21,7 +16,6 @@ const config: Config = {
     "text-yellow-700",
     "border-yellow-500",
     {
-      // for Tooltip.tsx
       pattern: /delay-(100|200|300|500)/,
     },
   ],

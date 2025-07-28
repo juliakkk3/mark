@@ -5,7 +5,7 @@ import { useAuthorStore } from "@/stores/author";
 import { getAssignmentIdFromURL } from "@/stores/learner";
 import type { ComponentPropsWithoutRef, FC } from "react";
 
-interface Props extends ComponentPropsWithoutRef<"div"> {}
+type Props = ComponentPropsWithoutRef<"div">;
 
 const Layout: FC<Props> = ({ children }) => {
   const [pageState] = useAuthorStore((state) => [state.pageState]);

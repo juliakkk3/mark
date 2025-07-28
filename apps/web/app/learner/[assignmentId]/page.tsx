@@ -1,7 +1,4 @@
-import { getStoredData } from "@/app/Helpers/getStoredDataFromLocal";
-import { Assignment } from "@/config/types";
 import { getUser } from "@/lib/talkToBackend";
-import AboutTheAssignment from "@learnerComponents/AboutTheAssignment";
 import { headers } from "next/headers";
 import AuthFetchToAbout from "./AuthFetchToAbout";
 

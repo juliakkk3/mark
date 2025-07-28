@@ -39,7 +39,6 @@ export class AssignmentRepository {
    * @param userSession - Optional user session for role-based access
    * @returns Assignment data formatted based on user role
    */
-  // This code block has been revised ✅
 
   async findById(
     id: number,
@@ -47,7 +46,6 @@ export class AssignmentRepository {
   ): Promise<GetAssignmentResponseDto | LearnerGetAssignmentResponseDto> {
     const isLearner = userSession?.role === UserRole.LEARNER;
 
-    // Retrieve assignment with related questions and variants
     const result = await this.prisma.assignment.findUnique({
       where: { id },
       include: {
@@ -61,15 +59,13 @@ export class AssignmentRepository {
       throw new NotFoundException(`Assignment with Id ${id} not found.`);
     }
 
-    // Process and filter questions and variants
     const processedAssignment = this.processAssignmentData(result);
 
-    // Return role-specific response
     if (isLearner) {
       return {
         ...processedAssignment,
         success: true,
-        questions: undefined, // Remove questions for learners
+        questions: undefined,
       } as LearnerGetAssignmentResponseDto;
     }
 
@@ -90,7 +86,7 @@ export class AssignmentRepository {
    * @param userSession - User session containing role and group info
    * @returns Array of assignment summaries
    */
-  // This code block has been revised ✅
+
   async findAllForUser(
     userSession: UserSession,
   ): Promise<AssignmentResponseDto[]> {
@@ -176,21 +172,17 @@ export class AssignmentRepository {
       questions: (Question & { variants: QuestionVariant[] })[];
     },
   ): Assignment & { questions: QuestionDto[] } {
-    // Make a deep copy to avoid modifying the original
     const assignment = JSON.parse(
       JSON.stringify(rawAssignment),
     ) as Assignment & { questions: QuestionDto[] };
 
-    // Ensure questions is an array
     const questions = Array.isArray(assignment.questions)
       ? assignment.questions
       : [];
 
-    // Filter out deleted questions
     const filteredQuestions = questions
       .filter((q) => !q.isDeleted)
       .map((q) => {
-        // Convert to QuestionDto with proper types
         const questionDto: QuestionDto = {
           ...q,
           variants: [],
@@ -201,7 +193,6 @@ export class AssignmentRepository {
           ),
         };
 
-        // Filter out deleted variants and parse their JSON fields
         if (Array.isArray(q.variants)) {
           questionDto.variants = q.variants
             .filter((v) => !v.isDeleted)
@@ -218,7 +209,6 @@ export class AssignmentRepository {
         return questionDto;
       });
 
-    // Sort questions based on questionOrder
     if (
       filteredQuestions.length > 0 &&
       Array.isArray(assignment.questionOrder)

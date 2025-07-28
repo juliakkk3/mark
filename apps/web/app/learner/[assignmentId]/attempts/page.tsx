@@ -180,7 +180,7 @@ export default function AssignmentAttempts() {
                 "_self",
               );
             }}
-            className="flex items-center gap-1 text-blue-600 hover:text-violet-600 underline"
+            className="flex items-center gap-1 text-purple-600 hover:text-violet-600 underline"
             aria-label={`View details for Attempt ${row.attemptNumber}`}
           >
             View
@@ -218,7 +218,6 @@ export default function AssignmentAttempts() {
           {assignmentDetails?.name || "Assignment"} Attempts
         </h1>
 
-        {/* Search Box */}
         <div className="mb-4">
           <input
             type="text"

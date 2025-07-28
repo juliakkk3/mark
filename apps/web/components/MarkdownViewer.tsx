@@ -19,7 +19,7 @@ declare global {
   }
 }
 
-interface Props extends ComponentPropsWithoutRef<"div"> {}
+type Props = ComponentPropsWithoutRef<"div">;
 
 /**
  * MarkdownViewer
@@ -35,7 +35,7 @@ const MarkdownViewer: FC<Props> = (props) => {
   useEffect(() => {
     if (quillInstance) {
       quillInstance.root.innerHTML = "";
-      // destroy Quill instance to prevent memory leaks
+
       quillInstance.disable();
       quillInstance.deleteText(0, quillInstance.getLength());
       setQuillInstance(null);

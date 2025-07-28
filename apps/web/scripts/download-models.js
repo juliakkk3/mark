@@ -1,4 +1,3 @@
-// apps/web/scripts/download-models.js
 const fs = require("fs");
 const path = require("path");
 const https = require("https");
@@ -43,10 +42,8 @@ async function downloadFile(url, outputPath) {
 
 async function main() {
   try {
-    // Create base model directory
     await mkdirp(MODEL_BASE_PATH);
 
-    // Create subdirectories synchronously
     for (const modelDir of Object.keys(MODEL_PATHS)) {
       const fullPath = path.join(MODEL_BASE_PATH, modelDir);
       if (!fs.existsSync(fullPath)) {
@@ -54,19 +51,15 @@ async function main() {
       }
     }
 
-    // Download files
     for (const [modelDir, urls] of Object.entries(MODEL_PATHS)) {
       for (const url of urls) {
         const filename = url.split("/").pop();
         const outputPath = path.join(MODEL_BASE_PATH, modelDir, filename);
-        console.log(`Downloading ${filename} to ${outputPath}...`);
+
         await downloadFile(url, outputPath);
       }
     }
-
-    console.log("All models downloaded successfully!");
   } catch (error) {
-    console.error("Download failed:", error);
     process.exit(1);
   }
 }

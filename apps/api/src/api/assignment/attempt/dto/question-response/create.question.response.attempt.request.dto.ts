@@ -1,9 +1,18 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
-import { IsArray, IsBoolean, IsOptional, IsString } from "class-validator";
+import { Type } from "class-transformer";
+import {
+  IsArray,
+  IsBoolean,
+  IsNumber,
+  IsOptional,
+  IsString,
+  ValidateNested,
+} from "class-validator";
 import {
   LearnerFileUpload,
-  LearnerPresentationResponse,
-} from "../assignment-attempt/types";
+  RepoType,
+} from "src/api/attempt/common/interfaces/attempt.interface";
+import { LearnerPresentationResponse } from "../assignment-attempt/types";
 
 export class CreateQuestionResponseAttemptRequestDto {
   @ApiPropertyOptional({
@@ -50,7 +59,7 @@ export class CreateQuestionResponseAttemptRequestDto {
     type: [Object],
   })
   @IsOptional()
-  learnerFileResponse?: LearnerFileUpload[];
+  learnerFileResponse?: LearnerFileUploadWithImages[];
 
   @ApiPropertyOptional({
     description: "The learner's presentation response.",
@@ -64,4 +73,185 @@ export class CreateQuestionResponseAttemptRequestDto {
     type: Number,
   })
   id: number;
+}
+export class LearnerFileUploadWithImages implements LearnerFileUpload {
+  content: string;
+  questionId?: number;
+  fileType?: string;
+  bucket?: string;
+  githubUrl?: string;
+  recordId?: number;
+  key?: string;
+  path?: string;
+  repo?: RepoType;
+  owner?: string;
+  blob?: Blob;
+  @IsString()
+  filename: string;
+
+  @IsOptional()
+  @IsString()
+  imageUrl?: string;
+
+  @IsString()
+  mimeType: string;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ImageAnalysisResultDto)
+  imageAnalysisResult?: ImageAnalysisResultDto;
+
+  @IsOptional()
+  @IsString()
+  imageData?: string;
+
+  @IsOptional()
+  @IsString()
+  imageBucket?: string;
+
+  @IsOptional()
+  @IsString()
+  imageKey?: string;
+}
+
+export class LearnerImageUploadDto {
+  @IsString()
+  filename: string;
+
+  @IsOptional()
+  @IsString()
+  imageUrl?: string;
+
+  @IsString()
+  mimeType: string;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ImageAnalysisResultDto)
+  imageAnalysisResult?: ImageAnalysisResultDto;
+
+  @IsOptional()
+  @IsString()
+  imageData?: string;
+
+  @IsOptional()
+  @IsString()
+  imageBucket?: string;
+
+  @IsOptional()
+  @IsString()
+  imageKey?: string;
+}
+
+export class ImageAnalysisResultDto {
+  @IsNumber()
+  width: number;
+
+  @IsNumber()
+  height: number;
+
+  @IsNumber()
+  aspectRatio: number;
+
+  @IsNumber()
+  fileSize: number;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  dominantColors?: string[];
+
+  @IsOptional()
+  @IsNumber()
+  brightness?: number;
+
+  @IsOptional()
+  @IsNumber()
+  contrast?: number;
+
+  @IsOptional()
+  @IsNumber()
+  sharpness?: number;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => DetectedObjectDto)
+  detectedObjects?: DetectedObjectDto[];
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => DetectedTextDto)
+  detectedText?: DetectedTextDto[];
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => TechnicalQualityDto)
+  technicalQuality?: TechnicalQualityDto;
+
+  @IsOptional()
+  @IsString()
+  sceneType?: string;
+
+  @IsOptional()
+  @IsString()
+  rawDescription?: string;
+
+  @IsOptional()
+  additionalData?: Record<string, any>;
+}
+
+export class DetectedObjectDto {
+  @IsString()
+  label: string;
+
+  @IsNumber()
+  confidence: number;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => BoundingBoxDto)
+  boundingBox?: BoundingBoxDto;
+}
+
+export class DetectedTextDto {
+  @IsString()
+  text: string;
+
+  @IsNumber()
+  confidence: number;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => BoundingBoxDto)
+  boundingBox?: BoundingBoxDto;
+}
+
+export class BoundingBoxDto {
+  @IsNumber()
+  x: number;
+
+  @IsNumber()
+  y: number;
+
+  @IsNumber()
+  width: number;
+
+  @IsNumber()
+  height: number;
+}
+
+export class TechnicalQualityDto {
+  @IsOptional()
+  @IsNumber()
+  exposureScore?: number;
+
+  @IsOptional()
+  @IsNumber()
+  noiseLevel?: number;
+
+  @IsOptional()
+  @IsNumber()
+  compositionScore?: number;
 }

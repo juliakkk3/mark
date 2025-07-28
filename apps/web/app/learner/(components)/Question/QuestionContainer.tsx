@@ -1,6 +1,6 @@
 import { getLanguageName } from "@/app/Helpers/getLanguageName";
 import MarkdownViewer from "@/components/MarkdownViewer";
-import { QuestionDisplayType, QuestionStore } from "@/config/types";
+import { QuestionDisplayType, QuestionStore, Scoring } from "@/config/types";
 import { cn } from "@/lib/strings";
 import { translateQuestion } from "@/lib/talkToBackend";
 import languages from "@/public/languages.json";
@@ -45,7 +45,11 @@ function Component(props: Props) {
   const setSelectedLanguage = useLearnerStore(
     (state) => state.setSelectedLanguage,
   );
-
+  useEffect(() => {
+    if (typeof question.scoring === "string") {
+      question.scoring = JSON.parse(question.scoring) as Scoring;
+    }
+  }, [question.scoring]);
   const checkToShowRubric = () => {
     if (
       ["TEXT", "UPLOAD", "LINk_FILE", "URL"].includes(question.type) &&
@@ -55,10 +59,11 @@ function Component(props: Props) {
       return true;
     else return false;
   };
+  const showPoints = question.scoring?.showPoints ?? false;
   // Get the questionStatus directly from the store
   const questionStatus = getQuestionStatusById
     ? getQuestionStatusById(questionId)
-    : "unedited"; // Fallback status
+    : "unedited";
 
   let questionTypeText: string;
   if (question.type === "MULTIPLE_CORRECT") {
@@ -71,7 +76,6 @@ function Component(props: Props) {
     questionTypeText = question.type;
   }
 
-  // Handle flagging/unflagging
   const handleFlaggingQuestion = () => {
     if (questionStatus === "flagged") {
       setQuestionStatus(questionId, "unflagged");
@@ -94,14 +98,14 @@ function Component(props: Props) {
   const [userPreferedLanguageName, setUserPreferredLanguageName] = useState<
     string | undefined
   >(undefined);
-  useEffect(() => {
+  (useEffect(() => {
     if (userPreferedLanguage) {
       setUserPreferredLanguageName(
         getLanguageName(userPreferedLanguage) || "English",
       );
     }
   }),
-    [userPreferedLanguage];
+    [userPreferedLanguage]);
   const translatingWords = [
     "Translating",
     "Traduciendo",
@@ -116,7 +120,7 @@ function Component(props: Props) {
   const setTranslationOn = useLearnerStore((state) => state.setTranslationOn);
   const toggleTranslation = () => {
     setTranslationOn(questionId, !translationOn);
-    // if translation is toggled on, fetch the translation
+
     if (
       !translationOn &&
       question.selectedLanguage !== userPreferedLanguageName
@@ -124,7 +128,7 @@ function Component(props: Props) {
       void fetchTranslation();
     }
   };
-  // Global language preference
+
   const [globalLanguage, setGlobalLanguage] = useLearnerStore((state) => [
     state.globalLanguage,
     state.setGlobalLanguage,
@@ -160,7 +164,7 @@ function Component(props: Props) {
         setTranslatedChoices(questionId, translation.translatedChoices);
       }
     } catch (error) {
-      console.error("Failed to fetch translation:", error);
+      console.error("Error fetching translation:", error);
     } finally {
       setLoadingTranslation(false);
     }
@@ -183,11 +187,10 @@ function Component(props: Props) {
         languages.find((lang) => lang.code === browserLanguage)?.name ||
         userPreferedLanguageName;
 
-      setGlobalLanguage(detectedLanguage); // Set the global language to browser's language
+      setGlobalLanguage(detectedLanguage);
     }
   }, [globalLanguage, setGlobalLanguage]);
 
-  // Initialize question language to global language on mount
   useEffect(() => {
     if (!question.selectedLanguage) {
       setSelectedLanguage(
@@ -198,7 +201,6 @@ function Component(props: Props) {
   }, [questionId, globalLanguage, setSelectedLanguage]);
 
   const handleLanguageChange = (newLanguage: string) => {
-    // Update global language and question language
     setSelectedLanguage(questionId, newLanguage);
     if (newLanguage !== userPreferedLanguageName) {
       setGlobalLanguage(newLanguage);
@@ -218,7 +220,6 @@ function Component(props: Props) {
         `${activeQuestionNumber === questionNumber ? "border-violet-600" : ""}`,
       )}
     >
-      {/* Question Header */}
       <div className="flex justify-between items-center pb-4 border-b">
         <div className="flex items-center gap-x-2">
           <p className="text-gray-700 text-xl font-semibold">
@@ -228,7 +229,6 @@ function Component(props: Props) {
           <span className="text-md text-gray-600">{questionTypeText}</span>
         </div>
         <div className="flex items-center gap-x-2">
-          {/* Flag Question Button */}
           <button
             className="text-gray-600 font-medium flex items-center group gap-x-2 hover:text-violet-600 transition"
             onClick={handleFlaggingQuestion}
@@ -241,7 +241,6 @@ function Component(props: Props) {
         </div>
       </div>
 
-      {/* Question Card */}
       <div className="flex flex-col gap-y-4">
         <div className="flex justify-between items-center">
           <MarkdownViewer
@@ -251,7 +250,7 @@ function Component(props: Props) {
             {question.translations?.[userPreferedLanguage]?.translatedText ??
               question.question}
           </MarkdownViewer>
-          <div className="flex items-center gap-x-2 ml-auto">
+          <div className="flex items-start gap-x-2 ml-auto ">
             <LanguageIcon
               className={`h-6 w-6 ${
                 translationOn ? "text-violet-600" : "text-gray-600"
@@ -277,10 +276,9 @@ function Component(props: Props) {
             </button>
           </div>
         </div>
-        {/* translation container */}
+
         {translationOn && (
           <div className="flex flex-col gap-y-4 bg-gray-100 rounded-md p-4">
-            {/* translation conversion */}
             <div className="flex items-center gap-x-2">
               <span className="text-gray-600 font-medium">
                 {userPreferedLanguageName}
@@ -306,7 +304,6 @@ function Component(props: Props) {
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.3, ease: "easeInOut" }}
               >
-                {/* Spinner Icon */}
                 <svg
                   className="animate-spin h-5 w-5 text-violet-600"
                   xmlns="http://www.w3.org/2000/svg"
@@ -328,7 +325,6 @@ function Component(props: Props) {
                   ></path>
                 </svg>
 
-                {/* Shimmer + Animated Text */}
                 <motion.div
                   key={currentWord}
                   className="text-violet-600 font-semibold text-lg shimmer"
@@ -340,7 +336,6 @@ function Component(props: Props) {
                   {currentWord}
                 </motion.div>
 
-                {/* Optional Dots Animation */}
                 <div className="dots text-violet-600 font-semibold">...</div>
               </motion.div>
             ) : (
@@ -352,10 +347,12 @@ function Component(props: Props) {
         )}
       </div>
       {checkToShowRubric() && (
-        <ShowHideRubric rubrics={question.scoring.rubrics} />
+        <ShowHideRubric
+          rubrics={question.scoring.rubrics}
+          showPoints={showPoints}
+        />
       )}
 
-      {/* Render the question based on the type */}
       <RenderQuestion
         questionType={question.type}
         question={{

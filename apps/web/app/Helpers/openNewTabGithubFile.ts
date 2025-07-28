@@ -49,7 +49,6 @@ export const openFileInNewTab = async (fileUrl: string, octokit: Octokit) => {
       toast.error("Failed to retrieve file content.");
     }
   } catch (error) {
-    console.error("Failed to open file:", error);
     toast.error(
       "Could not open the file. Check that the file exists and that you have the necessary permissions.",
     );

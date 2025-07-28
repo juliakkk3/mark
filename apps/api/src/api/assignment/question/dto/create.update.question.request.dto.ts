@@ -113,12 +113,12 @@ export class CreateUpdateQuestionRequestDto {
   @ApiPropertyOptional({
     description:
       'The choices for the question (if the Question Type is "SINGLE_CORRECT" or "MULTIPLE_CORRECT").',
-    type: [Choice], // Use an array of Choice
+    type: [Choice],
   })
   @IsOptional()
   @IsArray()
   @ArrayNotEmpty()
-  @ValidateNested({ each: true }) // Validate each item in the array
+  @ValidateNested({ each: true })
   @Type(() => Choice)
   choices?: Choice[];
 

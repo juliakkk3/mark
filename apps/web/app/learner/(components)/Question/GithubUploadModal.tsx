@@ -84,7 +84,6 @@ const GithubModal: React.FC<{
 
   const authenticateUser = async () => {
     try {
-      // if code already exist in the url, remove it
       const localUrl = window.location.href;
       const urlWithoutCode = localUrl.split("?")[0];
       window.history.replaceState({}, document.title, urlWithoutCode);
@@ -93,13 +92,11 @@ const GithubModal: React.FC<{
         role === "author"
           ? `${window.location.href}?authorMode=true`
           : window.location.href;
-      console.log("Redirect URL:", redirectUrl);
       const { url } = await AuthorizeGithubBackend(assignmentId, redirectUrl);
       if (url) {
         window.open(url, "_self");
       }
     } catch (error) {
-      console.error("GitHub authentication error:", error);
       showErrorOnce("Failed to authenticate with GitHub.");
     }
   };
@@ -121,7 +118,7 @@ const GithubModal: React.FC<{
           const isValid = await validateToken(returnedToken);
           if (isValid) {
             setToken(returnedToken);
-            // remove code from url
+
             const localUrl = window.location.href;
             const urlWithoutCode = localUrl.split("?")[0];
             window.history.replaceState({}, document.title, urlWithoutCode);
@@ -161,15 +158,12 @@ const GithubModal: React.FC<{
     void initialize();
   }, [token, searchParams, authAttempted]);
 
-  // A helper function to validate the token
   async function validateToken(testToken: string): Promise<boolean> {
     const testOctokit = new Octokit({ auth: testToken });
     try {
-      // Test endpoint to ensure token validity
       await testOctokit.request("GET /user");
       return true;
     } catch (error) {
-      console.error("Token validation failed:", error);
       return false;
     }
   }
@@ -186,7 +180,7 @@ const GithubModal: React.FC<{
     if (!octokit || !token) return;
     try {
       const { data } = await octokit.repos.listForAuthenticatedUser();
-      // get all the organizations and its repositories and add it to the list
+
       const orgs = await octokit.orgs.listForAuthenticatedUser();
       const orgRepos = await Promise.all(
         orgs.data.map(async (org) => {
@@ -203,11 +197,10 @@ const GithubModal: React.FC<{
       setRepos(allRepos);
       setOwner(data[0]?.owner?.login || null);
     } catch (error) {
-      console.error("Error fetching repos:", error);
       showErrorOnce(
         "Your GitHub token might have expired. Please reauthenticate.",
       );
-      // Clear token
+
       setToken(null);
     }
   };
@@ -246,7 +239,6 @@ const GithubModal: React.FC<{
       setSelectedRepo(repo);
       setOwner(ownerName);
     } catch (error) {
-      console.error("Error fetching repo contents:", error);
       showErrorOnce("Failed to load repository contents.");
     }
   };
@@ -332,7 +324,6 @@ const GithubModal: React.FC<{
           await searchDirectories(query);
         }
       } catch (error) {
-        console.error("Failed to search:", error);
         toast.error("Error searching for files or folders. Please try again.");
       } finally {
         setLoadingSearch(false);
@@ -358,7 +349,7 @@ const GithubModal: React.FC<{
       .filter((item) => item.type === "tree")
       .filter((item) => {
         const dirName = item.path.split("/").pop() || "";
-        return dirName.toLowerCase().startsWith(query.toLowerCase()); // CHANGED
+        return dirName.toLowerCase().startsWith(query.toLowerCase());
       })
       .map((item) => ({
         name: item.path.split("/").pop() || "",
@@ -385,21 +376,18 @@ const GithubModal: React.FC<{
     try {
       const fileContents = await Promise.all(
         selectedFiles.map(async (file) => {
-          // 1) Validate we have the necessary info
           if (!file.owner || !file.repo || !file.path) {
             throw new Error(
               `File missing owner/repo/path: ${JSON.stringify(file, null, 2)}`,
             );
           }
 
-          // 2) Fetch the content
           const { data } = await octokit.repos.getContent({
-            owner: file.owner, // from file
-            repo: file.repo.name, // from file
-            path: file.path, // from file
+            owner: file.owner,
+            repo: file.repo.name,
+            path: file.path,
           });
 
-          // 3) Convert the Base64 content
           if (data && "content" in data && data.content) {
             return {
               filename: file.filename,
@@ -424,7 +412,6 @@ const GithubModal: React.FC<{
       toast.success("Files added successfully!");
       onClose();
     } catch (error) {
-      console.error("Failed to fetch file contents:", error);
       showErrorOnce("Failed to save file selection. Please try again.");
     }
   };
@@ -505,7 +492,7 @@ const GithubModal: React.FC<{
                   >
                     {selectedRepo}
                   </button>
-                  {/* breadcrumb by directory with / in between */}
+
                   {currentPath.map((dir, index) => (
                     <div key={dir} className="flex items-center gap-x-[1px]">
                       <span className="text-gray-500">/</span>
@@ -529,7 +516,6 @@ const GithubModal: React.FC<{
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4 border-t border-gray-200 max-h-[60vh]">
-                {/* Left Column: Folders and Files */}
                 <div className="p-4 overflow-y-auto mb-20">
                   <h2 className="text-lg font-bold text-gray-700 mb-4">
                     Folders and Files
@@ -642,7 +628,6 @@ const GithubModal: React.FC<{
                   )}
                 </div>
 
-                {/* Right Column: Selected Files */}
                 <div className="p-4 border-l border-gray-200 overflow-y-auto">
                   <h2 className="text-lg font-bold text-gray-700 mb-4">
                     Selected Files
@@ -703,7 +688,7 @@ const GithubModal: React.FC<{
                 <div className="my-4">
                   {Object.entries(
                     repos.reduce((acc: Record<string, RepoType[]>, repo) => {
-                      const owner = repo.owner.login; // Group by owner
+                      const owner = repo.owner.login;
                       if (!acc[owner]) acc[owner] = [];
                       acc[owner].push(repo);
                       return acc;
@@ -713,7 +698,6 @@ const GithubModal: React.FC<{
                     .map(([owner, ownerRepos]) => (
                       <div
                         key={owner}
-                        // if its the last owner dont add line under
                         className={
                           repos[repos.length - 1].owner.login === owner
                             ? ""
@@ -749,7 +733,6 @@ const GithubModal: React.FC<{
           )}
 
           {selectedRepo && selectedFiles.length > 0 && (
-            // keep it at the bottom of the modal
             <div className="fixed bottom-0 left-0 right-0 p-4 flex justify-between items-center border-t border-gray-200 bg-white">
               <button
                 onClick={() => handleDeselectRepo()}

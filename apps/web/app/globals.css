@@ -149,7 +149,7 @@ textarea:focus {
 }
 
 .question-container:focus-within {
-  border-left-color: blue;
+  border-left-color: purple;
 }
 
 pre {

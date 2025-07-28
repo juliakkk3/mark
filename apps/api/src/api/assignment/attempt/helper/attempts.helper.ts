@@ -62,8 +62,8 @@ export const AttemptHelper = {
   },
   shuffleJsonArray<T>(array: T[]): T[] {
     for (let index = array.length - 1; index > 0; index--) {
-      const index_ = Math.floor(Math.random() * (index + 1)); // Pick a random index
-      [array[index], array[index_]] = [array[index_], array[index]]; // Swap elements
+      const index_ = Math.floor(Math.random() * (index + 1));
+      [array[index], array[index_]] = [array[index_], array[index]];
     }
     return array;
   },
@@ -73,9 +73,7 @@ export const AttemptHelper = {
     const MAX_CONTENT_SIZE = 100_000;
     try {
       if (url.includes("github.com")) {
-        // Handle GitHub repository root URLs
         if (url.includes("/blob/")) {
-          // Handle regular GitHub file URLs
           const rawUrl = convertGitHubUrlToRaw(url);
           if (!rawUrl) {
             return { body: "", isFunctional: false };
@@ -90,16 +88,13 @@ export const AttemptHelper = {
             return { body, isFunctional: true };
           }
         } else {
-          // For repository root URLs, fetch the repository metadata or README if available
           try {
-            // Extract user and repo from the URL
             const repoMatch = url.match(
               /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/?$/,
             );
             if (repoMatch) {
               const [, user, repo] = repoMatch;
 
-              // Try to fetch the README.md first (most common case)
               const readmeUrl = `https://raw.githubusercontent.com/${user}/${repo}/main/README.md`;
               try {
                 const readmeResponse = await axios.get<string>(readmeUrl);
@@ -111,7 +106,6 @@ export const AttemptHelper = {
                   return { body, isFunctional: true };
                 }
               } catch {
-                // README.md might not exist or be on a different branch, try master branch
                 try {
                   const masterReadmeUrl = `https://raw.githubusercontent.com/${user}/${repo}/master/README.md`;
                   const masterReadmeResponse =
@@ -124,7 +118,6 @@ export const AttemptHelper = {
                     return { body, isFunctional: true };
                   }
                 } catch {
-                  // If README fetching failed, get repository info from GitHub API
                   const apiUrl = `https://api.github.com/repos/${user}/${repo}`;
                   try {
                     const apiResponse = await axios.get(apiUrl);
@@ -142,38 +135,35 @@ export const AttemptHelper = {
                       return { body, isFunctional: true };
                     }
                   } catch (apiError) {
-                    console.error("Error fetching repository info:", apiError);
+                    // Handle API error
+                    console.error("Error fetching repo info:", apiError);
                   }
                 }
               }
             }
           } catch (repoError) {
-            console.error("Error processing GitHub repository URL:", repoError);
+            // Handle repo error
+            console.error("Error fetching README:", repoError);
           }
 
-          // If all attempts to get content failed, scrape the GitHub page itself
           try {
             const response = await axios.get<string>(url);
             const $ = cheerio.load(response.data);
 
-            // Remove script tags and other potentially irrelevant elements
             $(
               "script, style, noscript, iframe, noembed, embed, object",
             ).remove();
 
-            // Try to extract the README content if displayed on the page
             let content = "";
             const readmeElement = $("article.markdown-body");
             if (readmeElement.length > 0) {
               content = readmeElement.text().trim();
             } else {
-              // Get repository description and other info
               const aboutSection = $(".Box-body");
               if (aboutSection.length > 0) {
                 content += aboutSection.text().trim() + "\n\n";
               }
 
-              // Get file listing
               const fileList = $(
                 "div.js-details-container div.js-navigation-container tr.js-navigation-item",
               );
@@ -198,7 +188,8 @@ export const AttemptHelper = {
               };
             }
           } catch (pageError) {
-            console.error("Error scraping GitHub page:", pageError);
+            // Handle page error
+            console.error("Error fetching page content:", pageError);
           }
         }
 
@@ -207,19 +198,17 @@ export const AttemptHelper = {
         const response = await axios.get<string>(url);
         const $ = cheerio.load(response.data);
 
-        // Remove script tags and other potentially irrelevant elements
         $("script, style, noscript, iframe, noembed, embed, object").remove();
 
         const plainText = $("body")
           .text()
-          .trim() // remove spaces from start and end
+          .trim()
           // eslint-disable-next-line unicorn/prefer-string-replace-all
-          .replace(/\s+/g, " "); // replace multiple spaces with a single space
+          .replace(/\s+/g, " ");
 
         return { body: plainText, isFunctional: true };
       }
-    } catch (error) {
-      console.error("Error fetching content from URL:", error);
+    } catch {
       return { body: "", isFunctional: false };
     }
   },
@@ -230,7 +219,7 @@ function convertGitHubUrlToRaw(url: string): string | null {
   );
   if (!match) {
     // eslint-disable-next-line unicorn/no-null
-    return null; // Fixed: Return null instead of undefined
+    return null;
   }
   const [, user, repo, path] = match;
   return `https://raw.githubusercontent.com/${user}/${repo}/${path}`;

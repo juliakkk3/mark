@@ -38,10 +38,9 @@ const CriteriaRow: FC<CriteriaRowProps> = ({
   handleUpdateCriteriaDesc,
   rowsRef,
 }) => {
-  // Local state for this row's points and description
   const [points, setPoints] = useState<number>(initialPoints);
   const [description, setDescription] = useState<string>(initialDescription);
-  // If the parent updates the initial values, update local state
+
   useEffect(() => {
     setPoints(initialPoints);
   }, [initialPoints]);
@@ -173,7 +172,6 @@ const CriteriaRow: FC<CriteriaRowProps> = ({
   );
 };
 
-// New interfaces to reflect the revised data structure:
 interface Criterion {
   id: number;
   description: string;
@@ -239,7 +237,7 @@ const CriteriaTable: React.FC<CriteriaTableProps> = ({
                 <div className="flex flex-col">
                   <p className="typography-body text-gray-600">Criteria</p>
                 </div>
-                {/* Render the AI rubric generation button if criteria mode is active */}
+
                 {criteriaMode && !preview && (
                   <Tooltip
                     content="Generate a rubric with AI"

@@ -1,9 +1,19 @@
 import { QuestionType, ResponseType } from "@prisma/client";
+import { ScoringDto } from "src/api/assignment/dto/update.questions.request.dto";
 import {
   BaseQuestionEvaluateModel,
   QuestionAnswerContext,
 } from "./base.question.evaluate.model";
 
+export interface LearnerImageUpload {
+  imageUrl: string;
+  filename: string;
+  mimeType: string;
+  imageAnalysisResult: ImageAnalysisResult;
+  imageData: string;
+  imageBucket?: string;
+  imageKey?: string;
+}
 /**
  * Model that holds data for evaluating an image-based question.
  */
@@ -13,36 +23,26 @@ export class ImageBasedQuestionEvaluateModel
   /**
    * Image response from learner. Each image is base64 encoded with metadata.
    */
-  public learnerImageResponse: {
-    imageUrl: string;
-    filename: string;
-    mimeType: string;
-    imageAnalysisResult: ImageAnalysisResult;
-    imageData: string; // base64 encoded image data
-  }[];
+  public learnerImageResponse: LearnerImageUpload[];
   question: string;
   totalPoints: number;
   scoringCriteriaType: string;
-  scoringCriteria: object;
+  scoringCriteria: ScoringDto;
   questionType: QuestionType;
   responseType: ResponseType;
   imageData: string;
   learnerResponse: string;
+  imageBucket?: string;
+  imageKey?: string;
 
   constructor(
     question: string,
     previousQuestionsAnswersContext: QuestionAnswerContext[],
     assignmentInstrctions: string,
-    learnerImageResponse: {
-      imageUrl: string;
-      filename: string;
-      mimeType: string;
-      imageAnalysisResult: ImageAnalysisResult;
-      imageData: string; // base64 encoded image data
-    }[],
+    learnerImageResponse: LearnerImageUpload[],
     totalPoints: number,
     scoringCriteriaType: string,
-    scoringCriteria: object,
+    scoringCriteria: ScoringDto,
     questionType: QuestionType = QuestionType.UPLOAD,
     responseType: ResponseType = ResponseType.OTHER,
     imageData: string,
@@ -69,19 +69,16 @@ export class ImageBasedQuestionEvaluateModel
  * to the LLM for grading assistance.
  */
 export interface ImageAnalysisResult {
-  // Basic image properties
   width: number;
   height: number;
   aspectRatio: number;
-  fileSize: number; // in bytes
+  fileSize: number;
 
-  // Visual properties
-  dominantColors?: string[]; // Hex codes of dominant colors
-  brightness?: number; // Average brightness value
-  contrast?: number; // Contrast measure
-  sharpness?: number; // Sharpness/blur detection
+  dominantColors?: string[];
+  brightness?: number;
+  contrast?: number;
+  sharpness?: number;
 
-  // Content detection (from image analysis API)
   detectedObjects?: {
     label: string;
     confidence: number;
@@ -93,7 +90,6 @@ export interface ImageAnalysisResult {
     };
   }[];
 
-  // Text detection if any text is present in the image
   detectedText?: {
     text: string;
     confidence: number;
@@ -105,19 +101,15 @@ export interface ImageAnalysisResult {
     };
   }[];
 
-  // Technical quality assessment
   technicalQuality?: {
-    exposureScore?: number; // 0-100
-    noiseLevel?: number; // 0-100
-    compositionScore?: number; // 0-100
+    exposureScore?: number;
+    noiseLevel?: number;
+    compositionScore?: number;
   };
 
-  // Scene analysis
-  sceneType?: string; // e.g., "landscape", "portrait", "indoor", "macro"
+  sceneType?: string;
 
-  // Raw description from image analysis
   rawDescription?: string;
 
-  // Optional field for any additional analysis data
   additionalData?: Record<string, any>;
 }

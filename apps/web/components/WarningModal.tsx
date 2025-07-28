@@ -34,12 +34,7 @@ function WarningModal(props: Props) {
 
   return (
     <Transition.Root show={show} as={Fragment}>
-      <Dialog
-        as="div"
-        className="relative z-50"
-        // initialFocus={cancelButtonRef}
-        onClose={() => setShow(false)}
-      >
+      <Dialog as="div" className="relative z-50" onClose={() => setShow(false)}>
         <Transition.Child
           as={Fragment}
           enter="ease-out duration-300"

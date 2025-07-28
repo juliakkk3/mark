@@ -12,7 +12,7 @@ import sparkle from "./sparkle";
 
 const Lottie = dynamic(() => import("lottie-react"), { ssr: false });
 
-interface Props extends ComponentPropsWithoutRef<"div"> {}
+type Props = ComponentPropsWithoutRef<"div">;
 
 const Component: FC<Props> = () => {
   const lottieRef = useRef<LottieRefCurrentProps | null>(null);

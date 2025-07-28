@@ -8,11 +8,9 @@ export function absoluteUrl(path: string) {
 }
 
 const getBaseUrl = () => {
-  if (typeof window !== "undefined") return ""; // browser should use relative url
-  if (process.env.NODE_ENV === "production")
-    //if next server wants to get the base url
-    return "http://mark-api-gateway"; // SSR should use production url
-  return `http://localhost:${process.env.PORT ?? 3000}`; // dev SSR should use localhost
+  if (typeof window !== "undefined") return "";
+  if (process.env.NODE_ENV === "production") return "http://mark-api-gateway";
+  return `http://localhost:${process.env.PORT ?? 3000}`;
 };
 
 export const getFeedbackColors = (score: number, totalPoints: number) => {
@@ -38,7 +36,6 @@ export function mergeData<T extends DataWithUpdatedAt>(
   localData: T,
   backendData: Partial<T>,
 ): T | Partial<T> {
-  // If either updatedAt is missing, fallback to backend data.
   if (!localData?.updatedAt || !backendData.updatedAt) {
     return backendData;
   }
@@ -46,11 +43,9 @@ export function mergeData<T extends DataWithUpdatedAt>(
   const localDate = new Date(localData.updatedAt);
   const backendDate = new Date(backendData.updatedAt);
 
-  // Define a threshold for stale data (e.g. one week ago).
   const oneWeekAgo = new Date();
   oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
 
-  // If local data is newer than backend and not older than a week, use local.
   if (localDate > backendDate && localDate > oneWeekAgo) {
     return localData;
   }
@@ -65,7 +60,17 @@ export const useDebugLog = () => {
   const debugLog = useCallback(
     (...args: DebugArgs[]) => {
       if (debugMode) {
-        console.debug("[DEBUG LOG]:", ...args);
+        const formattedArgs = args.map((arg) => {
+          if (typeof arg === "object") {
+            return JSON.stringify(arg, null, 2);
+          }
+          return String(arg);
+        });
+        console.debug(
+          `%c [${new Date().toISOString()}]:`,
+          "color: #888; font-style: italic;",
+          ...formattedArgs,
+        );
       }
     },
     [debugMode],
@@ -92,17 +97,13 @@ export function parseLearnerResponse(response: string, attempts = 0) {
       if (isValidJSON(parsedResponse)) {
         parsedResponse = JSON.parse(parsedResponse) as LearnerResponseType;
       } else {
-        break; // if the response is not a string or a valid JSON, then break out of the loop
+        break;
       }
       attempts++;
     }
 
     return parsedResponse;
   } catch (e) {
-    console.error(
-      `Failed to parse learnerResponse after ${attempts} attempts:`,
-      e,
-    );
     return response;
   }
 }
@@ -115,8 +116,39 @@ function isValidJSON(str: string): boolean {
   }
 }
 
+const validateURL = (str: string) => {
+  const pattern = new RegExp(
+    "^(https?:\\/\\/)?" +
+      "((([a-z\\d]([a-z\\d-]*[a-z\\d])*)\\.)+[a-z]{2,}|" +
+      "((\\d{1,3}\\.){3}\\d{1,3}))" +
+      "(\\:\\d+)?(\\/[-a-z\\d%_.~+]*)*" +
+      "(\\?[;&a-z\\d%_.~+=-]*)?" +
+      "(\\#[-a-z\\d_]*)?$",
+    "i",
+  );
+  return pattern.test(str);
+};
+
 export const editedQuestionsOnly = (questions: QuestionStore[]) =>
   questions.filter(
+    (q) =>
+      q.learnerTextResponse ||
+      (q.learnerUrlResponse && validateURL(q.learnerUrlResponse)) ||
+      (q.learnerChoices?.length ?? 0) > 0 ||
+      q.learnerAnswerChoice !== undefined ||
+      q.learnerFileResponse !== undefined ||
+      q.presentationResponse !== undefined,
+  );
+
+export const getSubmitButtonStatus = (
+  questions: QuestionStore[],
+  submitting: boolean,
+) => {
+  if (submitting) {
+    return { disabled: true, reason: "Submitting assignment..." };
+  }
+
+  const questionsWithResponses = questions.filter(
     (q) =>
       q.learnerTextResponse ||
       q.learnerUrlResponse ||
@@ -126,18 +158,28 @@ export const editedQuestionsOnly = (questions: QuestionStore[]) =>
       q.presentationResponse !== undefined,
   );
 
-export const generateTempQuestionId = (): number => {
-  return Math.floor(Math.random() * 2e9); // Generates a number between 0 and 2,000,000,000
+  if (questionsWithResponses.length === 0) {
+    return { disabled: true, reason: "No questions have been answered" };
+  }
+
+  const questionsWithInvalidUrls = questionsWithResponses.filter(
+    (q) => q.learnerUrlResponse && !validateURL(q.learnerUrlResponse),
+  );
+
+  if (questionsWithInvalidUrls.length > 0) {
+    return {
+      disabled: true,
+      reason: `${questionsWithInvalidUrls.length} question${questionsWithInvalidUrls.length > 1 ? "s have" : " has"} invalid URL${questionsWithInvalidUrls.length > 1 ? "s" : ""}`,
+    };
+  }
+
+  const validEditedQuestions = editedQuestionsOnly(questions);
+  if (validEditedQuestions.length === 0) {
+    return { disabled: true, reason: "No valid responses to submit" };
+  }
+
+  return { disabled: false, reason: null };
 };
-// export function debounce<T extends (...args: unknown[]) => void>(
-//   func: T,
-//   delay: number
-// ): (...args: Parameters<T>) => void {
-//   let timer: ReturnType<typeof setTimeout>;
-//   return (...args: Parameters<T>): void => {
-//     clearTimeout(timer);
-//     timer = setTimeout(() => {
-//       func.apply(this, args);
-//     }, delay);
-//   };
-// }
+export const generateTempQuestionId = (): number => {
+  return Math.floor(Math.random() * 2e9);
+};

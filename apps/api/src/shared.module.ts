@@ -1,4 +1,3 @@
-// shared.module.ts
 import { Global, Module } from "@nestjs/common";
 import { HttpModule } from "@nestjs/axios";
 import { PrismaService } from "src/prisma.service";

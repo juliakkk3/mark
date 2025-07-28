@@ -1,12 +1,11 @@
 /* eslint-disable unicorn/no-null */
 import { Injectable } from "@nestjs/common";
-import { QuestionDto } from "src/api/assignment/dto/update.questions.request.dto";
 import { CreateQuestionResponseAttemptRequestDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.request.dto";
 import {
   CreateQuestionResponseAttemptResponseDto,
   GeneralFeedbackDto,
 } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.response.dto";
-
+import { QuestionDto } from "src/api/assignment/dto/update.questions.request.dto";
 import { LocalizationService } from "../../common/utils/localization.service";
 import { GradingAuditService } from "../../services/question-response/grading-audit.service";
 import { GradingContext } from "../interfaces/grading-context.interface";
@@ -36,38 +35,28 @@ export abstract class AbstractGradingStrategy<T = any>
     responseDto: CreateQuestionResponseAttemptResponseDto;
     learnerResponse: T;
   }> {
-    try {
-      // Step 1: Validate the response
-      await this.validateResponse(question, requestDto);
+    await this.validateResponse(question, requestDto);
 
-      // Step 2: Extract the learner's response
-      const learnerResponse = await this.extractLearnerResponse(requestDto);
+    const learnerResponse = await this.extractLearnerResponse(requestDto);
 
-      // Step 3: Grade the response
-      const responseDto = await this.gradeResponse(
-        question,
-        learnerResponse,
-        context,
-      );
+    const responseDto = await this.gradeResponse(
+      question,
+      learnerResponse,
+      context,
+    );
 
-      // Step 4: Record the grading for audit purposes (if audit service is available)
-      if (this.gradingAuditService) {
-        await this.gradingAuditService.recordGrading({
-          questionId: question.id,
-          assignmentId: context.assignmentId,
-          requestDto,
-          responseDto,
-          gradingStrategy: this.constructor.name,
-          metadata: context.metadata,
-        });
-      }
-
-      return { responseDto, learnerResponse };
-    } catch (error) {
-      // Log and rethrow the error
-      console.error(`Error in ${this.constructor.name}:`, error);
-      throw error;
+    if (this.gradingAuditService) {
+      await this.gradingAuditService.recordGrading({
+        questionId: question.id,
+        assignmentId: context.assignmentId,
+        requestDto,
+        responseDto,
+        gradingStrategy: this.constructor.name,
+        metadata: context.metadata,
+      });
     }
+
+    return { responseDto, learnerResponse };
   }
 
   /**
@@ -136,8 +125,7 @@ export abstract class AbstractGradingStrategy<T = any>
     if (typeof field === "string") {
       try {
         return JSON.parse(field);
-      } catch (error) {
-        console.error("Error parsing JSON field:", error);
+      } catch {
         return null;
       }
     }

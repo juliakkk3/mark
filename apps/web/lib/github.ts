@@ -71,7 +71,6 @@ export async function getStoredGithubToken(
 
     return token;
   } catch (err) {
-    console.error("Error fetching token from backend:", err);
     return null;
   }
 }
@@ -99,7 +98,6 @@ export async function exchangeGithubCodeForToken(
     const data = ((await res.json()) as { token: string }) || null;
     return data?.token || null;
   } catch (error) {
-    console.error("Error exchanging code for token:", error);
     return null;
   }
 }

@@ -16,7 +16,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, type ComponentPropsWithoutRef } from "react";
 import { toast } from "sonner";
 
-interface Props extends ComponentPropsWithoutRef<"div"> {}
+type Props = ComponentPropsWithoutRef<"div">;
 
 function Timer(props: Props) {
   const router = useRouter();
@@ -24,7 +24,7 @@ function Timer(props: Props) {
     (state) => state.userPreferedLanguage,
   );
   const [oneMinuteAlertShown, setOneMinuteAlertShown] = useState(false);
-  const [isSubmitted, setIsSubmitted] = useState(false); // New state to prevent re-submission
+  const [isSubmitted, setIsSubmitted] = useState(false);
   const [role, setRole] = useState<"author" | "learner">("learner");
   const [
     activeAttemptId,
@@ -70,7 +70,6 @@ function Timer(props: Props) {
     return num < 10 ? `0${num}` : num;
   };
   useEffect(() => {
-    // get user role
     const getUserRole = async () => {
       const user = await getUser();
       if (user) {
@@ -115,7 +114,6 @@ function Timer(props: Props) {
           if (["jpg", "jpeg", "png", "gif", "svg"].includes(extension)) {
             return {
               ...file,
-              content: "Picture was uploaded, please ignore",
             };
           }
           return file;
@@ -193,18 +191,16 @@ function Timer(props: Props) {
     }
   }, [expiresAt, countdown, oneMinuteAlertShown]);
 
-  // Reset countdown when activeAttemptId changes
   useEffect(() => {
     resetCountdown(expiresAt);
   }, [activeAttemptId, expiresAt, resetCountdown]);
 
-  // If assignment runs out of time, automatically submit it
   useEffect(() => {
     if (timerExpired && !isSubmitted) {
       toast.message("Time's up! Submitting your assignment...");
       void handleSubmitAssignment();
     }
-  }, [timerExpired, isSubmitted]); // Trigger only when timerExpired is true and submission hasn't been made
+  }, [timerExpired, isSubmitted]);
 
   return (
     <div className="flex items-center space-x-2" {...props}>
@@ -214,7 +210,7 @@ function Timer(props: Props) {
       <div
         className={cn(
           "text-base font-bold leading-tight",
-          hours === 0 && minutes < 5 ? "text-red-500" : "text-blue-600",
+          hours === 0 && minutes < 5 ? "text-red-500" : "text-purple-600",
         )}
       >
         {twoDigit(hours)}:{twoDigit(minutes)}:{twoDigit(seconds)}

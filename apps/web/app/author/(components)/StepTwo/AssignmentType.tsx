@@ -3,14 +3,10 @@
 import { stepTwoSections } from "@/config/constants";
 import { cn } from "@/lib/strings";
 import { useAssignmentConfig } from "@/stores/assignmentConfig";
-import {
-  type ComponentPropsWithoutRef,
-  type FC,
-  type MouseEvent,
-} from "react";
+import { type ComponentPropsWithoutRef, type FC, type MouseEvent } from "react";
 import SectionWithTitle from "../ReusableSections/SectionWithTitle";
 
-interface Props extends ComponentPropsWithoutRef<"div"> {}
+type Props = ComponentPropsWithoutRef<"div">;
 
 const Component: FC<Props> = () => {
   const [graded, setGraded, errors] = useAssignmentConfig((state) => [

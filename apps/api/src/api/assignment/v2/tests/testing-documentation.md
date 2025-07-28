@@ -124,8 +124,8 @@ RUN_LLM_TESTS=true npm test
 ```typescript
 // Import required modules
 import { Test, TestingModule } from "@nestjs/testing";
-import { ComponentToTest } from "./component-to-test";
 import { DependencyService } from "../dependency.service";
+import { ComponentToTest } from "./component-to-test";
 
 describe("ComponentToTest", () => {
   let component: ComponentToTest;
@@ -183,9 +183,9 @@ The project provides test utilities to simplify common testing tasks:
 
 ```typescript
 import {
+  createMockAuthMiddleware,
   createMockLogger,
   createMockPrismaService,
-  createMockAuthMiddleware,
   createMockUserSessions,
   llmTest,
 } from "src/test/test-utils";

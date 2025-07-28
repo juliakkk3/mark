@@ -54,7 +54,7 @@ const FeedbackOption: React.FC<FeedbackOptionProps> = ({
   );
 };
 
-interface Props extends ComponentPropsWithoutRef<"div"> {}
+type Props = ComponentPropsWithoutRef<"div">;
 
 const Component: FC<Props> = () => {
   const [
@@ -63,19 +63,26 @@ const Component: FC<Props> = () => {
     setShowAssignmentScore,
     setShowSubmissionFeedback,
     setShowQuestionScore,
+    setShowQuestion,
   ] = useAssignmentFeedbackConfig((state) => [
     state.verbosityLevel,
     state.setVerbosityLevel,
     state.setShowAssignmentScore,
     state.setShowSubmissionFeedback,
     state.setShowQuestionScore,
+    state.setShowQuestion,
   ]);
-  const [showAssignmentScore, showSubmissionFeedback, showQuestionScore] =
-    useAssignmentFeedbackConfig((state) => [
-      state.showAssignmentScore,
-      state.showSubmissionFeedback,
-      state.showQuestionScore,
-    ]);
+  const [
+    showAssignmentScore,
+    showSubmissionFeedback,
+    showQuestionScore,
+    showQuestions,
+  ] = useAssignmentFeedbackConfig((state) => [
+    state.showAssignmentScore,
+    state.showSubmissionFeedback,
+    state.showQuestionScore,
+    state.showQuestions,
+  ]);
   const handleButtonClick = (verbosity: VerbosityLevels) => {
     setVerbosityLevel(verbosity);
     switch (verbosity) {
@@ -83,16 +90,19 @@ const Component: FC<Props> = () => {
         setShowAssignmentScore(true);
         setShowSubmissionFeedback(true);
         setShowQuestionScore(true);
+        setShowQuestion(true);
         break;
-      case "Partial":
+      case "Custom":
         setShowAssignmentScore(true);
         setShowSubmissionFeedback(false);
         setShowQuestionScore(true);
+        setShowQuestion(true);
         break;
       case "None":
         setShowAssignmentScore(false);
         setShowSubmissionFeedback(false);
         setShowQuestionScore(false);
+        setShowQuestion(false);
         break;
       default:
         break;

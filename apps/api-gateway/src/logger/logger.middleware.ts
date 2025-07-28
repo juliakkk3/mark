@@ -14,7 +14,7 @@ export class LoggerMiddleware implements NestMiddleware {
 
     response.on("finish", () => {
       const diff = process.hrtime(start);
-      const responseTimeMs = diff[0] * 1e3 + diff[1] * 1e-6; // convert to ms
+      const responseTimeMs = diff[0] * 1e3 + diff[1] * 1e-6;
 
       const requestDetails = {
         client_ip: request.get("true-client-ip"),

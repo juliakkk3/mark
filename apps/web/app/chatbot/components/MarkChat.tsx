@@ -12,6 +12,9 @@ import {
   InformationCircleIcon,
   CogIcon,
   MicrophoneIcon,
+  ClockIcon,
+  ArchiveBoxIcon,
+  BellIcon,
 } from "@heroicons/react/24/outline";
 import {
   ArrowPathIcon,
@@ -26,29 +29,28 @@ import { AnimatePresence, motion } from "framer-motion";
 import Image from "next/image";
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
-import {
-  useAuthorContext,
-  UseAuthorContextInterface,
-} from "../store/useAuthorContext";
-import {
-  useLearnerContext,
-  UseLearnerContextInterface,
-} from "../store/useLearnerContext";
+import { useAuthorContext } from "../store/useAuthorContext";
+import { useLearnerContext } from "../store/useLearnerContext";
 import { ChatRole, useMarkChatStore } from "../store/useMarkChatStore";
 import { toast } from "sonner";
 import Tippy from "@tippyjs/react";
 import "tippy.js/dist/tippy.css";
-import { QuestionAuthorStore } from "@/config/types";
+import {
+  getOrCreateTodayChat,
+  getUserChats,
+  getChatById,
+  addMessageToChat,
+  endChat,
+  getUser,
+} from "@/lib/shared";
+import UserReportsPanel from "./UserReportsPanel";
+// import { NotificationsPanel } from "./NotificationPanel";
+// import { getUserNotifications, markNotificationAsRead } from "@/lib/author";
 
-// Suggestions Panel Component
 const SuggestionsPanel = ({
   suggestions,
   insertSuggestion,
   setShowSuggestions,
-}: {
-  suggestions: string[];
-  insertSuggestion: (suggestion: string) => void;
-  setShowSuggestions: (show: boolean) => void;
 }) => {
   return (
     <motion.div
@@ -74,7 +76,7 @@ const SuggestionsPanel = ({
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: index * 0.05 }}
             onClick={() => insertSuggestion(suggestion)}
-            className="flex-shrink-0 px-3 py-1.5 text-xs bg-gray-100 dark:bg-gray-800 hover:bg-blue-100 dark:hover:bg-blue-900/30 text-gray-700 dark:text-gray-300 hover:text-blue-700 dark:hover:text-blue-300 rounded-full transition-colors"
+            className="flex-shrink-0 px-3 py-1.5 text-xs bg-gray-100 dark:bg-gray-800 hover:bg-purple-100 dark:hover:bg-purple-900/30 text-gray-700 dark:text-gray-300 hover:text-purple-700 dark:hover:text-purple-300 rounded-full transition-colors"
           >
             {suggestion}
           </motion.button>
@@ -84,7 +86,6 @@ const SuggestionsPanel = ({
   );
 };
 
-// Settings Panel Component
 const SettingsPanel = ({
   setShowSettings,
   isRecording,
@@ -95,16 +96,6 @@ const SettingsPanel = ({
   handleSwitchQuestion,
   darkMode,
   setDarkMode,
-}: {
-  setShowSettings: (show: boolean) => void;
-  isRecording: boolean;
-  toggleVoiceRecognition: () => void;
-  userRole: string;
-  learnerContext: UseLearnerContextInterface;
-  activeQuestion: number | null;
-  handleSwitchQuestion: (questionId: number) => void;
-  darkMode: string;
-  setDarkMode: (mode: string) => void;
 }) => {
   return (
     <motion.div
@@ -126,7 +117,6 @@ const SettingsPanel = ({
       </div>
 
       <div className="space-y-3">
-        {/* Chat theme selector - light/dark mode */}
         <div className="flex items-center justify-between">
           <label className="text-sm text-gray-600 dark:text-gray-300 flex items-center gap-2">
             <AdjustmentsHorizontalIcon className="w-4 h-4" />
@@ -147,19 +137,13 @@ const SettingsPanel = ({
   );
 };
 
-// Context Indicators Component
 const ContextIndicators = ({
   contextReady,
   userRole,
   authorContext,
   learnerContext,
   activeQuestion,
-}: {
-  contextReady: boolean;
-  userRole: string;
-  authorContext: UseAuthorContextInterface;
-  learnerContext: UseLearnerContextInterface;
-  activeQuestion: number | null;
+  currentChatId,
 }) => {
   if (!contextReady) return null;
 
@@ -175,6 +159,15 @@ const ContextIndicators = ({
     </span>
   );
 
+  const chatSessionIndicator = currentChatId ? (
+    <Tippy content="Active chat session">
+      <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200 flex items-center gap-1">
+        <ClockIcon className="w-3 h-3" />
+        Chat Active
+      </span>
+    </Tippy>
+  ) : null;
+
   if (userRole === "learner") {
     const assignmentMeta = learnerContext.assignmentMeta;
     const attemptsRemaining = learnerContext.attemptsRemaining;
@@ -182,13 +175,14 @@ const ContextIndicators = ({
     return (
       <>
         {commonIndicators}
+        {chatSessionIndicator}
         <span
           className={`px-2 py-0.5 text-xs font-medium rounded-full ${
             learnerContext.isFeedbackMode
               ? "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200"
               : learnerContext.isGradedAssignment
                 ? "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200"
-                : "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
+                : "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200"
           }`}
         >
           {learnerContext.isFeedbackMode
@@ -215,7 +209,7 @@ const ContextIndicators = ({
           <Tippy
             content={`Currently focused on Question ${
               learnerContext.questions.findIndex(
-                (q: any) => q.id === activeQuestion,
+                (q) => q.id === activeQuestion,
               ) + 1
             }`}
           >
@@ -223,7 +217,7 @@ const ContextIndicators = ({
               <ChatBubbleOvalLeftEllipsisIcon className="w-3 h-3" />
               {`Q${
                 learnerContext.questions.findIndex(
-                  (q: any) => q.id === activeQuestion,
+                  (q) => q.id === activeQuestion,
                 ) + 1
               }`}
             </span>
@@ -232,11 +226,11 @@ const ContextIndicators = ({
       </>
     );
   } else {
-    // Author mode indicators
     const assignmentMeta = authorContext.assignmentMeta;
     return (
       <>
         {commonIndicators}
+        {chatSessionIndicator}
         {authorContext.focusedQuestionId && (
           <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200">
             Question Focus
@@ -248,7 +242,7 @@ const ContextIndicators = ({
           </span>
         )}
         {assignmentMeta?.questionCount !== undefined && (
-          <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+          <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200">
             {assignmentMeta.questionCount}{" "}
             {assignmentMeta.questionCount === 1 ? "question" : "questions"}
           </span>
@@ -258,17 +252,11 @@ const ContextIndicators = ({
   }
 };
 
-// Question Selector Component (for Learner Mode)
 const QuestionSelector = ({
   userRole,
   learnerContext,
   activeQuestion,
   handleSwitchQuestion,
-}: {
-  userRole: string;
-  learnerContext: any;
-  activeQuestion: number | null;
-  handleSwitchQuestion: (questionId: number) => void;
 }) => {
   if (
     userRole !== "learner" ||
@@ -281,7 +269,7 @@ const QuestionSelector = ({
     <div className="px-4 py-2 mb-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md">
       <div className="flex items-center justify-between">
         <div className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2">
-          <ChatBubbleOvalLeftEllipsisIcon className="w-4 h-4 text-blue-500" />
+          <ChatBubbleOvalLeftEllipsisIcon className="w-4 h-4 text-purple-500" />
           Question Focus
         </div>
         <select
@@ -289,34 +277,22 @@ const QuestionSelector = ({
           value={activeQuestion || ""}
           onChange={(e) => handleSwitchQuestion(Number(e.target.value))}
         >
-          {learnerContext.questions.map(
-            (question: QuestionAuthorStore, index: number) => (
-              <option key={question.id} value={question.id}>
-                Question {index + 1}
-              </option>
-            ),
-          )}
+          {learnerContext.questions.map((question, index) => (
+            <option key={question.id} value={question.id}>
+              Question {index + 1}
+            </option>
+          ))}
         </select>
       </div>
     </div>
   );
 };
 
-// Special Action UI Component
 const SpecialActionUI = ({
   specialActions,
   handleRegradeRequest,
   handleIssueReport,
   handleCreateQuestion,
-}: {
-  specialActions: {
-    show: boolean;
-    type: "regrade" | "report" | "create" | null;
-    data: any;
-  };
-  handleRegradeRequest: () => void;
-  handleIssueReport: () => void;
-  handleCreateQuestion: (type: string) => void;
 }) => {
   if (!specialActions.show) return null;
   return (
@@ -408,17 +384,11 @@ const SpecialActionUI = ({
   );
 };
 
-// Welcome Message Component
 const WelcomeMessage = ({
   getAccentColor,
   userRole,
   MarkFace,
   learnerContext,
-}: {
-  getAccentColor: () => string;
-  userRole: string;
-  MarkFace: any;
-  learnerContext: UseLearnerContextInterface;
 }) => {
   return (
     <motion.div
@@ -495,12 +465,12 @@ const WelcomeMessage = ({
 
           {!learnerContext.isGradedAssignment &&
             !learnerContext.isFeedbackMode && (
-              <div className="p-3 bg-blue-50 dark:bg-blue-900/30 rounded-lg text-left border border-blue-200 dark:border-blue-800">
-                <h4 className="text-sm font-medium text-blue-800 dark:text-blue-400 mb-2 flex items-center">
+              <div className="p-3 bg-purple-50 dark:bg-purple-900/30 rounded-lg text-left border border-purple-200 dark:border-purple-800">
+                <h4 className="text-sm font-medium text-purple-800 dark:text-purple-400 mb-2 flex items-center">
                   <AcademicCapIcon className="w-4 h-4 mr-1.5" />
                   Practice Mode
                 </h4>
-                <p className="text-xs text-blue-700 dark:text-blue-300">
+                <p className="text-xs text-purple-700 dark:text-purple-300">
                   I can provide detailed hints, explanations, and practice
                   guidance to help you learn effectively.
                 </p>
@@ -549,24 +519,17 @@ const WelcomeMessage = ({
   );
 };
 
-// Chat Messages Component
 const ChatMessages = ({
   messages,
   chatBubbleVariants,
   getAccentColor,
   renderTypingIndicator,
-}: {
-  messages: any[];
-  chatBubbleVariants: any;
-  getAccentColor: () => string;
-  renderTypingIndicator: () => JSX.Element | null;
 }) => {
   return (
     <>
       {messages
         .filter((msg) => msg.role !== "system")
         .map((msg, index) => {
-          console.log("msg", msg);
           const messageContent = msg.content;
           return (
             <motion.div
@@ -598,8 +561,97 @@ const ChatMessages = ({
   );
 };
 
-// Main MarkChat Component
-export const MarkChat: React.FC = () => {
+const ChatHistoryDrawer = ({
+  isOpen,
+  onClose,
+  chats,
+  onSelectChat,
+  currentChatId,
+  isLoading,
+}) => {
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 0.5 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/20 backdrop-blur-sm z-50"
+            onClick={onClose}
+          />
+          <motion.div
+            initial={{ x: "-100%" }}
+            animate={{ x: 0 }}
+            exit={{ x: "-100%" }}
+            transition={{ type: "spring", damping: 25, stiffness: 300 }}
+            className="fixed left-0 top-0 h-full w-80 bg-white dark:bg-gray-900 shadow-xl z-[999999] overflow-y-auto"
+          >
+            <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center pt-44 md:pt-36 lg:pt-36">
+              <h2 className="font-bold text-lg">Chat History</h2>
+              <button
+                onClick={onClose}
+                className="p-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800"
+              >
+                <XMarkIcon className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-2">
+              {isLoading ? (
+                <div className="text-center text-gray-500 dark:text-gray-400 p-4">
+                  Loading chat history...
+                </div>
+              ) : chats.length === 0 ? (
+                <div className="text-center text-gray-500 dark:text-gray-400 p-4">
+                  No chat history found
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {chats.map((chat) => (
+                    <button
+                      key={chat.id}
+                      onClick={() => onSelectChat(chat.id)}
+                      className={`w-full p-3 text-left rounded-lg transition-colors ${
+                        currentChatId === chat.id
+                          ? "bg-purple-50 dark:bg-purple-900/30 border border-purple-200 dark:border-purple-800"
+                          : "hover:bg-gray-100 dark:hover:bg-gray-800"
+                      }`}
+                    >
+                      <div className="font-medium truncate flex items-center">
+                        <span className="mr-2 flex-1">
+                          {chat.title ||
+                            "Chat " +
+                              new Date(chat.startedAt).toLocaleDateString()}
+                        </span>
+                        {!chat.isActive && (
+                          <span className="text-xs bg-gray-100 dark:bg-gray-800 text-gray-500 px-1.5 py-0.5 rounded">
+                            <ArchiveBoxIcon className="w-3 h-3 inline mr-1" />
+                            Archived
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400 mt-1 flex items-center">
+                        <ClockIcon className="w-3 h-3 mr-1" />
+                        {new Date(chat.lastActiveAt).toLocaleString()}
+                      </div>
+                      {chat.assignmentId && (
+                        <div className="text-xs text-purple-600 dark:text-purple-400 mt-1">
+                          Assignment: {chat.assignmentId}
+                        </div>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
+  );
+};
+
+export const MarkChat = () => {
   const {
     isOpen,
     toggleChat,
@@ -612,36 +664,238 @@ export const MarkChat: React.FC = () => {
     resetChat,
   } = useMarkChatStore();
 
-  const learnerContext: UseLearnerContextInterface = useLearnerContext();
-  const authorContext: UseAuthorContextInterface = useAuthorContext();
-
-  const messagesEndRef = useRef<HTMLDivElement | null>(null);
-  const chatContainerRef = useRef<HTMLDivElement | null>(null);
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const learnerContext = useLearnerContext();
+  const authorContext = useAuthorContext();
+  const messagesEndRef = useRef(null);
+  const chatContainerRef = useRef(null);
+  const textareaRef = useRef(null);
   const [isExpanded, setIsExpanded] = useState(true);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [contextReady, setContextReady] = useState(false);
-  const [activeQuestion, setActiveQuestion] = useState<number | null>(null);
+  const [activeQuestion, setActiveQuestion] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
   const [feedbackMode, setFeedbackMode] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [darkMode, setDarkMode] = useState("light");
-  const [history, setHistory] = useState<string[]>([]);
+  const [history, setHistory] = useState([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
-  const [specialActions, setSpecialActions] = useState<{
-    show: boolean;
-    type: "regrade" | "report" | "create" | null;
-    data: any;
-  }>({ show: false, type: null, data: null });
+  const [specialActions, setSpecialActions] = useState({
+    show: false,
+    type: null,
+    data: null,
+  });
+  const [user, setUser] = useState(null);
+  const [currentChatId, setCurrentChatId] = useState(null);
+  const [showChatHistory, setShowChatHistory] = useState(false);
+  const [userChats, setUserChats] = useState([]);
+  const [isLoadingChats, setIsLoadingChats] = useState(false);
+  const [isInitializing, setIsInitializing] = useState(true);
+  const [shouldAutoOpen, setShouldAutoOpen] = useState(false);
+  const [showReports, setShowReports] = useState(false);
+  const handleCheckReports = useCallback(() => {
+    setShowReports(true);
+  }, []);
+  const [notifications, setNotifications] = useState([]);
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [notificationCheckInterval, setNotificationCheckInterval] =
+    useState(null);
 
-  const recognitionRef = useRef<any>(null);
+  // const loadNotifications = useCallback(async () => {
+  //   if (!user?.userId) return;
 
-  // Determine which context to use
+  //   try {
+  //     const data = await getUserNotifications();
+  //     setNotifications(data);
+  //     setUnreadNotifications(data.filter((n) => !n.read).length);
+  //   } catch (error) {}
+  // }, [user?.userId]);
+
+  // const markNotificationRead = useCallback(async (notificationId) => {
+  //   try {
+  //     const success = await markNotificationAsRead(notificationId);
+
+  //     if (success) {
+  //       setNotifications((prev) =>
+  //         prev.map((n) => (n.id === notificationId ? { ...n, read: true } : n)),
+  //       );
+  //       setUnreadNotifications((prev) => Math.max(0, prev - 1));
+  //     }
+  //   } catch (error) {}
+  // }, []);
+  // const handleNotificationClick = useCallback(
+  //   (notification) => {
+  //     try {
+  //       let metadata: {
+  //         issueNumber?: string;
+  //         newStatus?: string;
+  //       };
+
+  //       try {
+  //         metadata = JSON.parse(notification.metadata || "{}");
+  //       } catch (e) {}
+
+  //       if (notification.type === "ISSUE_STATUS_CHANGE") {
+  //         setShowNotifications(false);
+
+  //         if (!isOpen) {
+  //           toggleChat();
+  //         }
+
+  //         setTimeout(() => {
+  //           useMarkChatStore.getState().addMessage({
+  //             id: `user-${Date.now()}`,
+  //             role: "user",
+  //             content: `What's the status of issue #${metadata.issueNumber || ""}?`,
+  //             timestamp: new Date().toISOString(),
+  //           });
+
+  //           setTimeout(() => {
+  //             useMarkChatStore.getState().addMessage({
+  //               id: `assistant-${Date.now()}`,
+  //               role: "assistant",
+  //               content: `I see that issue #${metadata.issueNumber || ""} has been ${metadata.newStatus || "updated"}.\n\n${notification.message}\n\nWould you like to see more details about this issue?`,
+  //               timestamp: new Date().toISOString(),
+  //             });
+  //           }, 500);
+  //         }, 300);
+
+  //         // markNotificationRead(notification.id);
+  //       }
+  //     } catch (error) {}
+  //   },
+  //   [isOpen, toggleChat, markNotificationRead],
+  // );
+
+  // useEffect(() => {
+  //   if (user?.userId) {
+  //     loadNotifications();
+
+  //     if (!notificationCheckInterval) {
+  //       const intervalId = setInterval(loadNotifications, 30000);
+  //       setNotificationCheckInterval(intervalId);
+  //     }
+
+  //     return () => {
+  //       if (notificationCheckInterval) {
+  //         clearInterval(notificationCheckInterval);
+  //         setNotificationCheckInterval(null);
+  //       }
+  //     };
+  //   }
+  // }, [user?.userId, loadNotifications, notificationCheckInterval]);
+
+  // useEffect(() => {
+  //   if (isOpen && user?.userId) {
+  //     loadNotifications();
+  //   }
+  // }, [isOpen, user?.userId, loadNotifications]);
+  const recognitionRef = useRef(null);
   const context = userRole === "learner" ? learnerContext : authorContext;
+  const checkForIssueStatusQuery = (message: string): boolean | number => {
+    const lowerMessage = message.toLowerCase();
 
-  // Apply dark mode
+    const generalIssuePatterns = [
+      "my issues",
+      "my reports",
+      "reported issues",
+      "issue status",
+      "report status",
+      "check my issues",
+      "check my reports",
+      "view my issues",
+      "view my reports",
+    ];
+
+    const specificIssueMatch =
+      lowerMessage.match(/issue #?(\d+)/i) ||
+      lowerMessage.match(/report #?(\d+)/i) ||
+      lowerMessage.match(/ticket #?(\d+)/i);
+
+    if (specificIssueMatch && specificIssueMatch[1]) {
+      return parseInt(specificIssueMatch[1]);
+    }
+
+    return generalIssuePatterns.some((pattern) =>
+      lowerMessage.includes(pattern),
+    );
+  };
   useEffect(() => {
-    const setTheme = (theme: string) => {
+    const fetchUser = async () => {
+      try {
+        const userData = await getUser();
+        setUser(userData);
+      } catch (error) {}
+    };
+    fetchUser();
+  }, [userRole, learnerContext.assignmentId]);
+
+  useEffect(() => {
+    const initializeChat = async () => {
+      if (!user?.userId) {
+        setIsInitializing(false);
+        return;
+      }
+
+      if (currentChatId) {
+        setIsInitializing(false);
+        return;
+      }
+
+      setIsInitializing(true);
+
+      try {
+        const assignmentId =
+          userRole === "learner"
+            ? learnerContext.assignmentId
+            : userRole === "author"
+              ? authorContext.activeAssignmentId
+              : undefined;
+
+        const todayChat = await getOrCreateTodayChat(
+          user.userId,
+          Number(assignmentId),
+        );
+
+        setCurrentChatId(todayChat.id);
+
+        if (todayChat.messages && todayChat.messages.length > 0) {
+          const storeMessages = todayChat.messages.map((msg) => ({
+            id: `msg-${msg.id}`,
+            role: msg.role.toLowerCase() as ChatRole,
+            content: msg.content,
+            timestamp: new Date(msg.timestamp).toISOString(),
+            toolCalls: msg.toolCalls,
+          }));
+
+          if (storeMessages.length > 0) {
+            useMarkChatStore.setState({ messages: storeMessages });
+          }
+        }
+      } catch (error) {
+      } finally {
+        setIsInitializing(false);
+      }
+    };
+
+    initializeChat();
+  }, [
+    user?.userId,
+    userRole,
+    learnerContext.assignmentId,
+    authorContext.activeAssignmentId,
+    currentChatId,
+  ]);
+
+  useEffect(() => {
+    if (shouldAutoOpen && !isOpen && !isInitializing) {
+      toggleChat();
+      setShouldAutoOpen(false);
+    }
+  }, [shouldAutoOpen, isOpen, isInitializing, toggleChat]);
+
+  useEffect(() => {
+    const setTheme = (theme) => {
       if (
         theme === "dark" ||
         (theme === "system" &&
@@ -655,14 +909,12 @@ export const MarkChat: React.FC = () => {
     setTheme(darkMode);
     if (darkMode === "system") {
       const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-      const handleChange = (e: MediaQueryListEvent) =>
-        setTheme(e.matches ? "dark" : "light");
+      const handleChange = (e) => setTheme(e.matches ? "dark" : "light");
       mediaQuery.addEventListener("change", handleChange);
       return () => mediaQuery.removeEventListener("change", handleChange);
     }
   }, [darkMode]);
 
-  // Setup voice recognition if available
   useEffect(() => {
     if (typeof window !== "undefined" && "webkitSpeechRecognition" in window) {
       const SpeechRecognition =
@@ -671,22 +923,37 @@ export const MarkChat: React.FC = () => {
       recognitionRef.current = new SpeechRecognition();
       recognitionRef.current.continuous = true;
       recognitionRef.current.interimResults = true;
-      recognitionRef.current.onresult = (event: any) => {
+      recognitionRef.current.onresult = (event) => {
         const transcript = Array.from(event.results)
-          .map((result: any) => result[0])
+          .map((result) => result[0])
           .map((result) => result.transcript)
           .join("");
         setUserInput(transcript);
       };
-      recognitionRef.current.onerror = (event: any) => {
-        console.error("Speech recognition error", event.error);
+      recognitionRef.current.onerror = (event) => {
         setIsRecording(false);
         toast.error("Voice recognition error. Please try again.");
       };
     }
   }, []);
 
-  // Toggle voice recognition
+  useEffect(() => {
+    const loadUserChats = async () => {
+      if (user?.userId && isOpen) {
+        setIsLoadingChats(true);
+        try {
+          const chats = await getUserChats(user.userId);
+          setUserChats(chats);
+        } catch (error) {
+        } finally {
+          setIsLoadingChats(false);
+        }
+      }
+    };
+
+    loadUserChats();
+  }, [user?.userId, isOpen]);
+
   const toggleVoiceRecognition = useCallback(() => {
     if (!recognitionRef.current) {
       toast.error("Voice recognition is not supported in your browser");
@@ -704,7 +971,6 @@ export const MarkChat: React.FC = () => {
     }
   }, [isRecording]);
 
-  // Set initial context ready and active question
   useEffect(() => {
     setContextReady(true);
     if (userRole === "learner" && learnerContext.currentQuestion) {
@@ -713,7 +979,615 @@ export const MarkChat: React.FC = () => {
     setFeedbackMode(userRole === "learner" && learnerContext.isFeedbackMode);
   }, [userRole, learnerContext]);
 
-  // Dynamic suggestions
+  const handleSelectChat = useCallback(
+    async (chatId) => {
+      try {
+        const chat = await getChatById(chatId);
+        setCurrentChatId(chat.id);
+
+        if (chat.messages && chat.messages.length > 0) {
+          const storeMessages = chat.messages.map((msg) => ({
+            id: `msg-${msg.id}`,
+            role: msg.role.toLowerCase() as ChatRole,
+            content: msg.content,
+            timestamp: new Date(msg.timestamp).toISOString(),
+            toolCalls: msg.toolCalls,
+          }));
+
+          useMarkChatStore.setState({ messages: storeMessages });
+        } else {
+          resetChat();
+        }
+
+        setShowChatHistory(false);
+        toast.success("Loaded chat session");
+      } catch (error) {
+        toast.error("Could not load selected chat");
+      }
+    },
+    [resetChat],
+  );
+
+  const checkForLearnerSpecialActions = useCallback(
+    (input) => {
+      const lowerInput = input.toLowerCase();
+      if (
+        learnerContext.isFeedbackMode &&
+        (lowerInput.includes("regrade") ||
+          lowerInput.includes("wrong grade") ||
+          lowerInput.includes("graded incorrectly") ||
+          lowerInput.includes("review my grade") ||
+          lowerInput.includes("points I deserved") ||
+          lowerInput.includes("scoring issue") ||
+          lowerInput.match(/score(?:.+?)wrong/) ||
+          lowerInput.match(/grade(?:.+?)incorrect/))
+      ) {
+        setSpecialActions({
+          show: true,
+          type: "regrade",
+          data: {
+            assignmentId: learnerContext.assignmentId,
+            attemptId: learnerContext.activeAttemptId,
+          },
+        });
+      } else if (
+        lowerInput.includes("issue") ||
+        lowerInput.includes("problem with") ||
+        lowerInput.includes("bug") ||
+        lowerInput.includes("doesn't work") ||
+        lowerInput.includes("error") ||
+        lowerInput.includes("glitch") ||
+        lowerInput.includes("not working") ||
+        lowerInput.includes("broken") ||
+        lowerInput.match(/can't(?:.+?)load/) ||
+        lowerInput.match(/won't(?:.+?)display/)
+      ) {
+        setSpecialActions({
+          show: true,
+          type: "report",
+          data: { assignmentId: learnerContext.assignmentId },
+        });
+      } else {
+        setSpecialActions({ show: false, type: null, data: null });
+      }
+    },
+    [learnerContext],
+  );
+
+  const checkForAuthorSpecialActions = useCallback((input) => {
+    const lowerInput = input.toLowerCase();
+    const createPatterns = [
+      "create",
+      "add",
+      "new",
+      "make",
+      "generate",
+      "build",
+      "design",
+      "develop",
+    ];
+    const questionPatterns = [
+      "question",
+      "multiple choice",
+      "true/false",
+      "text response",
+      "mc question",
+      "t/f",
+      "essay",
+      "prompt",
+      "quiz item",
+      "assessment item",
+      "mcq",
+    ];
+    const hasCreateIntent = createPatterns.some((pattern) =>
+      lowerInput.includes(pattern),
+    );
+    const hasQuestionIntent = questionPatterns.some((pattern) =>
+      lowerInput.includes(pattern),
+    );
+    if (hasCreateIntent && hasQuestionIntent) {
+      let questionType = "multiple-choice";
+      if (
+        lowerInput.match(/multiple.{0,10}choice/) ||
+        lowerInput.includes("mc") ||
+        lowerInput.includes("mcq")
+      ) {
+        questionType = "multiple-choice";
+      } else if (
+        lowerInput.match(/true.{0,5}false/) ||
+        lowerInput.includes("t/f") ||
+        lowerInput.includes("tf question")
+      ) {
+        questionType = "true/false";
+      } else if (
+        lowerInput.match(/text.{0,10}response/) ||
+        lowerInput.includes("essay") ||
+        lowerInput.includes("free response") ||
+        lowerInput.includes("written response") ||
+        lowerInput.includes("open ended")
+      ) {
+        questionType = "text response";
+      }
+      setSpecialActions({
+        show: true,
+        type: "create",
+        data: {
+          questionTypes: [
+            "SINGLE_CORRECT",
+            "MULTIPLE_CORRECT",
+            "TEXT",
+            "TRUE_FALSE",
+          ],
+          suggestedType: questionType,
+        },
+      });
+    } else {
+      setSpecialActions({ show: false, type: null, data: null });
+    }
+  }, []);
+
+  const handleSendWithContext = useCallback(
+    async (stream = true) => {
+      if (!userInput.trim()) return;
+      const issueCheck = checkForIssueStatusQuery(userInput);
+      if (issueCheck !== false) {
+        setHistory((prev) => [...prev, userInput]);
+        setHistoryIndex(-1);
+        useMarkChatStore.getState().addMessage({
+          id: `user-${Date.now()}`,
+          role: "user",
+          content: userInput,
+          timestamp: new Date().toISOString(),
+        });
+        setUserInput("");
+
+        if (typeof issueCheck === "number") {
+          const issueNumber = issueCheck;
+          const relevantNotification = notifications.find((n) => {
+            try {
+              const metadata = JSON.parse(n.metadata || "{}");
+              return metadata.issueNumber === issueNumber;
+            } catch (e) {
+              return false;
+            }
+          });
+
+          // setTimeout(() => {
+          //   if (relevantNotification) {
+          //     handleNotificationClick(relevantNotification);
+          //   } else {
+          //     useMarkChatStore.getState().addMessage({
+          //       id: `assistant-${Date.now()}`,
+          //       role: "assistant",
+          //       content: `I'll check the status of issue #${issueNumber} for you. Let me show you your reported issues.`,
+          //       timestamp: new Date().toISOString(),
+          //     });
+
+          //     setTimeout(() => setShowReports(true), 800);
+          //   }
+          // }, 500);
+        } else {
+          setTimeout(() => {
+            useMarkChatStore.getState().addMessage({
+              id: `assistant-${Date.now()}`,
+              role: "assistant",
+              content:
+                "I'm showing your reported issues now. You can view the status of each issue and any updates from our team.",
+              timestamp: new Date().toISOString(),
+            });
+
+            setTimeout(() => setShowReports(true), 800);
+          }, 500);
+        }
+        return;
+      }
+      try {
+        setHistory((prev) => [...prev, userInput]);
+        setHistoryIndex(-1);
+
+        const contextMessage = await context.getContextMessage();
+        const originalMessages = [...messages];
+        const messagesWithContext = [...originalMessages];
+
+        const lastUserMsgIndex = messagesWithContext
+          .map((msg, i) => (msg.role === "user" ? i : -1))
+          .filter((i) => i !== -1)
+          .pop();
+
+        if (lastUserMsgIndex !== undefined) {
+          messagesWithContext.splice(lastUserMsgIndex, 0, {
+            ...contextMessage,
+            role: contextMessage.role,
+          });
+        } else {
+          const systemIndex = messagesWithContext.findIndex(
+            (msg) => msg.role === "system",
+          );
+          const insertPosition = systemIndex !== -1 ? systemIndex + 1 : 0;
+          messagesWithContext.splice(insertPosition, 0, {
+            ...contextMessage,
+            role: contextMessage.role,
+          });
+        }
+
+        if (userRole === "learner") {
+          checkForLearnerSpecialActions(userInput);
+        } else {
+          checkForAuthorSpecialActions(userInput);
+        }
+
+        useMarkChatStore.setState({ messages: messagesWithContext });
+        const browserCookies =
+          typeof window !== "undefined" ? document.cookie : "";
+        if (currentChatId && user?.userId) {
+          try {
+            await addMessageToChat(
+              currentChatId,
+              "USER",
+              userInput,
+              undefined,
+              browserCookies,
+            );
+          } catch (error) {}
+        }
+
+        await sendMessage(stream);
+
+        const saveAssistantMessage = async () => {
+          const currentMessages = useMarkChatStore.getState().messages;
+          const relevantAssistantMessages = currentMessages.filter(
+            (msg) =>
+              msg.role === "assistant" &&
+              msg.id !== "assistant-initial" &&
+              !msg.id.includes("context"),
+          );
+
+          const sortedMessages = relevantAssistantMessages.sort((a, b) => {
+            const getTimestampFromId = (id) => {
+              const match = id.match(/assistant-(\d+)/);
+              return match ? parseInt(match[1]) : 0;
+            };
+
+            if (a.timestamp && b.timestamp) {
+              return (
+                new Date(b.timestamp).getTime() -
+                new Date(a.timestamp).getTime()
+              );
+            }
+
+            return getTimestampFromId(b.id) - getTimestampFromId(a.id);
+          });
+
+          const assistantMessage = sortedMessages[0];
+
+          if (assistantMessage && currentChatId && user?.userId) {
+            try {
+              let toolCallsData = undefined;
+
+              if (assistantMessage.toolCalls) {
+                toolCallsData = assistantMessage.toolCalls;
+              } else if (typeof assistantMessage.content === "string") {
+                const markerMatch = assistantMessage.content.match(
+                  /<!-- CLIENT_EXECUTION_MARKER\n([\s\S]*?)\n-->/,
+                );
+
+                if (markerMatch) {
+                  try {
+                    toolCallsData = JSON.parse(markerMatch[1]);
+                  } catch (e) {}
+                }
+              }
+
+              await addMessageToChat(
+                currentChatId,
+                "ASSISTANT",
+                assistantMessage.content,
+                toolCallsData,
+              );
+            } catch (error) {}
+          }
+        };
+
+        const pollIntervals = [300, 500, 700, 1000, 1500, 2000, 3000];
+        let pollIndex = 0;
+
+        const pollForCompletion = async () => {
+          if (!useMarkChatStore.getState().isTyping) {
+            await saveAssistantMessage();
+            return;
+          }
+
+          if (pollIndex < pollIntervals.length - 1) {
+            pollIndex++;
+          }
+
+          setTimeout(pollForCompletion, pollIntervals[pollIndex]);
+        };
+
+        setTimeout(pollForCompletion, 200);
+
+        setTimeout(async () => {
+          if (useMarkChatStore.getState().isTyping) {
+            await saveAssistantMessage();
+          }
+        }, 15000);
+
+        setTimeout(() => {
+          const purified = useMarkChatStore
+            .getState()
+            .messages.filter(
+              (msg) => msg.role !== "system" || !msg.id.includes("context"),
+            );
+          useMarkChatStore.setState({ messages: purified });
+        }, 500);
+      } catch (error) {
+        sendMessage(stream);
+      }
+
+      setShowSuggestions(false);
+      if (isRecording) {
+        recognitionRef.current?.stop();
+        setIsRecording(false);
+      }
+    },
+    [
+      userInput,
+      context,
+      messages,
+      notifications,
+      // handleNotificationClick,
+      setShowReports,
+      userRole,
+      isRecording,
+      sendMessage,
+      checkForLearnerSpecialActions,
+      checkForAuthorSpecialActions,
+      currentChatId,
+      user?.userId,
+    ],
+  );
+
+  const handleKeyDown = useCallback(
+    (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        handleSendWithContext(true);
+      } else if (
+        e.key === "ArrowUp" &&
+        userInput === "" &&
+        history.length > 0
+      ) {
+        e.preventDefault();
+        const newIndex =
+          historyIndex === -1
+            ? history.length - 1
+            : Math.max(0, historyIndex - 1);
+        setHistoryIndex(newIndex);
+        setUserInput(history[newIndex]);
+      } else if (e.key === "ArrowDown" && historyIndex !== -1) {
+        e.preventDefault();
+        if (historyIndex === history.length - 1) {
+          setHistoryIndex(-1);
+          setUserInput("");
+        } else {
+          const newIndex = historyIndex + 1;
+          setHistoryIndex(newIndex);
+          setUserInput(history[newIndex]);
+        }
+      }
+    },
+    [handleSendWithContext, history, historyIndex, userInput],
+  );
+
+  useEffect(() => {
+    if (isOpen && messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages, isOpen]);
+
+  useEffect(() => {
+    if (isOpen && textareaRef.current) {
+      setTimeout(() => {
+        textareaRef.current?.focus();
+      }, 300);
+    }
+  }, [isOpen]);
+
+  const insertSuggestion = useCallback((suggestion) => {
+    setUserInput(suggestion);
+    setShowSuggestions(false);
+    textareaRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    if (userInput.trim() !== "" || !isExpanded) {
+      setShowSuggestions(false);
+    }
+  }, [userInput, isExpanded]);
+
+  const toggleExpanded = useCallback(() => {
+    setIsExpanded(!isExpanded);
+  }, [isExpanded]);
+
+  const handleRegradeRequest = useCallback(() => {
+    const regradePrompt = `I'd like to request a regrade for assignment ${
+      learnerContext.assignmentId || "this assignment"
+    }. My attempt ID is ${
+      learnerContext.activeAttemptId || "current attempt"
+    }. I believe my answers were scored incorrectly because...`;
+    setUserInput(regradePrompt);
+    setSpecialActions({ show: false, type: null, data: null });
+    textareaRef.current?.focus();
+  }, [learnerContext]);
+
+  const handleIssueReport = useCallback(() => {
+    try {
+      const reportPrompt = `I'd like to report an issue with assignment ${
+        learnerContext.assignmentId || "this assignment"
+      }. The problem I'm experiencing is...`;
+      setUserInput(reportPrompt);
+      setSpecialActions({ show: false, type: null, data: null });
+      textareaRef.current?.focus();
+    } catch (error) {
+      toast.error(
+        "There was a problem setting up the issue report. Please try again.",
+      );
+    }
+  }, [learnerContext]);
+
+  const handleCreateQuestion = useCallback((type) => {
+    let createPrompt = "";
+    switch (type) {
+      case "multiple-choice":
+        createPrompt = `I'd like to create a new multiple-choice question. Here's what I'm thinking:
+
+Question: 
+Options:
+1. [First option - correct]
+2. [Second option]
+3. [Third option]
+4. [Fourth option]
+
+Can you help me complete and implement this question?`;
+        break;
+      case "true/false":
+        createPrompt = `I'd like to create a new true/false question. Here's what I'm thinking:
+
+Statement: 
+Correct answer: [True/False]
+
+Can you help me complete and implement this question?`;
+        break;
+      case "text response":
+        createPrompt = `I'd like to create a new text response question. Here's what I'm thinking:
+
+Question: 
+Rubric criteria:
+- [First criterion]
+- [Second criterion]
+
+Can you help me complete and implement this question?`;
+        break;
+      default:
+        createPrompt = `I'd like to create a new ${type} question for my assignment. The question should be about...`;
+    }
+    setUserInput(createPrompt);
+    setSpecialActions({ show: false, type: null, data: null });
+    textareaRef.current?.focus();
+  }, []);
+
+  const handleSwitchQuestion = useCallback(
+    (questionId) => {
+      if (userRole === "learner" && learnerContext.questions) {
+        const questionIndex = learnerContext.questions.findIndex(
+          (q) => q.id === questionId,
+        );
+        if (questionIndex >= 0) {
+          setActiveQuestion(questionId);
+          if (typeof learnerContext.setActiveQuestionNumber === "function") {
+            learnerContext.setActiveQuestionNumber(questionIndex + 1);
+            toast.success(`Focused on Question ${questionIndex + 1}`);
+          } else {
+            toast.info(`Focused on Question ${questionIndex + 1} (UI only)`);
+          }
+        }
+      }
+    },
+    [userRole, learnerContext],
+  );
+
+  const handleEndChat = useCallback(async () => {
+    if (currentChatId) {
+      try {
+        await endChat(currentChatId);
+        if (user?.userId) {
+          const assignmentId =
+            userRole === "learner"
+              ? learnerContext.assignmentId
+              : userRole === "author"
+                ? authorContext.activeAssignmentId
+                : undefined;
+
+          const newChat = await getOrCreateTodayChat(
+            user.userId,
+            Number(assignmentId),
+          );
+          setCurrentChatId(newChat.id);
+          resetChat();
+
+          const updatedChats = await getUserChats(user.userId);
+          setUserChats(updatedChats);
+
+          toast.success("Started a new chat session");
+        }
+      } catch (error) {
+        toast.error("Could not end chat session");
+      }
+    }
+  }, [
+    currentChatId,
+    user?.userId,
+    userRole,
+    learnerContext.assignmentId,
+    authorContext.activeAssignmentId,
+    resetChat,
+  ]);
+
+  const getChatTitle = useCallback(() => {
+    if (userRole === "author") return "Mark - Assignment Creator";
+    if (userRole === "learner") {
+      if (learnerContext.isFeedbackMode) {
+        return "Mark - Feedback Coach";
+      }
+      return learnerContext.isGradedAssignment
+        ? "Mark - Assignment Guide"
+        : "Mark - Practice Coach";
+    }
+    return "Mark AI Assistant";
+  }, [userRole, learnerContext]);
+
+  const getHelperText = useCallback(() => {
+    if (userRole === "author") {
+      if (authorContext.focusedQuestionId) {
+        const question = authorContext.getCurrentQuestionInfo();
+        if (!question) return "I can help you improve this question";
+        const questionType = question.type;
+        if (
+          questionType === "MULTIPLE_CORRECT" ||
+          questionType === "SINGLE_CORRECT"
+        ) {
+          return "I can help improve options, create variants, or modify scoring";
+        } else if (questionType === "TEXT") {
+          return "I can help build rubrics and refine the prompt";
+        } else if (questionType === "TRUE_FALSE") {
+          return "I can help create variants or convert to other formats";
+        }
+        return "I can help you improve this question";
+      }
+      return "I can create questions, build rubrics, and design assessments";
+    }
+    if (userRole === "learner") {
+      if (learnerContext.isFeedbackMode) {
+        return "I can explain your feedback and suggest improvements";
+      }
+      return learnerContext.isGradedAssignment
+        ? "I'll clarify requirements without providing answers"
+        : "I can provide hints and guidance for this practice";
+    }
+    return "I'm here to help with your educational tasks";
+  }, [userRole, authorContext, learnerContext]);
+
+  const getAccentColor = useCallback(() => {
+    if (userRole === "author") return "from-purple-600 to-indigo-600";
+    if (userRole === "learner") {
+      if (learnerContext.isFeedbackMode) return "from-orange-600 to-amber-600";
+      return learnerContext.isGradedAssignment
+        ? "from-amber-600 to-yellow-600"
+        : "from-purple-600 to-cyan-600";
+    }
+    return "from-purple-600 to-purple-600";
+  }, [userRole, learnerContext]);
+
   const suggestions = React.useMemo(() => {
     if (userRole === "author") {
       const focusedQuestionId = authorContext.focusedQuestionId;
@@ -809,7 +1683,6 @@ export const MarkChat: React.FC = () => {
     ];
   }, [userRole, authorContext, learnerContext]);
 
-  // Reset chat on context change
   useEffect(() => {
     if (userRole === "learner" && learnerContext.assignmentId) {
       resetChat();
@@ -823,407 +1696,10 @@ export const MarkChat: React.FC = () => {
     authorContext.activeAssignmentId,
   ]);
 
-  // Clear input helper
   const clearInput = useCallback(() => {
     setUserInput("");
     textareaRef.current?.focus();
   }, []);
-
-  // Special action detection for learner
-  const checkForLearnerSpecialActions = useCallback(
-    (input: string) => {
-      const lowerInput = input.toLowerCase();
-      if (
-        learnerContext.isFeedbackMode &&
-        (lowerInput.includes("regrade") ||
-          lowerInput.includes("wrong grade") ||
-          lowerInput.includes("graded incorrectly") ||
-          lowerInput.includes("review my grade") ||
-          lowerInput.includes("points I deserved") ||
-          lowerInput.includes("scoring issue") ||
-          lowerInput.match(/score(?:.+?)wrong/) ||
-          lowerInput.match(/grade(?:.+?)incorrect/))
-      ) {
-        setSpecialActions({
-          show: true,
-          type: "regrade",
-          data: {
-            assignmentId: learnerContext.assignmentId,
-            attemptId: learnerContext.activeAttemptId,
-          },
-        });
-      } else if (
-        lowerInput.includes("issue") ||
-        lowerInput.includes("problem with") ||
-        lowerInput.includes("bug") ||
-        lowerInput.includes("doesn't work") ||
-        lowerInput.includes("error") ||
-        lowerInput.includes("glitch") ||
-        lowerInput.includes("not working") ||
-        lowerInput.includes("broken") ||
-        lowerInput.match(/can't(?:.+?)load/) ||
-        lowerInput.match(/won't(?:.+?)display/)
-      ) {
-        setSpecialActions({
-          show: true,
-          type: "report",
-          data: { assignmentId: learnerContext.assignmentId },
-        });
-      } else {
-        setSpecialActions({ show: false, type: null, data: null });
-      }
-    },
-    [learnerContext],
-  );
-
-  // Special action detection for author
-  const checkForAuthorSpecialActions = useCallback((input: string) => {
-    const lowerInput = input.toLowerCase();
-    const createPatterns = [
-      "create",
-      "add",
-      "new",
-      "make",
-      "generate",
-      "build",
-      "design",
-      "develop",
-    ];
-    const questionPatterns = [
-      "question",
-      "multiple choice",
-      "true/false",
-      "text response",
-      "mc question",
-      "t/f",
-      "essay",
-      "prompt",
-      "quiz item",
-      "assessment item",
-      "mcq",
-    ];
-    const hasCreateIntent = createPatterns.some((pattern) =>
-      lowerInput.includes(pattern),
-    );
-    const hasQuestionIntent = questionPatterns.some((pattern) =>
-      lowerInput.includes(pattern),
-    );
-    if (hasCreateIntent && hasQuestionIntent) {
-      let questionType = "multiple-choice";
-      if (
-        lowerInput.match(/multiple.{0,10}choice/) ||
-        lowerInput.includes("mc") ||
-        lowerInput.includes("mcq")
-      ) {
-        questionType = "multiple-choice";
-      } else if (
-        lowerInput.match(/true.{0,5}false/) ||
-        lowerInput.includes("t/f") ||
-        lowerInput.includes("tf question")
-      ) {
-        questionType = "true/false";
-      } else if (
-        lowerInput.match(/text.{0,10}response/) ||
-        lowerInput.includes("essay") ||
-        lowerInput.includes("free response") ||
-        lowerInput.includes("written response") ||
-        lowerInput.includes("open ended")
-      ) {
-        questionType = "text response";
-      }
-      setSpecialActions({
-        show: true,
-        type: "create",
-        data: {
-          questionTypes: [
-            "SINGLE_CORRECT",
-            "MULTIPLE_CORRECT",
-            "TEXT",
-            "TRUE_FALSE",
-          ],
-          suggestedType: questionType,
-        },
-      });
-    } else {
-      setSpecialActions({ show: false, type: null, data: null });
-    }
-  }, []);
-
-  // Add context to messages and send
-  const handleSendWithContext = useCallback(
-    async (stream = true) => {
-      if (!userInput.trim()) return;
-      try {
-        setHistory((prev) => [...prev, userInput]);
-        setHistoryIndex(-1);
-        const contextMessage = await context.getContextMessage();
-        const originalMessages = [...messages];
-        const messagesWithContext = [...originalMessages];
-        const lastUserMsgIndex = messagesWithContext
-          .map((msg, i) => (msg.role === "user" ? i : -1))
-          .filter((i) => i !== -1)
-          .pop();
-        if (lastUserMsgIndex !== undefined) {
-          messagesWithContext.splice(lastUserMsgIndex, 0, {
-            ...contextMessage,
-            role: contextMessage.role as ChatRole,
-          });
-        } else {
-          const systemIndex = messagesWithContext.findIndex(
-            (msg) => msg.role === "system",
-          );
-          const insertPosition = systemIndex !== -1 ? systemIndex + 1 : 0;
-          messagesWithContext.splice(insertPosition, 0, {
-            ...contextMessage,
-            role: contextMessage.role as ChatRole,
-          });
-        }
-        if (userRole === "learner") {
-          checkForLearnerSpecialActions(userInput);
-        } else {
-          checkForAuthorSpecialActions(userInput);
-        }
-        useMarkChatStore.setState({ messages: messagesWithContext });
-        await sendMessage(stream);
-        setTimeout(() => {
-          const purified = useMarkChatStore
-            .getState()
-            .messages.filter(
-              (msg) => msg.role !== "system" || !msg.id.includes("context"),
-            );
-          useMarkChatStore.setState({ messages: purified });
-        }, 100);
-      } catch (error) {
-        console.error("Error sending message with context:", error);
-        sendMessage(stream);
-      }
-      setShowSuggestions(false);
-      if (isRecording) {
-        recognitionRef.current?.stop();
-        setIsRecording(false);
-      }
-    },
-    [
-      userInput,
-      context,
-      messages,
-      userRole,
-      isRecording,
-      sendMessage,
-      checkForLearnerSpecialActions,
-      checkForAuthorSpecialActions,
-    ],
-  );
-  // Handle message history with keyboard
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        handleSendWithContext(true);
-      } else if (
-        e.key === "ArrowUp" &&
-        userInput === "" &&
-        history.length > 0
-      ) {
-        e.preventDefault();
-        const newIndex =
-          historyIndex === -1
-            ? history.length - 1
-            : Math.max(0, historyIndex - 1);
-        setHistoryIndex(newIndex);
-        setUserInput(history[newIndex]);
-      } else if (e.key === "ArrowDown" && historyIndex !== -1) {
-        e.preventDefault();
-        if (historyIndex === history.length - 1) {
-          setHistoryIndex(-1);
-          setUserInput("");
-        } else {
-          const newIndex = historyIndex + 1;
-          setHistoryIndex(newIndex);
-          setUserInput(history[newIndex]);
-        }
-      }
-    },
-    [handleSendWithContext, history, historyIndex, userInput],
-  );
-
-  // Auto-scroll to bottom
-  useEffect(() => {
-    if (isOpen && messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
-    }
-  }, [messages, isOpen]);
-
-  // Auto-focus textarea when chat opens
-  useEffect(() => {
-    if (isOpen && textareaRef.current) {
-      setTimeout(() => {
-        textareaRef.current?.focus();
-      }, 300);
-    }
-  }, [isOpen]);
-
-  const insertSuggestion = useCallback((suggestion: string) => {
-    setUserInput(suggestion);
-    setShowSuggestions(false);
-    textareaRef.current?.focus();
-  }, []);
-
-  useEffect(() => {
-    if (userInput.trim() !== "" || !isExpanded) {
-      setShowSuggestions(false);
-    }
-  }, [userInput, isExpanded]);
-
-  const toggleExpanded = useCallback(() => {
-    setIsExpanded(!isExpanded);
-  }, [isExpanded]);
-
-  const handleRegradeRequest = useCallback(() => {
-    const regradePrompt = `I'd like to request a regrade for assignment ${
-      learnerContext.assignmentId || "this assignment"
-    }. My attempt ID is ${
-      learnerContext.activeAttemptId || "current attempt"
-    }. I believe my answers were scored incorrectly because...`;
-    setUserInput(regradePrompt);
-    setSpecialActions({ show: false, type: null, data: null });
-    textareaRef.current?.focus();
-  }, [learnerContext]);
-
-  const handleIssueReport = useCallback(async () => {
-    try {
-      const reportPrompt = `I'd like to report an issue with assignment ${
-        learnerContext.assignmentId || "this assignment"
-      }. The problem I'm experiencing is...`;
-      setUserInput(reportPrompt);
-      setSpecialActions({ show: false, type: null, data: null });
-      textareaRef.current?.focus();
-    } catch (error) {
-      console.error("Error handling issue report:", error);
-      toast.error(
-        "There was a problem setting up the issue report. Please try again.",
-      );
-    }
-  }, [learnerContext]);
-
-  const handleCreateQuestion = useCallback((type: string) => {
-    let createPrompt = "";
-    switch (type) {
-      case "multiple-choice":
-        createPrompt = `I'd like to create a new multiple-choice question. Here's what I'm thinking:
-
-Question: 
-Options:
-1. [First option - correct]
-2. [Second option]
-3. [Third option]
-4. [Fourth option]
-
-Can you help me complete and implement this question?`;
-        break;
-      case "true/false":
-        createPrompt = `I'd like to create a new true/false question. Here's what I'm thinking:
-
-Statement: 
-Correct answer: [True/False]
-
-Can you help me complete and implement this question?`;
-        break;
-      case "text response":
-        createPrompt = `I'd like to create a new text response question. Here's what I'm thinking:
-
-Question: 
-Rubric criteria:
-- [First criterion]
-- [Second criterion]
-
-Can you help me complete and implement this question?`;
-        break;
-      default:
-        createPrompt = `I'd like to create a new ${type} question for my assignment. The question should be about...`;
-    }
-    setUserInput(createPrompt);
-    setSpecialActions({ show: false, type: null, data: null });
-    textareaRef.current?.focus();
-  }, []);
-
-  const handleSwitchQuestion = useCallback(
-    (questionId: number) => {
-      if (userRole === "learner" && learnerContext.questions) {
-        const questionIndex = learnerContext.questions.findIndex(
-          (q: QuestionAuthorStore) => q.id === questionId,
-        );
-        if (questionIndex >= 0) {
-          setActiveQuestion(questionId);
-          if (typeof learnerContext.setActiveQuestionNumber === "function") {
-            learnerContext.setActiveQuestionNumber(questionIndex + 1);
-            toast.success(`Focused on Question ${questionIndex + 1}`);
-          } else {
-            console.warn(
-              "setActiveQuestionNumber function not available in learnerContext",
-            );
-            toast.info(`Focused on Question ${questionIndex + 1} (UI only)`);
-          }
-        }
-      }
-    },
-    [userRole, learnerContext],
-  );
-
-  const getChatTitle = useCallback(() => {
-    if (userRole === "author") return "Mark - Assignment Creator";
-    if (userRole === "learner") {
-      if (learnerContext.isFeedbackMode) {
-        return "Mark - Feedback Coach";
-      }
-      return learnerContext.isGradedAssignment
-        ? "Mark - Assignment Guide"
-        : "Mark - Practice Coach";
-    }
-    return "Mark AI Assistant";
-  }, [userRole, learnerContext]);
-
-  const getHelperText = useCallback(() => {
-    if (userRole === "author") {
-      if (authorContext.focusedQuestionId) {
-        const question = authorContext.getCurrentQuestionInfo();
-        if (!question) return "I can help you improve this question";
-        const questionType = question.type;
-        if (
-          questionType === "MULTIPLE_CORRECT" ||
-          questionType === "SINGLE_CORRECT"
-        ) {
-          return "I can help improve options, create variants, or modify scoring";
-        } else if (questionType === "TEXT") {
-          return "I can help build rubrics and refine the prompt";
-        } else if (questionType === "TRUE_FALSE") {
-          return "I can help create variants or convert to other formats";
-        }
-        return "I can help you improve this question";
-      }
-      return "I can create questions, build rubrics, and design assessments";
-    }
-    if (userRole === "learner") {
-      if (learnerContext.isFeedbackMode) {
-        return "I can explain your feedback and suggest improvements";
-      }
-      return learnerContext.isGradedAssignment
-        ? "I'll clarify requirements without providing answers"
-        : "I can provide hints and guidance for this practice";
-    }
-    return "I'm here to help with your educational tasks";
-  }, [userRole, authorContext, learnerContext]);
-
-  const getAccentColor = useCallback(() => {
-    if (userRole === "author") return "from-purple-600 to-indigo-600";
-    if (userRole === "learner") {
-      if (learnerContext.isFeedbackMode) return "from-orange-600 to-amber-600";
-      return learnerContext.isGradedAssignment
-        ? "from-amber-600 to-yellow-600"
-        : "from-blue-600 to-cyan-600";
-    }
-    return "from-blue-600 to-purple-600";
-  }, [userRole, learnerContext]);
 
   const chatWindowVariants = {
     hidden: { y: 20, opacity: 0, height: 0 },
@@ -1248,7 +1724,7 @@ Can you help me complete and implement this question?`;
 
   const chatBubbleVariants = {
     hidden: { scale: 0, opacity: 0 },
-    visible: (i: number) => ({
+    visible: (i) => ({
       scale: 1,
       opacity: 1,
       transition: {
@@ -1272,15 +1748,15 @@ Can you help me complete and implement this question?`;
         <div className="max-w-[85%] rounded-xl p-3 bg-white dark:bg-gray-800 shadow-md border dark:border-gray-700">
           <div className="flex space-x-1 items-center h-6">
             <div
-              className="w-2 h-2 rounded-full bg-blue-500 dark:bg-blue-400 animate-bounce"
+              className="w-2 h-2 rounded-full bg-purple-500 dark:bg-purple-400 animate-bounce"
               style={{ animationDelay: "0ms" }}
             />
             <div
-              className="w-2 h-2 rounded-full bg-blue-500 dark:bg-blue-400 animate-bounce"
+              className="w-2 h-2 rounded-full bg-purple-500 dark:bg-purple-400 animate-bounce"
               style={{ animationDelay: "300ms" }}
             />
             <div
-              className="w-2 h-2 rounded-full bg-blue-500 dark:bg-blue-400 animate-bounce"
+              className="w-2 h-2 rounded-full bg-purple-500 dark:bg-purple-400 animate-bounce"
               style={{ animationDelay: "600ms" }}
             />
           </div>
@@ -1309,6 +1785,11 @@ Can you help me complete and implement this question?`;
                 width={50}
                 height={50}
               />
+              {unreadNotifications > 0 && (
+                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                  {unreadNotifications > 9 ? "9+" : unreadNotifications}
+                </span>
+              )}
             </motion.button>
           ) : (
             <motion.button
@@ -1324,7 +1805,6 @@ Can you help me complete and implement this question?`;
             </motion.button>
           ))}
       </AnimatePresence>
-
       <AnimatePresence>
         {isOpen && (
           <>
@@ -1345,7 +1825,6 @@ Can you help me complete and implement this question?`;
               className="fixed bottom-0 right-0 w-[500px] bg-white dark:bg-gray-900 shadow-2xl rounded-t-xl border border-gray-200 dark:border-gray-700 flex flex-col z-50"
               role="dialog"
             >
-              {/* Header */}
               <div
                 className={`flex items-center justify-between p-4 bg-gradient-to-r ${getAccentColor()} rounded-t-xl text-white`}
               >
@@ -1367,6 +1846,40 @@ Can you help me complete and implement this question?`;
                   </div>
                 </div>
                 <div className="flex space-x-2">
+                  <button
+                    onClick={() => setShowChatHistory(true)}
+                    className="p-1 hover:bg-white/10 rounded-full transition-colors"
+                    title="Chat History"
+                  >
+                    <ClockIcon className="w-5 h-5" />
+                  </button>
+                  {/* <button
+                    onClick={() => setShowReports(true)}
+                    className="p-1 hover:bg-white/10 rounded-full transition-colors"
+                    title="View Reported Issues"
+                  >
+                    <ExclamationTriangleIcon className="w-5 h-5" />
+                  </button> */}
+                  {/* <button
+                    onClick={() => setShowNotifications(!showNotifications)}
+                    className="p-1 hover:bg-white/10 rounded-full transition-colors relative"
+                    title="Notifications"
+                  > */}
+                  {/* <BellIcon className="w-5 h-5" />
+                    {unreadNotifications > 0 && (
+                      <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full w-4 h-4 flex items-center justify-center">
+                        {unreadNotifications > 9 ? "9+" : unreadNotifications}
+                      </span>
+                    )} */}
+                  {/* </button> */}
+                  <button
+                    onClick={handleEndChat}
+                    className="p-1 hover:bg-white/10 rounded-full transition-colors"
+                    title="Start New Chat"
+                    disabled={!currentChatId || isInitializing}
+                  >
+                    <ArrowPathIcon className="w-5 h-5" />
+                  </button>
                   <button
                     onClick={() => setShowSettings(!showSettings)}
                     className="p-1 hover:bg-white/10 rounded-full transition-colors"
@@ -1394,7 +1907,6 @@ Can you help me complete and implement this question?`;
                 </div>
               </div>
 
-              {/* Context indicators */}
               <div className="flex flex-wrap items-center gap-2 p-2 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
                 <ContextIndicators
                   contextReady={contextReady}
@@ -1402,10 +1914,10 @@ Can you help me complete and implement this question?`;
                   authorContext={authorContext}
                   learnerContext={learnerContext}
                   activeQuestion={activeQuestion}
+                  currentChatId={currentChatId}
                 />
               </div>
 
-              {/* Chat Messages */}
               <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50 dark:bg-gray-950 relative">
                 <AnimatePresence>
                   {showSettings && (
@@ -1422,12 +1934,24 @@ Can you help me complete and implement this question?`;
                     />
                   )}
                 </AnimatePresence>
+                <AnimatePresence>
+                  {/* {showNotifications && (
+                    <NotificationsPanel
+                      notifications={notifications}
+                      onClose={() => setShowNotifications(false)}
+                      onMarkRead={markNotificationRead}
+                      onClickNotification={handleNotificationClick}
+                    />
+                  )} */}
+                </AnimatePresence>
+
                 <QuestionSelector
                   userRole={userRole}
                   learnerContext={learnerContext}
                   activeQuestion={activeQuestion}
                   handleSwitchQuestion={handleSwitchQuestion}
                 />
+
                 <AnimatePresence>
                   {specialActions.show && (
                     <SpecialActionUI
@@ -1438,7 +1962,16 @@ Can you help me complete and implement this question?`;
                     />
                   )}
                 </AnimatePresence>
-                {messages.length <= 1 ? (
+
+                {isInitializing ? (
+                  <div className="flex items-center justify-center h-32">
+                    <div className="animate-pulse flex flex-col items-center">
+                      <div className="w-10 h-10 rounded-full bg-gray-300 dark:bg-gray-700 mb-2"></div>
+                      <div className="h-2 bg-gray-300 dark:bg-gray-700 rounded w-24 mb-2"></div>
+                      <div className="h-2 bg-gray-300 dark:bg-gray-700 rounded w-32"></div>
+                    </div>
+                  </div>
+                ) : messages.length <= 1 ? (
                   <WelcomeMessage
                     getAccentColor={getAccentColor}
                     userRole={userRole}
@@ -1456,7 +1989,6 @@ Can you help me complete and implement this question?`;
                 <div ref={messagesEndRef} />
               </div>
 
-              {/* Action Bar */}
               <motion.div
                 variants={fadeInVariants}
                 className="border-t dark:border-gray-800 p-3 bg-white dark:bg-gray-900"
@@ -1482,8 +2014,9 @@ Can you help me complete and implement this question?`;
                       isRecording
                         ? "border-red-400 dark:border-red-600"
                         : "dark:border-gray-700"
-                    } rounded-xl bg-white dark:bg-gray-800 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[56px] max-h-24`}
+                    } rounded-xl bg-white dark:bg-gray-800 resize-none focus:outline-none focus:ring-2 focus:ring-purple-500 min-h-[56px] max-h-24`}
                     style={{ maxHeight: "120px", overflowY: "auto" }}
+                    disabled={isInitializing}
                   />
                   <div className="absolute right-3 bottom-3 flex space-x-2">
                     {userInput.trim() !== "" && (
@@ -1510,6 +2043,7 @@ Can you help me complete and implement this question?`;
                           : "bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-300"
                       }`}
                       title="Voice input"
+                      disabled={isInitializing}
                     >
                       <MicrophoneIcon className="w-4 h-4" />
                     </motion.button>
@@ -1519,6 +2053,7 @@ Can you help me complete and implement this question?`;
                       onClick={() => setShowSuggestions(!showSuggestions)}
                       className="p-1.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-full transition-colors"
                       title="Show suggestions"
+                      disabled={isInitializing}
                     >
                       <LightBulbIcon className="w-4 h-4 text-gray-600 dark:text-gray-300" />
                     </motion.button>
@@ -1527,12 +2062,12 @@ Can you help me complete and implement this question?`;
                       whileTap={{ scale: 0.9 }}
                       onClick={() => handleSendWithContext(true)}
                       className={`p-1.5 ${
-                        !userInput.trim() || isTyping
-                          ? "bg-blue-400 cursor-not-allowed"
-                          : "bg-blue-600 hover:bg-blue-700"
-                      } dark:bg-blue-700 dark:hover:bg-blue-800 rounded-full transition-colors`}
+                        !userInput.trim() || isTyping || isInitializing
+                          ? "bg-purple-400 cursor-not-allowed"
+                          : "bg-purple-600 hover:bg-purple-700"
+                      } dark:bg-purple-700 dark:hover:bg-purple-800 rounded-full transition-colors`}
                       title="Send message"
-                      disabled={!userInput.trim() || isTyping}
+                      disabled={!userInput.trim() || isTyping || isInitializing}
                     >
                       <PaperAirplaneIcon className="w-4 h-4 text-white" />
                     </motion.button>
@@ -1546,6 +2081,39 @@ Can you help me complete and implement this question?`;
               </motion.div>
             </motion.div>
           </>
+        )}
+      </AnimatePresence>
+      <ChatHistoryDrawer
+        isOpen={showChatHistory}
+        onClose={() => setShowChatHistory(false)}
+        chats={userChats}
+        onSelectChat={handleSelectChat}
+        currentChatId={currentChatId}
+        isLoading={isLoadingChats}
+      />
+
+      <AnimatePresence>
+        {showReports && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/20 backdrop-blur-sm z-50 flex items-center justify-center"
+            onClick={() => setShowReports(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="w-full max-w-2xl m-4"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <UserReportsPanel
+                userId={user?.userId || ""}
+                onClose={() => setShowReports(false)}
+              />
+            </motion.div>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>

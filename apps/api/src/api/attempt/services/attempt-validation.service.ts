@@ -52,7 +52,6 @@ export class AttemptValidationService {
       },
     });
 
-    // Check for ongoing attempts
     const ongoingAttempts = attempts.filter(
       (sub) =>
         !sub.submitted &&
@@ -63,7 +62,6 @@ export class AttemptValidationService {
       throw new UnprocessableEntityException(IN_PROGRESS_SUBMISSION_EXCEPTION);
     }
 
-    // Check attempts per time range
     const attemptsInTimeRange = attempts.filter(
       (sub) =>
         sub.createdAt >= timeRangeStartDate && sub.createdAt <= new Date(),
@@ -78,7 +76,6 @@ export class AttemptValidationService {
       );
     }
 
-    // Check maximum attempts
     if (assignment.numAttempts !== null && assignment.numAttempts !== -1) {
       const attemptCount = await this.countUserAttempts(
         userSession.userId,

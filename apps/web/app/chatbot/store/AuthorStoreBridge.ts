@@ -6,7 +6,6 @@ import { useEffect } from "react";
 import { OptionalQuestion, useAuthorStore } from "@/stores/author";
 import { QuestionType } from "@/config/types";
 
-// Create a global variable to track bridge initialization
 declare global {
   interface Window {
     authorStoreBridge?: {
@@ -57,9 +56,7 @@ declare global {
  * and listens for message events from the server routes.
  */
 export default function AuthorStoreBridge() {
-  // Initialize the bridge as soon as the component mounts
   useEffect(() => {
-    // Set up the callback system if it doesn't exist
     if (!window._authorStoreBridgeCallbacks) {
       window._authorStoreBridgeCallbacks = [];
       window._notifyBridgeInitialized = () => {
@@ -71,12 +68,10 @@ export default function AuthorStoreBridge() {
 
     if (!window.authorStoreBridge) {
       window.authorStoreBridge = {
-        // Get author store state
         getState: () => {
           return useAuthorStore.getState();
         },
 
-        // Create a new question
         createQuestion: (
           questionType,
           questionText,
@@ -88,21 +83,17 @@ export default function AuthorStoreBridge() {
           try {
             const authorStore = useAuthorStore.getState();
 
-            // Validate inputs
             if (!questionType || !questionText) {
               throw new Error("Question type and text are required");
             }
 
-            // Generate a new question ID
             const existingIds = authorStore.questions.map((q) => q.id || 0);
             let newQuestionId = Math.max(0, ...existingIds) + 1;
 
-            // Ensure ID uniqueness
             if (existingIds.includes(newQuestionId)) {
               newQuestionId = Math.max(1000000, ...existingIds) + 1;
             }
 
-            // Format choices if needed
             let choices = [];
             if (
               options &&
@@ -125,10 +116,9 @@ export default function AuthorStoreBridge() {
               }));
             }
 
-            // Create question object
             const newQuestion = {
               id: newQuestionId,
-              type: questionType as QuestionType, // Ensure questionType is cast to QuestionType
+              type: questionType as QuestionType,
               question: questionText,
               totalPoints: totalPoints || 10,
               assignmentId: authorStore.activeAssignmentId || 1,
@@ -143,10 +133,8 @@ export default function AuthorStoreBridge() {
               index: (authorStore.questions.length || 0) + 1,
             };
 
-            // Add question to store
             authorStore.addQuestion(newQuestion);
 
-            // Update question order
             if (
               authorStore.questionOrder &&
               !authorStore.questionOrder.includes(newQuestionId)
@@ -157,7 +145,6 @@ export default function AuthorStoreBridge() {
               ]);
             }
 
-            // Force store update
             if (authorStore.setUpdatedAt) {
               authorStore.setUpdatedAt(Date.now());
             }
@@ -170,7 +157,6 @@ export default function AuthorStoreBridge() {
               questionId: newQuestionId,
             };
           } catch (error) {
-            console.error("Error creating question:", error);
             console.groupEnd();
             return {
               success: false,
@@ -180,7 +166,6 @@ export default function AuthorStoreBridge() {
           }
         },
 
-        // Modify an existing question
         modifyQuestion: (
           questionId,
           questionText,
@@ -192,13 +177,11 @@ export default function AuthorStoreBridge() {
           try {
             const authorStore = useAuthorStore.getState();
 
-            // Parse questionId to ensure it's a number
             questionId = parseInt(questionId.toString());
             if (isNaN(questionId)) {
               throw new Error("Invalid question ID format");
             }
 
-            // Find question
             const question = authorStore.questions.find(
               (q) => q.id === questionId,
             );
@@ -206,7 +189,6 @@ export default function AuthorStoreBridge() {
               throw new Error(`Question with ID ${questionId} not found`);
             }
 
-            // Create modification object
             const modification: OptionalQuestion = {};
             if (questionText !== undefined && questionText !== null)
               modification.question = questionText;
@@ -215,10 +197,8 @@ export default function AuthorStoreBridge() {
             if (questionType !== undefined && questionType !== null)
               modification.type = questionType as QuestionType;
 
-            // Apply modifications
             authorStore.modifyQuestion(questionId, modification);
 
-            // Force store update
             if (authorStore.setUpdatedAt) {
               authorStore.setUpdatedAt(Date.now());
             }
@@ -230,7 +210,6 @@ export default function AuthorStoreBridge() {
               message: `Successfully modified question ${questionId}.`,
             };
           } catch (error) {
-            console.error("Error modifying question:", error);
             console.groupEnd();
             return {
               success: false,
@@ -240,14 +219,12 @@ export default function AuthorStoreBridge() {
           }
         },
 
-        // Set question choices
         setQuestionChoices: (questionId, choices, variantId) => {
           console.group("Bridge: setQuestionChoices");
 
           try {
             const authorStore = useAuthorStore.getState();
 
-            // Parse IDs
             questionId = parseInt(questionId.toString());
             if (isNaN(questionId)) {
               throw new Error("Invalid question ID format");
@@ -260,7 +237,6 @@ export default function AuthorStoreBridge() {
               }
             }
 
-            // Find question
             const question = authorStore.questions.find(
               (q) => q.id === questionId,
             );
@@ -268,12 +244,10 @@ export default function AuthorStoreBridge() {
               throw new Error(`Question with ID ${questionId} not found`);
             }
 
-            // Validate choices
             if (!choices || !Array.isArray(choices) || choices.length === 0) {
               throw new Error("Choices must be a non-empty array");
             }
 
-            // Convert question type if needed
             if (
               !["SINGLE_CORRECT", "MULTIPLE_CORRECT"].includes(question.type)
             ) {
@@ -282,7 +256,6 @@ export default function AuthorStoreBridge() {
               });
             }
 
-            // Format choices
             const formattedChoices = choices.map((choice) => ({
               choice: choice.text || "",
               isCorrect: choice.isCorrect || false,
@@ -297,10 +270,8 @@ export default function AuthorStoreBridge() {
               feedback: "",
             }));
 
-            // Set choices
             authorStore.setChoices(questionId, formattedChoices, variantId);
 
-            // Force store update
             if (authorStore.setUpdatedAt) {
               authorStore.setUpdatedAt(Date.now());
             }
@@ -312,7 +283,6 @@ export default function AuthorStoreBridge() {
               message: `Successfully updated choices for question ${questionId}${variantId ? ` variant ${variantId}` : ""}.`,
             };
           } catch (error) {
-            console.error("Error setting question choices:", error);
             console.groupEnd();
             return {
               success: false,
@@ -322,20 +292,17 @@ export default function AuthorStoreBridge() {
           }
         },
 
-        // Add rubric to question
         addRubric: (questionId, rubricQuestion, criteria) => {
           console.group("Bridge: addRubric");
 
           try {
             const authorStore = useAuthorStore.getState();
 
-            // Parse questionId
             questionId = parseInt(questionId.toString());
             if (isNaN(questionId)) {
               throw new Error("Invalid question ID format");
             }
 
-            // Find question
             const question = authorStore.questions.find(
               (q) => q.id === questionId,
             );
@@ -343,17 +310,14 @@ export default function AuthorStoreBridge() {
               throw new Error(`Question with ID ${questionId} not found`);
             }
 
-            // Add rubric
             authorStore.addOneRubric(questionId);
 
-            // Get latest rubric index
             const scoring = question.scoring || {
               type: "CRITERIA_BASED",
               rubrics: [],
             };
             const rubricIndex = (scoring.rubrics?.length || 1) - 1;
 
-            // Set rubric question text
             if (rubricQuestion) {
               authorStore.setRubricQuestionText(
                 questionId,
@@ -363,7 +327,6 @@ export default function AuthorStoreBridge() {
               );
             }
 
-            // Add criteria
             if (criteria && criteria.length > 0) {
               const formattedCriteria = criteria.map((criterion, index) => ({
                 id: index + 1,
@@ -378,7 +341,6 @@ export default function AuthorStoreBridge() {
               );
             }
 
-            // Force store update
             if (authorStore.setUpdatedAt) {
               authorStore.setUpdatedAt(Date.now());
             }
@@ -389,7 +351,6 @@ export default function AuthorStoreBridge() {
               message: `Successfully added rubric to question ${questionId}.`,
             };
           } catch (error) {
-            console.error("Error adding rubric:", error);
             console.groupEnd();
             return {
               success: false,
@@ -399,20 +360,17 @@ export default function AuthorStoreBridge() {
           }
         },
 
-        // Generate question variant
         generateQuestionVariant: (questionId, variantType) => {
           console.group("Bridge: generateQuestionVariant");
 
           try {
             const authorStore = useAuthorStore.getState();
 
-            // Parse questionId
             questionId = parseInt(questionId.toString());
             if (isNaN(questionId)) {
               throw new Error("Invalid question ID format");
             }
 
-            // Find question
             const question = authorStore.questions.find(
               (q) => q.id === questionId,
             );
@@ -420,12 +378,10 @@ export default function AuthorStoreBridge() {
               throw new Error(`Question with ID ${questionId} not found`);
             }
 
-            // Generate new variant ID
             const variantId =
               Math.max(0, ...(question.variants || []).map((v) => v.id || 0)) +
               1;
 
-            // Create variant object
             const newVariant = {
               id: variantId,
               questionId: questionId,
@@ -440,10 +396,8 @@ export default function AuthorStoreBridge() {
               randomizedChoices: question.randomizedChoices,
             };
 
-            // Add variant
             authorStore.addVariant(questionId, newVariant);
 
-            // Force store update
             if (authorStore.setUpdatedAt) {
               authorStore.setUpdatedAt(Date.now());
             }
@@ -456,7 +410,6 @@ export default function AuthorStoreBridge() {
               variantId: variantId,
             };
           } catch (error) {
-            console.error("Error generating variant:", error);
             console.groupEnd();
             return {
               success: false,
@@ -466,20 +419,17 @@ export default function AuthorStoreBridge() {
           }
         },
 
-        // Delete question
         deleteQuestion: (questionId) => {
           console.group("Bridge: deleteQuestion");
 
           try {
             const authorStore = useAuthorStore.getState();
 
-            // Parse questionId
             questionId = parseInt(questionId.toString());
             if (isNaN(questionId)) {
               throw new Error("Invalid question ID format");
             }
 
-            // Verify question exists
             const questionExists = authorStore.questions.some(
               (q) => q.id === questionId,
             );
@@ -487,10 +437,8 @@ export default function AuthorStoreBridge() {
               throw new Error(`Question with ID ${questionId} not found`);
             }
 
-            // Delete question
             authorStore.removeQuestion(questionId);
 
-            // Update question order
             if (authorStore.questionOrder) {
               const updatedOrder = authorStore.questionOrder.filter(
                 (id) => id !== questionId,
@@ -498,7 +446,6 @@ export default function AuthorStoreBridge() {
               authorStore.setQuestionOrder(updatedOrder);
             }
 
-            // Force store update
             if (authorStore.setUpdatedAt) {
               authorStore.setUpdatedAt(Date.now());
             }
@@ -510,7 +457,6 @@ export default function AuthorStoreBridge() {
               message: `Successfully deleted question ${questionId}.`,
             };
           } catch (error) {
-            console.error("Error deleting question:", error);
             console.groupEnd();
             return {
               success: false,
@@ -520,7 +466,6 @@ export default function AuthorStoreBridge() {
           }
         },
 
-        // Generate questions from objectives
         generateQuestionsFromObjectives: (
           learningObjectives,
           questionTypes,
@@ -531,12 +476,10 @@ export default function AuthorStoreBridge() {
           try {
             const authorStore = useAuthorStore.getState();
 
-            // Validate learning objectives
             if (!learningObjectives || !learningObjectives.trim()) {
               throw new Error("No learning objectives provided");
             }
 
-            // Default values
             count = count || 5;
             questionTypes =
               questionTypes &&
@@ -545,13 +488,11 @@ export default function AuthorStoreBridge() {
                 ? questionTypes
                 : ["SINGLE_CORRECT", "MULTIPLE_CORRECT", "TEXT", "TRUE_FALSE"];
 
-            // Generate questions
             let generatedCount = 0;
             const questionIds = [];
             const startId =
               Math.max(0, ...authorStore.questions.map((q) => q.id || 0)) + 1;
 
-            // Create questions
             for (let i = 0; i < count; i++) {
               const qType = questionTypes[i % questionTypes.length];
               const qId = startId + i;
@@ -563,17 +504,15 @@ export default function AuthorStoreBridge() {
                 totalPoints: 10,
                 assignmentId: authorStore.activeAssignmentId || 0,
                 variants: [],
-                choices: [], // Added choices property to fix the error
-                answer: undefined, // Added answer property to fix the error
+                choices: [],
+                answer: undefined,
                 scoring: {
-                  // Added scoring property to fix the error
                   type: "CRITERIA_BASED" as const,
                   rubrics: [],
                   showRubricsToLearner: true,
                 },
               };
 
-              // Add type-specific properties
               if (qType === "SINGLE_CORRECT" || qType === "MULTIPLE_CORRECT") {
                 newQuestion.choices = [
                   {
@@ -603,20 +542,17 @@ export default function AuthorStoreBridge() {
                 newQuestion.answer = true;
               }
 
-              // Add scoring
               newQuestion.scoring = {
                 type: "CRITERIA_BASED",
                 rubrics: [],
                 showRubricsToLearner: true,
               };
 
-              // Add question
               authorStore.addQuestion(newQuestion);
               questionIds.push(qId);
               generatedCount++;
             }
 
-            // Update question order
             if (authorStore.questionOrder) {
               authorStore.setQuestionOrder([
                 ...authorStore.questionOrder,
@@ -624,7 +560,6 @@ export default function AuthorStoreBridge() {
               ]);
             }
 
-            // Force store update
             if (authorStore.setUpdatedAt) {
               authorStore.setUpdatedAt(Date.now());
             }
@@ -637,7 +572,6 @@ export default function AuthorStoreBridge() {
               questionIds: questionIds,
             };
           } catch (error) {
-            console.error("Error generating questions:", error);
             console.groupEnd();
             return {
               success: false,
@@ -647,17 +581,14 @@ export default function AuthorStoreBridge() {
           }
         },
 
-        // Update learning objectives
         updateLearningObjectives: (learningObjectives) => {
           console.group("Bridge: updateLearningObjectives");
 
           try {
             const authorStore = useAuthorStore.getState();
 
-            // Update objectives
             authorStore.setLearningObjectives(learningObjectives);
 
-            // Force store update
             if (authorStore.setUpdatedAt) {
               authorStore.setUpdatedAt(Date.now());
             }
@@ -669,7 +600,6 @@ export default function AuthorStoreBridge() {
               message: `Successfully updated learning objectives.`,
             };
           } catch (error) {
-            console.error("Error updating learning objectives:", error);
             console.groupEnd();
             return {
               success: false,
@@ -679,20 +609,17 @@ export default function AuthorStoreBridge() {
           }
         },
 
-        // Set question title
         setQuestionTitle: (questionId, title) => {
           console.group("Bridge: setQuestionTitle");
 
           try {
             const authorStore = useAuthorStore.getState();
 
-            // Parse questionId
             questionId = parseInt(questionId.toString());
             if (isNaN(questionId)) {
               throw new Error("Invalid question ID format");
             }
 
-            // Verify question exists
             const questionExists = authorStore.questions.some(
               (q) => q.id === questionId,
             );
@@ -700,10 +627,8 @@ export default function AuthorStoreBridge() {
               throw new Error(`Question with ID ${questionId} not found`);
             }
 
-            // Update title
             authorStore.setQuestionTitle(title, questionId);
 
-            // Force store update
             if (authorStore.setUpdatedAt) {
               authorStore.setUpdatedAt(Date.now());
             }
@@ -715,7 +640,6 @@ export default function AuthorStoreBridge() {
               message: `Successfully updated title for question ${questionId}.`,
             };
           } catch (error) {
-            console.error("Error setting question title:", error);
             console.groupEnd();
             return {
               success: false,
@@ -726,24 +650,17 @@ export default function AuthorStoreBridge() {
         },
       };
 
-      // Set up a custom event listener to execute author store operations
       const authorOperationHandler = (e) => {
         if (!window.authorStoreBridge) {
-          console.error("No bridge yet!");
           return;
         }
 
-        // Validate event detail
         const { operation, args, requestId } = e.detail;
         if (!operation || !args || !requestId) {
-          console.error("Invalid operation event:", e);
           return;
         }
 
         if (typeof window.authorStoreBridge[operation] !== "function") {
-          console.error(`Operation ${operation} not found in bridge`);
-
-          // Dispatch error result
           window.dispatchEvent(
             new CustomEvent("author-store-result", {
               detail: {
@@ -762,7 +679,6 @@ export default function AuthorStoreBridge() {
         try {
           const result = window.authorStoreBridge[operation](...args);
 
-          // Dispatch successful result
           window.dispatchEvent(
             new CustomEvent("author-store-result", {
               detail: {
@@ -772,9 +688,6 @@ export default function AuthorStoreBridge() {
             }),
           );
         } catch (error) {
-          console.error(`Error executing ${operation}:`, error);
-
-          // Dispatch error result
           window.dispatchEvent(
             new CustomEvent("author-store-result", {
               detail: {
@@ -792,11 +705,9 @@ export default function AuthorStoreBridge() {
 
       window.addEventListener("author-store-operation", authorOperationHandler);
 
-      // Mark the bridge as initialized and notify any waiting callbacks
       window._authorStoreBridgeInitialized = true;
       window._notifyBridgeInitialized();
 
-      // Cleanup on unmount
       return () => {
         window.removeEventListener(
           "author-store-operation",
@@ -806,12 +717,10 @@ export default function AuthorStoreBridge() {
         window._authorStoreBridgeInitialized = false;
       };
     } else {
-      // Bridge already exists, just make sure initialized flag is set
       window._authorStoreBridgeInitialized = true;
       window._notifyBridgeInitialized();
     }
   }, []);
 
-  // This component doesn't render anything
   return null;
 }

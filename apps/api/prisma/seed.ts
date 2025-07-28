@@ -1,7 +1,7 @@
 import { exec } from "node:child_process";
-import path from "node:path";
 import fs from "node:fs";
-import { PrismaClient } from "@prisma/client";
+import path from "node:path";
+import { Prisma, PrismaClient } from "@prisma/client";
 import dotenv from "dotenv";
 import {
   ScoringType,
@@ -122,10 +122,8 @@ async function runPgRestore(sqlFilePath: string) {
   return new Promise((resolve, reject) => {
     exec(command, (error, stdout, stderr) => {
       if (error) {
-        console.error(`Error during pg_restore: ${stderr}`);
         reject(error);
       } else {
-        console.log(`pg_restore output: ${stdout}`);
         resolve(stdout);
       }
     });
@@ -133,7 +131,6 @@ async function runPgRestore(sqlFilePath: string) {
 }
 
 async function main() {
-  console.log("Start seeding...");
   // eslint-disable-next-line unicorn/prefer-module
   const sqlFilePath = path.join(__dirname, "seed.sql");
   if (fs.existsSync(sqlFilePath)) {
@@ -182,8 +179,13 @@ async function main() {
         timeEstimateMinutes: 1,
         published: true,
         questions: {
-          // @ts-expect-error - The types ain't typing
-          createMany: { data: questions },
+          createMany: {
+            data: questions.map((q) => ({
+              ...q,
+              scoring: q.scoring as unknown as Prisma.InputJsonValue,
+              choices: q.choices as unknown as Prisma.InputJsonValue,
+            })),
+          },
         },
         groups: {
           create: [
@@ -203,14 +205,11 @@ async function main() {
         },
       },
     });
-    console.log("Created assignment with ID:", assignment.id);
   }
-  console.log("Seeding completed.");
 }
 
 main()
   .catch((error) => {
-    console.error(error);
     // eslint-disable-next-line unicorn/no-process-exit
     process.exit(1);
   })

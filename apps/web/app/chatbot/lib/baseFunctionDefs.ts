@@ -1,7 +1,3 @@
-// app/chatbot/lib/baseFunctionDefs.ts
-// Function definitions for OpenAI API function calling
-
-// Common functions for both roles
 const commonFunctions = [
   {
     name: "searchKnowledgeBase",
@@ -44,7 +40,6 @@ const commonFunctions = [
   },
 ];
 
-// Learner-specific functions
 const learnerFunctions = [
   {
     name: "getQuestionDetails",
@@ -118,7 +113,6 @@ const learnerFunctions = [
   },
 ];
 
-// Author-specific functions
 const authorFunctions = [
   {
     name: "createQuestion",
@@ -231,7 +225,6 @@ const authorFunctions = [
   },
 ];
 
-// Export combined function definitions
 export const functionDefinitions = [
   ...commonFunctions,
   ...learnerFunctions,

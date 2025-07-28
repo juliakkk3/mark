@@ -25,7 +25,6 @@ function Dropdown<T>({
   const [portalContainer, setPortalContainer] = useState<Element | null>(null);
 
   useEffect(() => {
-    // Create a container for the portal if it doesn't exist
     let container = document.getElementById("dropdown-portal");
     if (!container) {
       container = document.createElement("div");
@@ -58,7 +57,6 @@ function Dropdown<T>({
     setIsOpen(false);
   };
 
-  // The button stays in place but the menu is portaled out
   const menu = (
     <div
       className={cn(
@@ -66,7 +64,7 @@ function Dropdown<T>({
         isOpen
           ? "scale-100 opacity-100"
           : "scale-90 opacity-0 pointer-events-none",
-        "max-h-60 overflow-y-auto", // Added classes for scrollable content
+        "max-h-60 overflow-y-auto",
       )}
       style={{
         top: dropdownRef.current
@@ -150,7 +148,7 @@ function Dropdown<T>({
           </svg>
         </button>
       </Tooltip>
-      {/* Render the dropdown menu using a portal */}
+
       {isOpen && portalContainer
         ? ReactDOM.createPortal(menu, portalContainer)
         : null}

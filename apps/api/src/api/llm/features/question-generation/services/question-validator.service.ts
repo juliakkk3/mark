@@ -1,23 +1,22 @@
 /* eslint-disable unicorn/no-null */
-// src/llm/features/question-generation/services/question-validator.service.ts
-import { Injectable, Inject } from "@nestjs/common";
-import { QuestionType, AIUsageType } from "@prisma/client";
-import { PromptTemplate } from "@langchain/core/prompts";
-import { StructuredOutputParser } from "langchain/output_parsers";
-import { z } from "zod";
 
-import { PROMPT_PROCESSOR } from "../../../llm.constants";
-import { IPromptProcessor } from "src/api/llm/core/interfaces/prompt-processor.interface";
+import { PromptTemplate } from "@langchain/core/prompts";
+import { Inject, Injectable } from "@nestjs/common";
+import { AIUsageType, QuestionType } from "@prisma/client";
+import { StructuredOutputParser } from "langchain/output_parsers";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
-import { Logger } from "winston";
 import { EnhancedQuestionsToGenerate } from "src/api/assignment/dto/post.assignment.request.dto";
-import { Criteria } from "src/api/assignment/question/dto/create.update.question.request.dto";
-import { DifficultyLevel } from "./question-generation.service";
 import {
   Choice,
   QuestionDto,
 } from "src/api/assignment/dto/update.questions.request.dto";
+import { Criteria } from "src/api/assignment/question/dto/create.update.question.request.dto";
+import { IPromptProcessor } from "src/api/llm/core/interfaces/prompt-processor.interface";
+import { Logger } from "winston";
+import { z } from "zod";
+import { PROMPT_PROCESSOR } from "../../../llm.constants";
 import { IQuestionValidatorService } from "../interfaces/question-validator.interface";
+import { DifficultyLevel } from "./question-generation.service";
 
 /**
  * Validation result for a batch of questions
@@ -25,8 +24,8 @@ import { IQuestionValidatorService } from "../interfaces/question-validator.inte
 export interface ValidationResult {
   isValid: boolean;
   hasImprovements: boolean;
-  issues: Record<number, string[]>; // Maps question index to array of issues
-  improvements: Record<number, string>; // Maps question index to improvement suggestion
+  issues: Record<number, string[]>;
+  improvements: Record<number, string>;
 }
 
 /**
@@ -50,13 +49,13 @@ export class QuestionValidatorService implements IQuestionValidatorService {
    * Validate a batch of generated questions against requirements
    */
   async validateQuestions(
+    assignmentId: number,
     questions: QuestionDto[],
     requirements: EnhancedQuestionsToGenerate,
     difficultyLevel: DifficultyLevel,
     content?: string,
     learningObjectives?: string,
   ): Promise<ValidationResult> {
-    // ──────────────────────────── quick short-circuit ────────────────────────────
     if (!questions?.length) {
       return {
         isValid: false,
@@ -66,7 +65,6 @@ export class QuestionValidatorService implements IQuestionValidatorService {
       };
     }
 
-    // ──────────────────────────── Zod output schema ──────────────────────────────
     const parser = StructuredOutputParser.fromZodSchema(
       z.object({
         isValid: z.boolean(),
@@ -77,7 +75,6 @@ export class QuestionValidatorService implements IQuestionValidatorService {
     );
     const formatInstructions = parser.getFormatInstructions();
 
-    // ──────────────────────────── prompt template ────────────────────────────────
     const template = `
   You are an expert assessment quality validator tasked with evaluating a set of generated questions against specific requirements.
   
@@ -130,7 +127,6 @@ export class QuestionValidatorService implements IQuestionValidatorService {
         format_instructions: () => formatInstructions,
         questions: () => JSON.stringify(questions, null, 2),
 
-        // counts
         mc: () => String(requirements.multipleChoice ?? 0),
         ms: () => String(requirements.multipleSelect ?? 0),
         txt: () => String(requirements.textResponse ?? 0),
@@ -141,7 +137,6 @@ export class QuestionValidatorService implements IQuestionValidatorService {
 
         difficultyLevel: () => difficultyLevel,
 
-        // optional sections
         contentSection: () =>
           content
             ? `CONTENT:\n${content.slice(0, 500)}...\n`
@@ -154,12 +149,12 @@ export class QuestionValidatorService implements IQuestionValidatorService {
       },
     });
 
-    // ──────────────────────────── LLM call & parsing ─────────────────────────────
     try {
       const response = await this.promptProcessor.processPrompt(
         prompt,
-        Date.now(), // handy fallback ID
+        assignmentId,
         AIUsageType.ASSIGNMENT_GENERATION,
+        "gpt-4o-mini",
       );
 
       const parsed = await parser.parse(response);
@@ -174,9 +169,11 @@ export class QuestionValidatorService implements IQuestionValidatorService {
       };
     } catch (error) {
       this.logger.error(
-        `Error validating questions: ${error instanceof Error ? error.message : "Unknown error"}`,
+        `Error validating questions: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`,
       );
-      // basic fallback
+
       return this.performBasicValidation(questions, requirements);
     }
   }
@@ -209,16 +206,13 @@ export class QuestionValidatorService implements IQuestionValidatorService {
     const issues: Record<number, string[]> = {};
     const improvements: Record<number, string> = {};
 
-    // Count questions by type
     const countsByType: Record<string, number> = {};
 
     for (const [index, question] of questions.entries()) {
       const questionIssues: string[] = [];
 
-      // Count by type
       countsByType[question.type] = (countsByType[question.type] || 0) + 1;
 
-      // Basic validation by question type
       switch (question.type) {
         case QuestionType.SINGLE_CORRECT: {
           this.validateMultipleChoiceQuestion(question, questionIssues);
@@ -244,15 +238,14 @@ export class QuestionValidatorService implements IQuestionValidatorService {
         }
       }
 
-      // Add issues if any found
       if (questionIssues.length > 0) {
         issues[index] = questionIssues;
-        improvements[index] =
-          `Fix the following issues: ${questionIssues.join(", ")}`;
+        improvements[index] = `Fix the following issues: ${questionIssues.join(
+          ", ",
+        )}`;
       }
     }
 
-    // Check type counts against requirements
     const typeCountIssues: string[] = [];
 
     if (
@@ -260,7 +253,11 @@ export class QuestionValidatorService implements IQuestionValidatorService {
       (requirements.multipleChoice || 0)
     ) {
       typeCountIssues.push(
-        `Expected ${requirements.multipleChoice || 0} SINGLE_CORRECT questions, got ${countsByType[QuestionType.SINGLE_CORRECT] || 0}`,
+        `Expected ${
+          requirements.multipleChoice || 0
+        } SINGLE_CORRECT questions, got ${
+          countsByType[QuestionType.SINGLE_CORRECT] || 0
+        }`,
       );
     }
 
@@ -269,7 +266,11 @@ export class QuestionValidatorService implements IQuestionValidatorService {
       (requirements.multipleSelect || 0)
     ) {
       typeCountIssues.push(
-        `Expected ${requirements.multipleSelect || 0} MULTIPLE_CORRECT questions, got ${countsByType[QuestionType.MULTIPLE_CORRECT] || 0}`,
+        `Expected ${
+          requirements.multipleSelect || 0
+        } MULTIPLE_CORRECT questions, got ${
+          countsByType[QuestionType.MULTIPLE_CORRECT] || 0
+        }`,
       );
     }
 
@@ -278,7 +279,9 @@ export class QuestionValidatorService implements IQuestionValidatorService {
       (requirements.textResponse || 0)
     ) {
       typeCountIssues.push(
-        `Expected ${requirements.textResponse || 0} TEXT questions, got ${countsByType[QuestionType.TEXT] || 0}`,
+        `Expected ${requirements.textResponse || 0} TEXT questions, got ${
+          countsByType[QuestionType.TEXT] || 0
+        }`,
       );
     }
 
@@ -287,13 +290,17 @@ export class QuestionValidatorService implements IQuestionValidatorService {
       (requirements.trueFalse || 0)
     ) {
       typeCountIssues.push(
-        `Expected ${requirements.trueFalse || 0} TRUE_FALSE questions, got ${countsByType[QuestionType.TRUE_FALSE] || 0}`,
+        `Expected ${requirements.trueFalse || 0} TRUE_FALSE questions, got ${
+          countsByType[QuestionType.TRUE_FALSE] || 0
+        }`,
       );
     }
 
     if ((countsByType[QuestionType.URL] || 0) !== (requirements.url || 0)) {
       typeCountIssues.push(
-        `Expected ${requirements.url || 0} URL questions, got ${countsByType[QuestionType.URL] || 0}`,
+        `Expected ${requirements.url || 0} URL questions, got ${
+          countsByType[QuestionType.URL] || 0
+        }`,
       );
     }
 
@@ -301,7 +308,9 @@ export class QuestionValidatorService implements IQuestionValidatorService {
       (countsByType[QuestionType.UPLOAD] || 0) !== (requirements.upload || 0)
     ) {
       typeCountIssues.push(
-        `Expected ${requirements.upload || 0} UPLOAD questions, got ${countsByType[QuestionType.UPLOAD] || 0}`,
+        `Expected ${requirements.upload || 0} UPLOAD questions, got ${
+          countsByType[QuestionType.UPLOAD] || 0
+        }`,
       );
     }
 
@@ -310,11 +319,12 @@ export class QuestionValidatorService implements IQuestionValidatorService {
       (requirements.linkFile || 0)
     ) {
       typeCountIssues.push(
-        `Expected ${requirements.linkFile || 0} LINK_FILE questions, got ${countsByType[QuestionType.LINK_FILE] || 0}`,
+        `Expected ${requirements.linkFile || 0} LINK_FILE questions, got ${
+          countsByType[QuestionType.LINK_FILE] || 0
+        }`,
       );
     }
 
-    // If we have type count issues, add them to the general issues
     if (typeCountIssues.length > 0) {
       issues[-1] = typeCountIssues;
     }
@@ -334,18 +344,15 @@ export class QuestionValidatorService implements IQuestionValidatorService {
     question: QuestionDto,
     issues: string[],
   ): void {
-    // Check for existence of choices
     if (!question.choices || !Array.isArray(question.choices)) {
       issues.push("Missing choices array");
       return;
     }
 
-    // Check number of choices
     if (question.choices.length < 3) {
       issues.push("Multiple choice questions should have at least 3 choices");
     }
 
-    // Check for exactly one correct answer
     const correctChoices = question.choices.filter((c: Choice) => c.isCorrect);
     if (correctChoices.length !== 1) {
       issues.push(
@@ -353,7 +360,6 @@ export class QuestionValidatorService implements IQuestionValidatorService {
       );
     }
 
-    // Check for missing feedback
     const missingFeedback = question.choices.some(
       (c: Choice) => !c.feedback || c.feedback.length < 3,
     );
@@ -361,7 +367,6 @@ export class QuestionValidatorService implements IQuestionValidatorService {
       issues.push("All choices should have meaningful feedback");
     }
 
-    // Check for duplicate choices
     const choiceTexts = question.choices.map((c: Choice) =>
       c.choice?.toLowerCase().trim(),
     );
@@ -377,18 +382,15 @@ export class QuestionValidatorService implements IQuestionValidatorService {
     question: QuestionDto,
     issues: string[],
   ): void {
-    // Check for existence of choices
     if (!question.choices || !Array.isArray(question.choices)) {
       issues.push("Missing choices array");
       return;
     }
 
-    // Check number of choices
     if (question.choices.length < 3) {
       issues.push("Multiple select questions should have at least 3 choices");
     }
 
-    // Check for at least one correct answer
     const correctChoices = question.choices.filter((c: Choice) => c.isCorrect);
     if (correctChoices.length === 0) {
       issues.push(
@@ -396,7 +398,6 @@ export class QuestionValidatorService implements IQuestionValidatorService {
       );
     }
 
-    // Check for missing feedback
     const missingFeedback = question.choices.some(
       (c: Choice) => !c.feedback || c.feedback.length < 3,
     );
@@ -404,7 +405,6 @@ export class QuestionValidatorService implements IQuestionValidatorService {
       issues.push("All choices should have meaningful feedback");
     }
 
-    // Check for duplicate choices
     const choiceTexts = question.choices.map((c: Choice) =>
       c.choice?.toLowerCase().trim(),
     );
@@ -417,14 +417,12 @@ export class QuestionValidatorService implements IQuestionValidatorService {
    * Validate a text question
    */
   private validateTextQuestion(question: QuestionDto, issues: string[]): void {
-    // Check for word/character limits
     if (!question.maxWords && !question.maxCharacters) {
       issues.push(
         "Text questions should have either maxWords or maxCharacters limit",
       );
     }
 
-    // Check for scoring rubric
     if (
       !question.scoring ||
       !question.scoring.rubrics ||
@@ -435,7 +433,6 @@ export class QuestionValidatorService implements IQuestionValidatorService {
       return;
     }
 
-    // Check each rubric
     for (const [index, rubric] of question.scoring.rubrics.entries()) {
       if (
         !rubric.criteria ||
@@ -461,13 +458,11 @@ export class QuestionValidatorService implements IQuestionValidatorService {
     question: QuestionDto,
     issues: string[],
   ): void {
-    // Check for choices
     if (!question.choices || !Array.isArray(question.choices)) {
       issues.push("Missing choices array");
       return;
     }
 
-    // Check for exactly 1 choice
     if (question.choices.length !== 1) {
       issues.push("True/False questions must have exactly 1 choice");
       return;
@@ -475,17 +470,14 @@ export class QuestionValidatorService implements IQuestionValidatorService {
 
     const choice = question.choices[0];
 
-    // Normalize the choice text to lowercase for case-insensitive comparison
     const choiceText = choice.choice?.toString().toLowerCase().trim();
 
-    // Validate the choice text is either "true" or "false" (case-insensitive)
     if (choiceText !== "true" && choiceText !== "false") {
       issues.push(
         'True/False questions must have a choice with text "true" or "false"',
       );
     }
 
-    // Check if isCorrect matches the choice value
     const isStatementTrue = choiceText === "true";
     if (choice.isCorrect !== isStatementTrue) {
       issues.push(
@@ -493,14 +485,12 @@ export class QuestionValidatorService implements IQuestionValidatorService {
       );
     }
 
-    // Check for feedback
     if (!choice.feedback || choice.feedback.length < 5) {
       issues.push(
         "The choice must have meaningful feedback (at least 5 characters)",
       );
     }
 
-    // Check for points allocation
     if (isStatementTrue && (!choice.points || choice.points <= 0)) {
       issues.push("A correct TRUE/FALSE choice should have positive points");
     }
@@ -510,14 +500,12 @@ export class QuestionValidatorService implements IQuestionValidatorService {
    * Validate a file-based question (URL, UPLOAD, LINK_FILE)
    */
   private validateFileQuestion(question: QuestionDto, issues: string[]): void {
-    // Check for clear instructions
     if (question.question.length < 20) {
       issues.push(
         "File-based questions should have clear, detailed instructions",
       );
     }
 
-    // Check for scoring rubric
     if (
       !question.scoring ||
       !question.scoring.rubrics ||
@@ -528,7 +516,6 @@ export class QuestionValidatorService implements IQuestionValidatorService {
       return;
     }
 
-    // Check each rubric
     for (const [index, rubric] of question.scoring.rubrics.entries()) {
       if (
         !rubric.criteria ||
@@ -537,7 +524,6 @@ export class QuestionValidatorService implements IQuestionValidatorService {
       ) {
         issues.push(`Rubric ${index + 1} needs at least 2 criteria`);
       } else {
-        // Check for unique point values
         const points = rubric.criteria.map((c: Criteria) => c.points);
         if (new Set(points).size !== points.length) {
           issues.push(
@@ -547,7 +533,6 @@ export class QuestionValidatorService implements IQuestionValidatorService {
       }
     }
 
-    // Check for appropriate response type
     if (!question.responseType) {
       issues.push("File-based questions should have a specified responseType");
     }

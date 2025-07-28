@@ -1,12 +1,10 @@
 import languageData from "./languages.json";
 
-// languages.ts
 export interface Language {
   code: string;
   name: string;
 }
 
-// Use the imported JSON as an array of Language objects
 const languages: Language[] = languageData as Language[];
 
 /**

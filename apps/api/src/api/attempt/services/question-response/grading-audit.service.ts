@@ -1,8 +1,8 @@
 /* eslint-disable unicorn/no-null */
 import { Injectable } from "@nestjs/common";
-import { PrismaService } from "../../../../prisma.service";
 import { CreateQuestionResponseAttemptRequestDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.request.dto";
 import { CreateQuestionResponseAttemptResponseDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.response.dto";
+import { PrismaService } from "../../../../prisma.service";
 
 /**
  * Interface for grading audit records
@@ -45,9 +45,8 @@ export class GradingAuditService {
           timestamp: new Date(),
         },
       });
-    } catch (error) {
-      // Just log the error but don't fail the main grading flow
-      console.error("Failed to record grading audit:", error);
+    } catch {
+      console.error("Error recording grading audit:", record);
     }
   }
 
@@ -87,7 +86,6 @@ export class GradingAuditService {
       };
     }
 
-    // Parse response payloads to get scores
     const scores = audits.map((audit) => {
       try {
         const response = JSON.parse(audit.responsePayload) as {
@@ -99,11 +97,9 @@ export class GradingAuditService {
       }
     });
 
-    // Calculate statistics
     const totalScore = scores.reduce((sum, score) => sum + score, 0);
     const averageScore = totalScore / scores.length;
 
-    // Calculate score distribution
     const distribution: Record<number, number> = {};
     for (const score of scores) {
       distribution[score] = (distribution[score] || 0) + 1;
@@ -126,16 +122,15 @@ export class GradingAuditService {
     const audits = await this.prisma.gradingAudit.findMany({
       where: { questionId },
       orderBy: { timestamp: "desc" },
-      take: 100, // Look at the last 100 attempts
+      take: 100,
     });
 
     if (audits.length < 10) {
-      return []; // Not enough data to identify issues
+      return [];
     }
 
     const issues: GradingIssue[] = [];
 
-    // Parse responses to get scores
     const scores = audits.map((audit) => {
       try {
         const parsedResponse = JSON.parse(audit.responsePayload) as {
@@ -151,7 +146,6 @@ export class GradingAuditService {
       }
     });
 
-    // Check for excessive zeros (more than 40% of responses)
     const zeroCount = scores.filter((score) => score === 0).length;
     if (zeroCount / scores.length > 0.4) {
       issues.push({
@@ -161,7 +155,6 @@ export class GradingAuditService {
       });
     }
 
-    // Check for excessive max scores (more than 60% of responses)
     const question = await this.prisma.question.findUnique({
       where: { id: questionId },
       select: { totalPoints: true },
@@ -179,10 +172,6 @@ export class GradingAuditService {
         });
       }
     }
-
-    // Check for inconsistent scoring (same response, different scores)
-    // This requires a more complex analysis that would examine the request payloads
-    // and response patterns
 
     return issues;
   }

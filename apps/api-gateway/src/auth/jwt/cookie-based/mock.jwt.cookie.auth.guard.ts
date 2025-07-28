@@ -21,12 +21,11 @@ export class MockJwtCookieAuthGuard extends AuthGuard("cookie-strategy") {
   canActivate(context: ExecutionContext) {
     const request: RequestWithUserSession = context.switchToHttp().getRequest();
 
-    // Here you can modify the request object to include a temporary user. You can customize this part whenever testing locally.
     request.user = {
       userId: "dev-user",
-      role: UserRole.AUTHOR,
-      groupId: "autogen-faculty-v1-course-v1-IND-AI0103EN-v1",
-      assignmentId: 1,
+      role: UserRole.LEARNER,
+      groupId: "string",
+      assignmentId: 1888,
       gradingCallbackRequired: false,
       returnUrl: "https://skills.network",
       launch_presentation_locale: "en",
