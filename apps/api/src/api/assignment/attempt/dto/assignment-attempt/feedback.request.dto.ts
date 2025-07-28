@@ -1,10 +1,11 @@
 import {
+  IsBoolean,
+  IsEmail,
   IsNumber,
   IsOptional,
   IsString,
   Max,
   Min,
-  IsEmail,
 } from "class-validator";
 
 export class AssignmentFeedbackDto {

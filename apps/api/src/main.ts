@@ -1,3 +1,4 @@
+import instana from "@instana/collector";
 import { ValidationPipe, VersioningType } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
@@ -9,7 +10,7 @@ import { AppModule } from "./app.module";
 import { AuthModule } from "./auth/auth.module";
 import { RolesGlobalGuard } from "./auth/role/roles.global.guard";
 import { winstonOptions } from "./logger/config";
-import instana from "@instana/collector";
+
 instana();
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
