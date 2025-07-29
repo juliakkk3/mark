@@ -118,16 +118,8 @@ jobs:
         run: yarn turbo run lint --filter=${{ matrix.app }}
       
       - name: Run tests for ${{ matrix.app }}
-        run: yarn turbo run test --filter=${{ matrix.app }} -- -- --coverage --watchAll=false
+        run: yarn turbo run test --filter=${{ matrix.app }} -- -- --watchAll=false
 
-      - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@v4
-        with:
-          file: ./apps/${{ matrix.app }}/coverage/lcov.info
-          flags: ${{ matrix.app }}
-          name: codecov-${{ matrix.app }}
-          token: ${{ secrets.CODECOV_TOKEN }}
-          fail_ci_if_error: false
 
   needs-scan-for-vulnerabilities:
     runs-on: ubuntu-latest
