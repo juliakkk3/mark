@@ -1,5 +1,4 @@
-/* eslint-disable @typescript-eslint/require-await */
-/* eslint-disable unicorn/no-null */
+/* eslint-disable */
 import { PromptTemplate } from "@langchain/core/prompts";
 import { HttpException, HttpStatus, Inject, Injectable } from "@nestjs/common";
 import { AIUsageType } from "@prisma/client";
