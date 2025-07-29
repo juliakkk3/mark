@@ -89,7 +89,7 @@ jobs:
 
       - name: Run detect-secrets
         run: |
-          pip install detect-secrets
+          pip install detect-secrets==0.13.1
           detect-secrets scan --baseline .secrets.baseline
 
   test_and_lint:
