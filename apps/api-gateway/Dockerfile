@@ -19,7 +19,7 @@ COPY --from=builder $DIR/out/json/ .
 COPY --from=builder $DIR/out/yarn.lock ./yarn.lock
 COPY --from=builder $DIR/turbo.json ./turbo.json
 COPY --from=builder $DIR/packages ./packages
-RUN yarn install --ignore-scripts --frozen-lockfile
+RUN yarn install --ignore-scripts --frozen-lockfile --network-timeout 600000
 
 # Running build using turbo
 FROM ${BASE_IMAGE} AS sourcer
@@ -28,7 +28,7 @@ WORKDIR $DIR
 COPY --from=installer $DIR/ .
 COPY --from=builder $DIR/out/full/ .
 COPY --from=builder /usr/local/share/.config/yarn/global /usr/local/share/.config/yarn/global
-RUN yarn build --filter=api-gateway && yarn install --production --ignore-scripts --frozen-lockfile
+RUN yarn build --filter=api-gateway && yarn install --production --ignore-scripts --frozen-lockfile --network-timeout 600000
 
 # Production stage
 FROM ${BASE_IMAGE} AS production

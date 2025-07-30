@@ -19,7 +19,7 @@ COPY --from=builder $DIR/out/json/ .
 COPY --from=builder $DIR/out/yarn.lock ./yarn.lock
 COPY --from=builder $DIR/turbo.json ./turbo.json
 COPY --from=builder $DIR/packages ./packages
-RUN yarn install --ignore-scripts --frozen-lockfile
+RUN yarn install --ignore-scripts --frozen-lockfile --network-timeout 600000
 
 # Running build using turbo
 FROM node:22-alpine AS sourcer
@@ -31,7 +31,7 @@ COPY --from=builder /usr/local/share/.config/yarn/global /usr/local/share/.confi
 WORKDIR $DIR/apps/api
 RUN npx prisma generate
 WORKDIR $DIR
-RUN yarn build --filter=api && yarn install --production --ignore-scripts --frozen-lockfile
+RUN yarn build --filter=api && yarn install --production --ignore-scripts --frozen-lockfile --network-timeout 600000
 
 # Production stage
 FROM node:22-alpine AS production

@@ -18,13 +18,13 @@ ARG DIR=/usr/src/app
 WORKDIR $DIR
 COPY --from=builder $DIR/ .
 COPY --from=builder /usr/local/share/.config/yarn/global /usr/local/share/.config/yarn/global
-RUN yarn install --ignore-scripts --frozen-lockfile && yarn cache clean
+RUN yarn install --ignore-scripts --frozen-lockfile --network-timeout 600000 && yarn cache clean
 
 # Running build using turbo for the Next.js app
 FROM installer AS sourcer
 WORKDIR $DIR
 COPY --from=builder /usr/local/share/.config/yarn/global /usr/local/share/.config/yarn/global
-RUN yarn build --filter=web && yarn install --production --ignore-scripts --frozen-lockfile && yarn cache clean
+RUN yarn build --filter=web && yarn install --production --ignore-scripts --frozen-lockfile --network-timeout 600000 && yarn cache clean
 
 # Production stage
 FROM ${BASE_IMAGE} AS production
