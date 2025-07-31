@@ -89,22 +89,66 @@ jobs:
           severity: 'UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL'
         continue-on-error: true
 
+      - name: Display filesystem security scan results
+        if: steps.changes.outputs.needs_scan == 'true'
+        run: |
+          echo "🔍 FILESYSTEM SECURITY SCAN RESULTS FOR ${{ matrix.service }}"
+          echo "================================================="
+          
+          # Run Trivy again with table format for readable output
+          docker run --rm -v "$PWD:/workspace" aquasec/trivy:latest fs \
+            --format table \
+            --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL \
+            /workspace/apps/${{ matrix.service }} || true
+          
+          echo ""
+          echo "📄 Detailed SARIF report saved as trivy-fs-${{ matrix.service }}.sarif"
+        continue-on-error: true
+
       - name: Run dependency security audit
         if: steps.changes.outputs.needs_scan == 'true'
         run: |
-          echo "Running dependency security audit for ${{ matrix.service }}..."
+          echo "🔍 DEPENDENCY SECURITY AUDIT FOR ${{ matrix.service }}"
+          echo "==============================================="
+          
           # Generate JSON report regardless of vulnerabilities
           yarn audit --groups dependencies --level moderate --json > yarn-audit-${{ matrix.service }}.json || true
-          # Generate human-readable report
-          yarn audit --groups dependencies --level moderate > yarn-audit-${{ matrix.service }}.txt || true
-          echo "Security audit completed - reports generated"
+          
+          # Display human-readable report directly in workflow
+          echo "📊 VULNERABILITY SUMMARY:"
+          yarn audit --groups dependencies --level moderate || true
+          
+          echo ""
+          echo "📄 Detailed JSON report saved as yarn-audit-${{ matrix.service }}.json"
         continue-on-error: true
 
       - name: Run detect-secrets scan
         if: steps.changes.outputs.needs_scan == 'true'
         run: |
+          echo "🔍 SECRETS DETECTION SCAN"
+          echo "========================"
+          
           pip install git+https://github.com/IBM/detect-secrets.git@0.13.1+ibm.62.dss
+          
+          # Run scan and show results
+          echo "🔎 Scanning for potential secrets..."
           detect-secrets scan --update .secrets.baseline
+          
+          # Display baseline file if it exists
+          if [ -f ".secrets.baseline" ]; then
+            echo "📊 SECRETS BASELINE SUMMARY:"
+            echo "Total potential secrets found: $(jq '.results | to_entries | length' .secrets.baseline)"
+            
+            # Show files with potential secrets
+            echo "📁 Files with potential secrets:"
+            jq -r '.results | keys[]' .secrets.baseline | head -10
+            
+            if [ "$(jq '.results | to_entries | length' .secrets.baseline)" -gt 10 ]; then
+              echo "... and more (check .secrets.baseline for full list)"
+            fi
+          else
+            echo "✅ No potential secrets detected"
+          fi
         continue-on-error: true
 
       - name: Upload filesystem scan results
@@ -276,6 +320,22 @@ jobs:
           format: 'sarif'
           output: 'trivy-container-${{ matrix.service }}.sarif'
           severity: 'UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL'
+        continue-on-error: true
+
+      - name: Display container security scan results
+        if: steps.changes.outputs.needs_build == 'true'
+        run: |
+          echo "🔍 CONTAINER SECURITY SCAN RESULTS FOR ${{ matrix.service }}"
+          echo "===================================================="
+          
+          # Run Trivy again with table format for readable output
+          docker run --rm aquasec/trivy:latest image \
+            --format table \
+            --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL \
+            ghcr.io/${{ github.repository }}/mark-${{ matrix.service }}:${{ env.IMAGE_TAG }} || true
+          
+          echo ""
+          echo "📄 Detailed SARIF report saved as trivy-container-${{ matrix.service }}.sarif"
         continue-on-error: true
 
       - name: Upload container scan results
