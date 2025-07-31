@@ -95,11 +95,22 @@ jobs:
           echo "🔍 FILESYSTEM SECURITY SCAN RESULTS FOR ${{ matrix.service }}"
           echo "================================================="
           
-          # Run Trivy again with table format for readable output
+          # Run Trivy again with table format for readable output (show ALL vulnerabilities)
+          echo "📊 DETAILED VULNERABILITY TABLE:"
           docker run --rm -v "$PWD:/workspace" aquasec/trivy:latest fs \
             --format table \
             --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL \
+            --ignore-unfixed=false \
             /workspace/apps/${{ matrix.service }} || true
+          
+          echo ""
+          echo "📋 SUMMARY BY SEVERITY:"
+          docker run --rm -v "$PWD:/workspace" aquasec/trivy:latest fs \
+            --format json \
+            --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL \
+            --ignore-unfixed=false \
+            /workspace/apps/${{ matrix.service }} 2>/dev/null | \
+            jq -r '.Results[]?.Vulnerabilities[]? | .Severity' | sort | uniq -c | sort -nr || true
           
           echo ""
           echo "📄 Detailed SARIF report saved as trivy-fs-${{ matrix.service }}.sarif"
@@ -111,15 +122,22 @@ jobs:
           echo "🔍 DEPENDENCY SECURITY AUDIT FOR ${{ matrix.service }}"
           echo "==============================================="
           
-          # Generate JSON report regardless of vulnerabilities
-          yarn audit --groups dependencies --level moderate --json > yarn-audit-${{ matrix.service }}.json || true
+          # Generate comprehensive JSON report (all dependencies, all severity levels)
+          yarn audit --json > yarn-audit-${{ matrix.service }}-full.json || true
+          yarn audit --groups dependencies --level info --json > yarn-audit-${{ matrix.service }}.json || true
           
-          # Display human-readable report directly in workflow
-          echo "📊 VULNERABILITY SUMMARY:"
-          yarn audit --groups dependencies --level moderate || true
+          # Display human-readable report directly in workflow (show ALL vulnerabilities)
+          echo "📊 VULNERABILITY SUMMARY (ALL SEVERITIES):"
+          echo "--- ALL DEPENDENCIES (including dev) ---"
+          yarn audit || true
+          echo ""
+          echo "--- PRODUCTION DEPENDENCIES ONLY ---"
+          yarn audit --groups dependencies --level info || true
           
           echo ""
-          echo "📄 Detailed JSON report saved as yarn-audit-${{ matrix.service }}.json"
+          echo "📄 Reports saved:"
+          echo "  - yarn-audit-${{ matrix.service }}-full.json (all deps, all severities)"
+          echo "  - yarn-audit-${{ matrix.service }}.json (prod deps, all severities)"
         continue-on-error: true
 
       - name: Run detect-secrets scan
@@ -166,7 +184,7 @@ jobs:
           path: |
             trivy-fs-${{ matrix.service }}.sarif
             yarn-audit-${{ matrix.service }}.json
-            yarn-audit-${{ matrix.service }}.txt
+            yarn-audit-${{ matrix.service }}-full.json
             .secrets.baseline
           retention-days: 30
 
@@ -328,11 +346,22 @@ jobs:
           echo "🔍 CONTAINER SECURITY SCAN RESULTS FOR ${{ matrix.service }}"
           echo "===================================================="
           
-          # Run Trivy again with table format for readable output
+          # Run Trivy again with table format for readable output (show ALL vulnerabilities)
+          echo "📊 DETAILED VULNERABILITY TABLE:"
           docker run --rm aquasec/trivy:latest image \
             --format table \
             --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL \
+            --ignore-unfixed=false \
             ghcr.io/${{ github.repository }}/mark-${{ matrix.service }}:${{ env.IMAGE_TAG }} || true
+          
+          echo ""
+          echo "📋 SUMMARY BY SEVERITY:"
+          docker run --rm aquasec/trivy:latest image \
+            --format json \
+            --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL \
+            --ignore-unfixed=false \
+            ghcr.io/${{ github.repository }}/mark-${{ matrix.service }}:${{ env.IMAGE_TAG }} 2>/dev/null | \
+            jq -r '.Results[]?.Vulnerabilities[]? | .Severity' | sort | uniq -c | sort -nr || true
           
           echo ""
           echo "📄 Detailed SARIF report saved as trivy-container-${{ matrix.service }}.sarif"
