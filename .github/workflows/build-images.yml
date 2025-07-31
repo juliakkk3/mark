@@ -24,82 +24,8 @@ on:
   repository_dispatch:
 
 jobs:
-  security-scan:
-    name: Security Scanning
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
-        with:
-          scan-type: 'fs'
-          format: 'sarif'
-          output: 'trivy-results.sarif'
-          severity: 'UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL'
-        continue-on-error: true
-
-      - name: Upload Trivy scan results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v3
-        if: always() && hashFiles('trivy-results.sarif') != ''
-        with:
-          sarif_file: 'trivy-results.sarif'
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22.0.0'
-          cache: 'yarn'
-
-      - name: Install dependencies
-        run: yarn install --frozen-lockfile
-
-      - name: Run dependency security audit (show all vulnerabilities)
-        run: |
-          echo "Running dependency security audit..."
-          yarn audit --groups dependencies --level moderate || echo "Vulnerabilities found - report generated"
-
-      - name: Run detect-secrets
-        run: |
-          pip install git+https://github.com/IBM/detect-secrets.git@0.13.1+ibm.62.dss
-          detect-secrets scan --update .secrets.baseline
-
-  test_and_lint:
-    name: Test & Lint
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        app: [api, api-gateway, web]
-      fail-fast: false
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22.0.0'
-          cache: 'yarn'
-      
-      - name: Install dependencies
-        run: yarn install --frozen-lockfile
-      
-      - name: Run linting for ${{ matrix.app }}
-        run: yarn turbo run lint --filter=${{ matrix.app }}
-      
-      - name: Run tests for ${{ matrix.app }}
-        run: yarn turbo run test --filter=${{ matrix.app }} -- -- --watchAll=false
-
-
-
-  build_images:
-    name: Build & Scan Images
-    needs: [security-scan, test_and_lint]
+  build_and_deploy:
+    name: Build ${{ matrix.service }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -111,38 +37,114 @@ jobs:
       matrix:
         service: [api-gateway, api, web]
       fail-fast: false
-    
+    outputs:
+      image-tag: ${{ steps.meta.outputs.image-tag }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
+      - name: Check if service needs scanning/building
+        id: changes
+        run: |
+          # Check if this is a scheduled run, tag, or if service files changed
+          if [[ "${{ github.event_name }}" == "schedule" ]] || [[ "${{ github.event_name }}" == "workflow_dispatch" ]] || [[ $GITHUB_REF == refs/tags/* ]]; then
+            echo "needs_scan=true" >> $GITHUB_OUTPUT
+            echo "needs_build=true" >> $GITHUB_OUTPUT
+          else
+            # Check for changes in service-specific files
+            if git diff --name-only ${{ github.event.before }}..${{ github.sha }} | grep -E "(^apps/${{ matrix.service }}/|^package\.json|^yarn\.lock|^turbo\.json|^\.github/workflows/)"; then
+              echo "needs_scan=true" >> $GITHUB_OUTPUT
+              echo "needs_build=true" >> $GITHUB_OUTPUT
+            else
+              echo "needs_scan=false" >> $GITHUB_OUTPUT
+              echo "needs_build=false" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+      - name: Setup Node.js
+        if: steps.changes.outputs.needs_scan == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.0.0'
+          cache: 'yarn'
+
+      - name: Install dependencies
+        if: steps.changes.outputs.needs_scan == 'true'
+        run: yarn install --frozen-lockfile
+
+      - name: Run filesystem security scan
+        if: steps.changes.outputs.needs_scan == 'true'
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: 'apps/${{ matrix.service }}'
+          format: 'sarif'
+          output: 'trivy-fs-${{ matrix.service }}.sarif'
+          severity: 'UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL'
+        continue-on-error: true
+
+      - name: Run dependency security audit
+        if: steps.changes.outputs.needs_scan == 'true'
+        run: |
+          echo "Running dependency security audit for ${{ matrix.service }}..."
+          yarn audit --groups dependencies --level moderate || echo "Vulnerabilities found - report generated"
+        continue-on-error: true
+
+      - name: Run detect-secrets scan
+        if: steps.changes.outputs.needs_scan == 'true'
+        run: |
+          pip install git+https://github.com/IBM/detect-secrets.git@0.13.1+ibm.62.dss
+          detect-secrets scan --update .secrets.baseline
+        continue-on-error: true
+
+      - name: Upload filesystem scan results
+        if: always() && steps.changes.outputs.needs_scan == 'true' && hashFiles('trivy-fs-${{ matrix.service }}.sarif') != ''
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-fs-${{ matrix.service }}.sarif'
+          category: trivy-fs-${{ matrix.service }}
+
+      - name: Run linting for ${{ matrix.service }}
+        if: steps.changes.outputs.needs_build == 'true'
+        run: yarn turbo run lint --filter=${{ matrix.service }}
+
+      - name: Run tests for ${{ matrix.service }}
+        if: steps.changes.outputs.needs_build == 'true'
+        run: yarn turbo run test --filter=${{ matrix.service }} -- -- --watchAll=false
+
       - name: Set up Docker Buildx
+        if: steps.changes.outputs.needs_build == 'true'
         uses: docker/setup-buildx-action@v3
-      
+
       - name: Login to GitHub Container Registry
+        if: steps.changes.outputs.needs_build == 'true'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      
+
       - name: Extract metadata
+        if: steps.changes.outputs.needs_build == 'true'
         id: meta
         run: |
           if [[ $GITHUB_REF == refs/tags/* ]]; then
-            echo "IMAGE_TAG=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+            IMAGE_TAG="${GITHUB_REF#refs/tags/}"
           elif [[ $GITHUB_REF == refs/heads/* ]]; then
             BRANCH_NAME=$(echo ${GITHUB_REF#refs/heads/} | sed 's/[^a-zA-Z0-9]/-/g' | tr '[:upper:]' '[:lower:]')
             SHORT_SHA=$(git rev-parse --short HEAD)
-            echo "IMAGE_TAG=${BRANCH_NAME}-${SHORT_SHA}" >> $GITHUB_ENV
+            IMAGE_TAG="${BRANCH_NAME}-${SHORT_SHA}"
           else
             SHORT_SHA=$(git rev-parse --short HEAD)
-            echo "IMAGE_TAG=sha-${SHORT_SHA}" >> $GITHUB_ENV
+            IMAGE_TAG="sha-${SHORT_SHA}"
           fi
+          echo "image-tag=${IMAGE_TAG}" >> $GITHUB_OUTPUT
+          echo "IMAGE_TAG=${IMAGE_TAG}" >> $GITHUB_ENV
 
       - name: Build and push ${{ matrix.service }} image
+        if: steps.changes.outputs.needs_build == 'true'
         uses: docker/build-push-action@v6
         id: build-push
         with:
@@ -156,19 +158,20 @@ jobs:
           cache-to: type=gha,mode=max,scope=${{ matrix.service }}
           platforms: linux/amd64
 
-      - name: Run Trivy security scan
+      - name: Run container security scan
+        if: steps.changes.outputs.needs_build == 'true'
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: ghcr.io/${{ github.repository }}/mark-${{ matrix.service }}:${{ env.IMAGE_TAG }}
           format: 'sarif'
-          output: 'trivy-results.sarif'
+          output: 'trivy-container-${{ matrix.service }}.sarif'
           severity: 'UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL'
         continue-on-error: true
 
-      - name: Upload security scan results
+      - name: Upload container scan results
+        if: always() && steps.changes.outputs.needs_build == 'true' && hashFiles('trivy-container-${{ matrix.service }}.sarif') != ''
         uses: github/codeql-action/upload-sarif@v3
-        if: always() && hashFiles('trivy-results.sarif') != ''
         with:
-          sarif_file: 'trivy-results.sarif'
-          category: trivy-${{ matrix.service }}
+          sarif_file: 'trivy-container-${{ matrix.service }}.sarif'
+          category: trivy-container-${{ matrix.service }}
 
