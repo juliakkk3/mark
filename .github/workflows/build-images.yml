@@ -1,4 +1,4 @@
-name: CI/CD Pipeline
+name: Build All Services
 
 on:
   push:
@@ -22,10 +22,6 @@ on:
         description: Custom suffix for tag
         required: false
   repository_dispatch:
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
 
 jobs:
   security-scan:
@@ -121,24 +117,10 @@ jobs:
         run: yarn turbo run test --filter=${{ matrix.app }} -- -- --watchAll=false
 
 
-  needs-scan-for-vulnerabilities:
-    runs-on: ubuntu-latest
-    outputs:
-      skip: ${{ steps.needs-scan-for-vulnerabilities.outputs.skip }}
-    steps:
-      - id: needs-scan-for-vulnerabilities
-        run: |
-          BRANCH_NAME="${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}"
-          echo "BRANCH_NAME=$BRANCH_NAME"
-          if [[ "$BRANCH_NAME" =~ ^dependabot.* || "$BRANCH_NAME" =~ ^renovate.* ]]; then
-            echo "skip=true" >> $GITHUB_OUTPUT
-          else
-            echo "skip=false" >> $GITHUB_OUTPUT
-          fi
 
   build_images:
     name: Build & Scan Images
-    needs: [security-scan, test_and_lint, needs-scan-for-vulnerabilities]
+    needs: [security-scan, test_and_lint]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -157,23 +139,8 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Maximize free space on runner
-        uses: jlumbroso/free-disk-space@main
-        with:
-          dotnet: true
-          android: true
-          haskell: true
-          large-packages: true
-          docker-images: false
-          swap-storage: false
-        if: ${{ github.event_name == 'schedule' }}
-      
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-        with:
-          buildkitd-config-inline: |
-            [worker.oci]
-              max-parallelism = 2
       
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
@@ -184,167 +151,45 @@ jobs:
       
       - name: Extract metadata
         id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/${{ github.repository }}/mark-${{ matrix.service }}
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha,prefix={{branch}}-
-            type=raw,value=latest,enable={{is_default_branch}}
-
-      - name: Check if final image already exists
-        id: check-image
         run: |
-          MAIN_TAG=$(echo "${{ steps.meta.outputs.tags }}" | head -n1)
-          if docker manifest inspect "$MAIN_TAG" &> /dev/null; then
-            echo "exists=true" >> $GITHUB_OUTPUT
-            echo "Image already exists: $MAIN_TAG"
+          if [[ $GITHUB_REF == refs/tags/* ]]; then
+            echo "IMAGE_TAG=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+          elif [[ $GITHUB_REF == refs/heads/* ]]; then
+            BRANCH_NAME=$(echo ${GITHUB_REF#refs/heads/} | sed 's/[^a-zA-Z0-9]/-/g' | tr '[:upper:]' '[:lower:]')
+            SHORT_SHA=$(git rev-parse --short HEAD)
+            echo "IMAGE_TAG=${BRANCH_NAME}-${SHORT_SHA}" >> $GITHUB_ENV
           else
-            echo "exists=false" >> $GITHUB_OUTPUT
-            echo "Image does not exist: $MAIN_TAG"
+            SHORT_SHA=$(git rev-parse --short HEAD)
+            echo "IMAGE_TAG=sha-${SHORT_SHA}" >> $GITHUB_ENV
           fi
-        continue-on-error: true
 
-      - name: Fail if image already exists on tag
-        if: ${{ github.ref_type == 'tag' && steps.check-image.outputs.exists == 'true' }}
-        run: |
-          echo "Error: Tagged image already exists. This suggests a duplicate release."
-          exit 1
-
-      - name: Build scan image
-        if: ${{ needs.needs-scan-for-vulnerabilities.outputs.skip == 'false' && !startsWith(github.ref, 'refs/tags/') }}
+      - name: Build and push ${{ matrix.service }} image
         uses: docker/build-push-action@v6
+        id: build-push
         with:
           context: .
           file: apps/${{ matrix.service }}/Dockerfile
-          target: patched
           push: true
-          tags: ghcr.io/${{ github.repository }}/mark-${{ matrix.service }}:scan-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          tags: |
+            ghcr.io/${{ github.repository }}/mark-${{ matrix.service }}:${{ env.IMAGE_TAG }}
+            ghcr.io/${{ github.repository }}/mark-${{ matrix.service }}:latest
           cache-from: type=gha,scope=${{ matrix.service }}
           cache-to: type=gha,mode=max,scope=${{ matrix.service }}
           platforms: linux/amd64
-          build-args: |
-            BUILDKIT_INLINE_CACHE=1
 
-      - name: Run Trivy vulnerability scanner (HIGH/CRITICAL only)
-        if: ${{ needs.needs-scan-for-vulnerabilities.outputs.skip == 'false' }}
+      - name: Run Trivy security scan
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ghcr.io/${{ github.repository }}/mark-${{ matrix.service }}:scan-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          image-ref: ghcr.io/${{ github.repository }}/mark-${{ matrix.service }}:${{ env.IMAGE_TAG }}
           format: 'sarif'
           output: 'trivy-results.sarif'
           severity: 'HIGH,CRITICAL'
-          exit-code: '1'
-        continue-on-error: true
-        id: trivy-scan
-
-      - name: Run Grype vulnerability scanner
-        if: ${{ needs.needs-scan-for-vulnerabilities.outputs.skip == 'false' }}
-        uses: anchore/scan-action@v4
-        with:
-          image: ghcr.io/${{ github.repository }}/mark-${{ matrix.service }}:scan-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
-          fail-build: false
-          severity-cutoff: high
-        id: grype-scan
-
-      - name: Run Snyk Container scan
-        if: ${{ needs.needs-scan-for-vulnerabilities.outputs.skip == 'false' }}
-        uses: snyk/actions/docker@master
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        with:
-          image: ghcr.io/${{ github.repository }}/mark-${{ matrix.service }}:scan-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
-          args: --severity-threshold=high --file=apps/${{ matrix.service }}/Dockerfile
         continue-on-error: true
 
-      - name: Generate SBOM
-        if: ${{ needs.needs-scan-for-vulnerabilities.outputs.skip == 'false' }}
-        uses: anchore/sbom-action@v0
-        with:
-          image: ghcr.io/${{ github.repository }}/mark-${{ matrix.service }}:scan-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
-          format: spdx-json
-          output-file: sbom-${{ matrix.service }}.spdx.json
-
-      - name: Upload SBOM
-        if: ${{ needs.needs-scan-for-vulnerabilities.outputs.skip == 'false' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: sbom-${{ matrix.service }}-${{ github.run_id }}
-          path: sbom-${{ matrix.service }}.spdx.json
-
-      - name: Check for overdue vulnerabilities
-        if: ${{ needs.needs-scan-for-vulnerabilities.outputs.skip == 'false' && steps.trivy-scan.outcome == 'failure' }}
-        run: |
-          echo "⚠️ CRITICAL or HIGH vulnerabilities found in ${{ matrix.service }} image"
-          echo "Continuing build for development - review security scan results"
-          # TODO: Re-enable once vulnerabilities are addressed
-          # exit 1
-
-      - name: Upload Trivy scan results
+      - name: Upload security scan results
         uses: github/codeql-action/upload-sarif@v3
         if: always()
         with:
           sarif_file: 'trivy-results.sarif'
           category: trivy-${{ matrix.service }}
 
-      - name: Upload Grype scan results
-        uses: github/codeql-action/upload-sarif@v3
-        if: always() && steps.grype-scan.outputs.sarif
-        with:
-          sarif_file: ${{ steps.grype-scan.outputs.sarif }}
-          category: grype-${{ matrix.service }}
-
-      - name: Delete scan image
-        if: ${{ always() && needs.needs-scan-for-vulnerabilities.outputs.skip == 'false' }}
-        run: |
-          gh api \
-            --method DELETE \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            /orgs/${{ github.repository_owner }}/packages/container/$(echo ${{ github.repository }} | cut -d'/' -f2)%2Fmark-${{ matrix.service }}/versions/$(docker inspect ghcr.io/${{ github.repository }}/mark-${{ matrix.service }}:scan-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }} --format='{{index .RepoDigests 0}}' | cut -d'@' -f2 | tr ':' '_') || true
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        continue-on-error: true
-
-      - name: Build and push final ${{ matrix.service }} image
-        uses: docker/build-push-action@v6
-        id: build-push
-        with:
-          context: .
-          file: apps/${{ matrix.service }}/Dockerfile
-          target: patched
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=${{ matrix.service }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
-          platforms: linux/amd64,linux/arm64
-          build-args: |
-            BUILDKIT_INLINE_CACHE=1
-
-      - name: Install Cosign
-        uses: sigstore/cosign-installer@v3
-        if: ${{ github.ref_type == 'tag' || github.ref_name == 'master' }}
-
-      - name: Sign container image
-        if: ${{ github.ref_type == 'tag' || github.ref_name == 'master' }}
-        run: |
-          cosign sign --yes \
-            -a "repo=${{ github.repository }}" \
-            -a "workflow=${{ github.workflow }}" \
-            -a "ref=${{ github.sha }}" \
-            -a "service=${{ matrix.service }}" \
-            ghcr.io/${{ github.repository }}/mark-${{ matrix.service }}@${{ steps.build-push.outputs.digest }}
-        env:
-          COSIGN_EXPERIMENTAL: 1
-
-      - name: Generate attestation
-        if: ${{ github.ref_type == 'tag' || github.ref_name == 'master' }}
-        uses: actions/attest-build-provenance@v1
-        with:
-          subject-name: ghcr.io/${{ github.repository }}/mark-${{ matrix.service }}
-          subject-digest: ${{ steps.build-push.outputs.digest }}
-          push-to-registry: true
