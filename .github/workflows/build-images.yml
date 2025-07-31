@@ -169,8 +169,19 @@ jobs:
           fi
         continue-on-error: true
 
+      - name: Check if SARIF file exists
+        if: always() && steps.changes.outputs.needs_scan == 'true'
+        id: sarif-check
+        run: |
+          if [ -f "trivy-fs-${{ matrix.service }}.sarif" ]; then
+            echo "sarif_exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "sarif_exists=false" >> $GITHUB_OUTPUT
+            echo "⚠️ SARIF file trivy-fs-${{ matrix.service }}.sarif not found"
+          fi
+
       - name: Upload filesystem scan results
-        if: always() && steps.changes.outputs.needs_scan == 'true' && hashFiles('trivy-fs-${{ matrix.service }}.sarif') != ''
+        if: always() && steps.changes.outputs.needs_scan == 'true' && steps.sarif-check.outputs.sarif_exists == 'true'
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: 'trivy-fs-${{ matrix.service }}.sarif'
@@ -367,8 +378,19 @@ jobs:
           echo "📄 Detailed SARIF report saved as trivy-container-${{ matrix.service }}.sarif"
         continue-on-error: true
 
+      - name: Check if container SARIF file exists
+        if: always() && steps.changes.outputs.needs_build == 'true'
+        id: container-sarif-check
+        run: |
+          if [ -f "trivy-container-${{ matrix.service }}.sarif" ]; then
+            echo "sarif_exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "sarif_exists=false" >> $GITHUB_OUTPUT
+            echo "⚠️ Container SARIF file trivy-container-${{ matrix.service }}.sarif not found"
+          fi
+
       - name: Upload container scan results
-        if: always() && steps.changes.outputs.needs_build == 'true' && hashFiles('trivy-container-${{ matrix.service }}.sarif') != ''
+        if: always() && steps.changes.outputs.needs_build == 'true' && steps.container-sarif-check.outputs.sarif_exists == 'true'
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: 'trivy-container-${{ matrix.service }}.sarif'
