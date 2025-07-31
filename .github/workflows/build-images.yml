@@ -93,7 +93,11 @@ jobs:
         if: steps.changes.outputs.needs_scan == 'true'
         run: |
           echo "Running dependency security audit for ${{ matrix.service }}..."
-          yarn audit --groups dependencies --level moderate || echo "Vulnerabilities found - report generated"
+          # Generate JSON report regardless of vulnerabilities
+          yarn audit --groups dependencies --level moderate --json > yarn-audit-${{ matrix.service }}.json || true
+          # Generate human-readable report
+          yarn audit --groups dependencies --level moderate > yarn-audit-${{ matrix.service }}.txt || true
+          echo "Security audit completed - reports generated"
         continue-on-error: true
 
       - name: Run detect-secrets scan
@@ -109,6 +113,18 @@ jobs:
         with:
           sarif_file: 'trivy-fs-${{ matrix.service }}.sarif'
           category: trivy-fs-${{ matrix.service }}
+
+      - name: Upload security reports as artifacts
+        if: always() && steps.changes.outputs.needs_scan == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-reports-${{ matrix.service }}-${{ github.run_number }}
+          path: |
+            trivy-fs-${{ matrix.service }}.sarif
+            yarn-audit-${{ matrix.service }}.json
+            yarn-audit-${{ matrix.service }}.txt
+            .secrets.baseline
+          retention-days: 30
 
   lint-and-test:
     name: Lint & Test - ${{ matrix.service }}
@@ -268,4 +284,55 @@ jobs:
         with:
           sarif_file: 'trivy-container-${{ matrix.service }}.sarif'
           category: trivy-container-${{ matrix.service }}
+
+      - name: Upload container security reports as artifacts
+        if: always() && steps.changes.outputs.needs_build == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: container-security-reports-${{ matrix.service }}-${{ github.run_number }}
+          path: |
+            trivy-container-${{ matrix.service }}.sarif
+          retention-days: 30
+
+      - name: Generate security summary
+        if: always() && steps.changes.outputs.needs_build == 'true'
+        run: |
+          echo "## Security Scan Summary for ${{ matrix.service }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Filesystem scan summary
+          if [ -f "trivy-fs-${{ matrix.service }}.sarif" ]; then
+            CRITICAL=$(jq '.runs[0].results[] | select(.level == "error" and (.ruleId | contains("CRITICAL")))' trivy-fs-${{ matrix.service }}.sarif | wc -l)
+            HIGH=$(jq '.runs[0].results[] | select(.level == "error" and (.ruleId | contains("HIGH")))' trivy-fs-${{ matrix.service }}.sarif | wc -l)
+            MEDIUM=$(jq '.runs[0].results[] | select(.level == "warning" and (.ruleId | contains("MEDIUM")))' trivy-fs-${{ matrix.service }}.sarif | wc -l)
+            echo "### Filesystem Scan Results" >> $GITHUB_STEP_SUMMARY
+            echo "- Critical: $CRITICAL" >> $GITHUB_STEP_SUMMARY
+            echo "- High: $HIGH" >> $GITHUB_STEP_SUMMARY
+            echo "- Medium: $MEDIUM" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          # Container scan summary
+          if [ -f "trivy-container-${{ matrix.service }}.sarif" ]; then
+            CRITICAL=$(jq '.runs[0].results[] | select(.level == "error" and (.ruleId | contains("CRITICAL")))' trivy-container-${{ matrix.service }}.sarif | wc -l)
+            HIGH=$(jq '.runs[0].results[] | select(.level == "error" and (.ruleId | contains("HIGH")))' trivy-container-${{ matrix.service }}.sarif | wc -l)
+            MEDIUM=$(jq '.runs[0].results[] | select(.level == "warning" and (.ruleId | contains("MEDIUM")))' trivy-container-${{ matrix.service }}.sarif | wc -l)
+            echo "### Container Scan Results" >> $GITHUB_STEP_SUMMARY
+            echo "- Critical: $CRITICAL" >> $GITHUB_STEP_SUMMARY
+            echo "- High: $HIGH" >> $GITHUB_STEP_SUMMARY
+            echo "- Medium: $MEDIUM" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          # Dependency audit summary
+          if [ -f "yarn-audit-${{ matrix.service }}.json" ]; then
+            ADVISORIES=$(jq '.metadata.totalDependencies // 0' yarn-audit-${{ matrix.service }}.json)
+            VULNERABILITIES=$(jq '.metadata.vulnerabilities | length // 0' yarn-audit-${{ matrix.service }}.json)
+            echo "### Dependency Audit Results" >> $GITHUB_STEP_SUMMARY
+            echo "- Total Dependencies: $ADVISORIES" >> $GITHUB_STEP_SUMMARY
+            echo "- Vulnerabilities Found: $VULNERABILITIES" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "📊 **View detailed reports in the workflow artifacts**" >> $GITHUB_STEP_SUMMARY
 
