@@ -62,9 +62,21 @@ jobs:
           node-version: '22.0.0'
           cache: 'yarn'
 
+      - name: Configure Yarn
+        if: steps.changes.outputs.needs_scan == 'true'
+        run: |
+          yarn config set network-timeout 600000
+          yarn config set network-concurrency 1
+          yarn config set child-concurrency 1
+
       - name: Install dependencies
         if: steps.changes.outputs.needs_scan == 'true'
-        run: yarn install --frozen-lockfile
+        run: yarn install --frozen-lockfile --verbose
+        env:
+          NODE_OPTIONS: "--max-old-space-size=4096"
+          PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: true
+          HUSKY: 0
+        timeout-minutes: 15
 
       - name: Run filesystem security scan
         if: steps.changes.outputs.needs_scan == 'true'
@@ -135,9 +147,21 @@ jobs:
           node-version: '22.0.0'
           cache: 'yarn'
 
+      - name: Configure Yarn
+        if: steps.changes.outputs.needs_build == 'true'
+        run: |
+          yarn config set network-timeout 600000
+          yarn config set network-concurrency 1
+          yarn config set child-concurrency 1
+
       - name: Install dependencies
         if: steps.changes.outputs.needs_build == 'true'
-        run: yarn install --frozen-lockfile
+        run: yarn install --frozen-lockfile --verbose
+        env:
+          NODE_OPTIONS: "--max-old-space-size=4096"
+          PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: true
+          HUSKY: 0
+        timeout-minutes: 15
 
       - name: Run linting for ${{ matrix.service }}
         if: steps.changes.outputs.needs_build == 'true'
