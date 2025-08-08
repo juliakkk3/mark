@@ -19,6 +19,7 @@ COPY --from=builder $DIR/out/json/ .
 COPY --from=builder $DIR/out/yarn.lock ./yarn.lock
 COPY --from=builder $DIR/turbo.json ./turbo.json
 COPY --from=builder $DIR/packages ./packages
+COPY --from=builder $DIR/apps/api/prisma ./prisma
 RUN yarn install --ignore-scripts --frozen-lockfile --network-timeout 600000
 
 # Running build using turbo
@@ -39,8 +40,12 @@ ARG DIR=/usr/src/app
 ENV NODE_ENV production
 WORKDIR $DIR
 RUN apk add --no-cache dumb-init=1.2.5-r3
+COPY --chown=node:node --from=sourcer $DIR/apps/api/package.json ./package.json
 COPY --chown=node:node --from=sourcer $DIR/apps/api/dist ./dist
 COPY --chown=node:node --from=sourcer $DIR/node_modules $DIR/node_modules
+COPY --chown=node:node --from=sourcer $DIR/prisma ./prisma
+COPY --chown=node:node --from=sourcer $DIR/apps/api/migrate.sh ./migrate.sh
+COPY --chown=node:node --from=sourcer $DIR/apps/api/ensureDb.js ./ensureDb.js
 ENTRYPOINT ["/usr/bin/dumb-init", "--"]
 CMD ["node", "dist/main.js"]
 EXPOSE 3000
