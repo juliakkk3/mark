@@ -21,7 +21,9 @@ COPY --from=builder $DIR/turbo.json ./turbo.json
 COPY --from=builder $DIR/packages ./packages
 COPY --from=builder $DIR/apps/api/prisma ./prisma
 RUN yarn install --ignore-scripts --frozen-lockfile --network-timeout 600000
-
+RUN apk add --no-cache python3~=3 make~=4 g++~=14 pkgconf~=2 \
+  && yarn prisma generate \
+  && npm rebuild cld --build-from-source
 # Running build using turbo
 FROM node:22-alpine AS sourcer
 ARG DIR=/usr/src/app
