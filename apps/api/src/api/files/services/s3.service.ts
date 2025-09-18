@@ -80,7 +80,15 @@ export class S3Service {
     return client.getObject(parameters).promise();
   }
 
-  getSignedUrl(operation: string, parameters: S3.GetObjectRequest): string {
+  getSignedUrl(
+    operation: string,
+    parameters: {
+      Bucket: string;
+      Key: string;
+      Expires?: number;
+      [key: string]: any; // Allow additional parameters
+    },
+  ): string {
     const bucket = parameters.Bucket;
     const client = this.getS3Client(bucket);
     return client.getSignedUrl(operation, parameters);
