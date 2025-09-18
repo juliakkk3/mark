@@ -22,14 +22,12 @@ import { IModerationService } from "../../../core/interfaces/moderation.interfac
 import { IPromptProcessor } from "../../../core/interfaces/prompt-processor.interface";
 import {
   GRADING_JUDGE_SERVICE,
-  GRADING_THRESHOLD_SERVICE,
   MODERATION_SERVICE,
   PROMPT_PROCESSOR,
   RESPONSE_TYPE_SPECIFIC_INSTRUCTIONS,
 } from "../../../llm.constants";
 import { IGradingJudgeService } from "../interfaces/grading-judge.interface";
 import { ITextGradingService } from "../interfaces/text-grading.interface";
-import { GradingThresholdService } from "./grading-threshold.service";
 
 export interface GradingValidation {
   isValid: boolean;
@@ -109,8 +107,6 @@ export class TextGradingService implements ITextGradingService {
     private readonly moderationService: IModerationService,
     @Inject(GRADING_JUDGE_SERVICE)
     private readonly gradingJudgeService: IGradingJudgeService,
-    @Inject(GRADING_THRESHOLD_SERVICE)
-    private readonly thresholdService: GradingThresholdService,
     @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger,
   ) {
     this.logger = parentLogger.child({ context: TextGradingService.name });
@@ -153,32 +149,16 @@ export class TextGradingService implements ITextGradingService {
       // Generate content hash for consistency checking
       const contentHash = this.generateContentHash(learnerResponse, question);
 
-      // Check if JudgeLLM should be used based on response length
-      const thresholdResult = this.thresholdService.shouldUseJudgeLLM({
-        responseText: sanitizedLearnerResponse,
-        questionText: question,
-        responseType: textBasedQuestionEvaluateModel.responseType,
-      });
-
-      this.logger.info(
-        `JudgeLLM threshold evaluation - Use Judge: ${thresholdResult.shouldUseJudgeLLM ? "YES" : "NO"}, ` +
-          `Reason: ${thresholdResult.reason}`,
-      );
-
-      // Attempt grading with optional judge validation
+      // Attempt grading with judge validation loop
       let gradingAttempt: GradingAttempt | null = null;
       let judgeApproved = false;
       let attemptCount = 0;
       let previousJudgeFeedback: string | null = null;
-      const useJudgeLLM = thresholdResult.shouldUseJudgeLLM;
 
-      // If we're not using JudgeLLM, we'll only do one grading attempt
-      const maxAttempts = useJudgeLLM ? this.maxRetries : 1;
-
-      while (!judgeApproved && attemptCount < maxAttempts) {
+      while (!judgeApproved && attemptCount < this.maxRetries) {
         attemptCount++;
         this.logger.info(
-          `Grading attempt ${attemptCount}/${maxAttempts} for assignment ${assignmentId} (JudgeLLM: ${useJudgeLLM ? "enabled" : "disabled"})`,
+          `Grading attempt ${attemptCount}/${this.maxRetries} for assignment ${assignmentId}`,
         );
 
         try {
@@ -192,68 +172,60 @@ export class TextGradingService implements ITextGradingService {
             previousJudgeFeedback,
           );
 
-          // Validate with judge only if threshold is met
-          if (useJudgeLLM) {
-            const judgeResult = await this.validateWithJudge(
-              question,
-              sanitizedLearnerResponse,
-              scoringCriteria as ScoringDto,
-              gradingAttempt,
-              maxPossiblePoints,
-              assignmentId,
-            );
+          // Validate with judge
+          const judgeResult = await this.validateWithJudge(
+            question,
+            sanitizedLearnerResponse,
+            scoringCriteria as ScoringDto,
+            gradingAttempt,
+            maxPossiblePoints,
+            assignmentId,
+          );
 
-            if (judgeResult.approved) {
-              judgeApproved = true;
-              this.logger.info(
-                `Judge approved grading on attempt ${attemptCount}`,
-              );
-            } else {
-              // Format judge feedback to be more actionable for the TA
-              previousJudgeFeedback = this.formatJudgeFeedbackForTA(
-                judgeResult,
-                attemptCount,
-              );
-              this.logger.warn(
-                `Judge rejected grading attempt ${attemptCount}: ${judgeResult.feedback}`,
-              );
-
-              // Apply judge's corrections if provided
-              if (judgeResult.corrections && gradingAttempt) {
-                const originalPoints = gradingAttempt.points;
-                gradingAttempt = this.applyJudgeCorrections(
-                  gradingAttempt,
-                  judgeResult.corrections,
-                );
-
-                // If corrections were applied, check if we should approve
-                if (
-                  this.areCorrectionsMinor(
-                    judgeResult.corrections,
-                    originalPoints,
-                    maxPossiblePoints,
-                  )
-                ) {
-                  judgeApproved = true;
-                  this.logger.info(
-                    "Minor corrections applied, approving grading",
-                  );
-                }
-              }
-
-              // Add exponential backoff delay before retry
-              if (!judgeApproved && attemptCount < maxAttempts) {
-                const backoffDelay =
-                  this.retryDelay * Math.pow(2, attemptCount - 1);
-                await this.delay(Math.min(backoffDelay, 5000)); // Cap at 5 seconds
-              }
-            }
-          } else {
-            // Skip judge validation - approve immediately since threshold not met
+          if (judgeResult.approved) {
             judgeApproved = true;
             this.logger.info(
-              `Skipping JudgeLLM validation - ${thresholdResult.reason}`,
+              `Judge approved grading on attempt ${attemptCount}`,
             );
+          } else {
+            // Format judge feedback to be more actionable for the TA
+            previousJudgeFeedback = this.formatJudgeFeedbackForTA(
+              judgeResult,
+              attemptCount,
+            );
+            this.logger.warn(
+              `Judge rejected grading attempt ${attemptCount}: ${judgeResult.feedback}`,
+            );
+
+            // Apply judge's corrections if provided
+            if (judgeResult.corrections && gradingAttempt) {
+              const originalPoints = gradingAttempt.points;
+              gradingAttempt = this.applyJudgeCorrections(
+                gradingAttempt,
+                judgeResult.corrections,
+              );
+
+              // If corrections were applied, check if we should approve
+              if (
+                this.areCorrectionsMinor(
+                  judgeResult.corrections,
+                  originalPoints,
+                  maxPossiblePoints,
+                )
+              ) {
+                judgeApproved = true;
+                this.logger.info(
+                  "Minor corrections applied, approving grading",
+                );
+              }
+            }
+
+            // Add exponential backoff delay before retry
+            if (!judgeApproved && attemptCount < this.maxRetries) {
+              const backoffDelay =
+                this.retryDelay * Math.pow(2, attemptCount - 1);
+              await this.delay(Math.min(backoffDelay, 5000)); // Cap at 5 seconds
+            }
           }
         } catch (error) {
           this.logger.error(
@@ -263,7 +235,7 @@ export class TextGradingService implements ITextGradingService {
           );
 
           // On last attempt, use the grading even if judge fails
-          if (attemptCount === maxAttempts && gradingAttempt) {
+          if (attemptCount === this.maxRetries && gradingAttempt) {
             judgeApproved = true;
             this.logger.warn(
               "Using grading despite judge failure on final attempt",
@@ -288,16 +260,13 @@ export class TextGradingService implements ITextGradingService {
       const endTime = Date.now();
       this.logger.info(
         `Graded text question - Points: ${gradingAttempt.points}/${maxPossiblePoints}, ` +
-          `Content Hash: ${contentHash}, Judge Used: ${useJudgeLLM ? "YES" : "NO"}, ` +
-          `Judge Approved: ${judgeApproved.toString()}, Reason: ${thresholdResult.reason}, ` +
+          `Content Hash: ${contentHash}, Judge Approved: ${judgeApproved.toString()}, ` +
           `Time: ${endTime - startTime}ms, Attempts: ${attemptCount}`,
       );
 
       // Create properly typed metadata
       const metadata: GradingMetadata = {
         judgeApproved,
-        judgeUsed: useJudgeLLM,
-        thresholdReason: thresholdResult.reason,
         attempts: attemptCount,
         gradingTimeMs: endTime - startTime,
         contentHash,

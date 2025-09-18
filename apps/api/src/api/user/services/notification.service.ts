@@ -1,7 +1,7 @@
 /* eslint-disable unicorn/no-null */
 /* eslint-disable @typescript-eslint/require-await */
+import { EventEmitter } from "node:events";
 import { Injectable } from "@nestjs/common";
-import { EventEmitter } from "events";
 import { PrismaService } from "src/prisma.service";
 
 interface NotificationSubscription {
@@ -12,6 +12,7 @@ interface NotificationSubscription {
 
 @Injectable()
 export class NotificationsService {
+  // eslint-disable-next-line unicorn/prefer-event-target
   private eventEmitter = new EventEmitter();
   private subscriptions = new Map<string, NotificationSubscription>();
 

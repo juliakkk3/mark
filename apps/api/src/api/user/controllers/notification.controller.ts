@@ -54,7 +54,10 @@ export class NotificationsController {
     const initialNotifications =
       await this.notificationsService.getUserNotifications(userId);
     response.write(
-      `data: ${JSON.stringify({ type: "initial", notifications: initialNotifications })}\n\n`,
+      `data: ${JSON.stringify({
+        type: "initial",
+        notifications: initialNotifications,
+      })}\n\n`,
     );
 
     // Set up real-time updates
@@ -62,6 +65,7 @@ export class NotificationsController {
       userId,
       (notification) => {
         response.write(
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
           `data: ${JSON.stringify({ type: "new", notification })}\n\n`,
         );
       },
@@ -75,7 +79,7 @@ export class NotificationsController {
     // Send heartbeat every 30 seconds to keep connection alive
     const heartbeat = setInterval(() => {
       response.write(`data: ${JSON.stringify({ type: "heartbeat" })}\n\n`);
-    }, 30000);
+    }, 30_000);
 
     // Handle client disconnect
     request.on("close", () => {

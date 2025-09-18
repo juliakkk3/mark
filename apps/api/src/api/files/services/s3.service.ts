@@ -80,12 +80,9 @@ export class S3Service {
     return client.getObject(parameters).promise();
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  getSignedUrl(operation: string, parameters: any): string {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment
+  getSignedUrl(operation: string, parameters: S3.GetObjectRequest): string {
     const bucket = parameters.Bucket;
     const client = this.getS3Client(bucket);
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
     return client.getSignedUrl(operation, parameters);
   }
 
