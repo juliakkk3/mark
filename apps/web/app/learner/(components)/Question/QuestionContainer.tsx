@@ -271,7 +271,8 @@ function Component(props: Props) {
               className="text-gray-800 px-2 border-gray-300"
               id={`question-${question.id}-original`}
             >
-              {question.question}
+              {question.translations?.[userPreferedLanguage]?.translatedText ??
+                question.question}
             </MarkdownViewer>
           </div>
 
