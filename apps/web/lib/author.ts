@@ -316,7 +316,7 @@ export function subscribeToJobStatus(
 
         timeoutId = setTimeout(
           () => handleError("Job processing timeout"),
-          300000,
+          3000000,
         );
       };
 
