@@ -1,47 +1,37 @@
+import { Injectable, Inject } from "@nestjs/common";
 import { HumanMessage } from "@langchain/core/messages";
 import { ChatOpenAI } from "@langchain/openai";
-import { Inject, Injectable } from "@nestjs/common";
-import { WINSTON_MODULE_PROVIDER } from "nest-winston";
-import { Logger } from "winston";
-import { TOKEN_COUNTER } from "../../llm.constants";
 import {
   IMultimodalLlmProvider,
   LlmRequestOptions,
   LlmResponse,
 } from "../interfaces/llm-provider.interface";
 import { ITokenCounter } from "../interfaces/token-counter.interface";
+import { TOKEN_COUNTER } from "../../llm.constants";
+import { WINSTON_MODULE_PROVIDER } from "nest-winston";
+import { Logger } from "winston";
 
-/**
- * GPT-5-mini provider service targeting the lightweight/faster GPT-5-mini model.
- * This service offers enhanced performance over GPT-4o-mini with better efficiency
- * and cost-effectiveness for simpler tasks.
- */
 @Injectable()
-export class Gpt5MiniLlmService implements IMultimodalLlmProvider {
+export class GptOss120bLlmService implements IMultimodalLlmProvider {
   private readonly logger: Logger;
-  static readonly DEFAULT_MODEL = "gpt-5-mini";
-  readonly key = "gpt-5-mini";
+  static readonly DEFAULT_MODEL = "gpt-oss-120b";
+  readonly key = "gpt-oss-120b"; // This will be the model key in the database
 
   constructor(
     @Inject(TOKEN_COUNTER) private readonly tokenCounter: ITokenCounter,
     @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger,
   ) {
-    this.logger = parentLogger.child({ context: Gpt5MiniLlmService.name });
+    this.logger = parentLogger.child({ context: GptOss120bLlmService.name });
   }
 
-  /**
-   * Create a ChatOpenAI instance with the given options
-   */
   private createChatModel(options?: LlmRequestOptions): ChatOpenAI {
     return new ChatOpenAI({
-      modelName: options?.modelName ?? Gpt5MiniLlmService.DEFAULT_MODEL,
-      maxCompletionTokens: options?.maxTokens ?? 4096,
+      temperature: options?.temperature ?? 0.5,
+      modelName: options?.modelName ?? GptOss120bLlmService.DEFAULT_MODEL,
+      maxCompletionTokens: options?.maxTokens,
     });
   }
 
-  /**
-   * Send a request to GPT-5-mini and get a response
-   */
   async invoke(
     messages: HumanMessage[],
     options?: LlmRequestOptions,
@@ -55,7 +45,7 @@ export class Gpt5MiniLlmService implements IMultimodalLlmProvider {
       .join("\n");
     const inputTokens = this.tokenCounter.countTokens(inputText);
 
-    this.logger.debug(`Invoking GPT-5-mini with ${inputTokens} input tokens`);
+    this.logger.debug(`Invoking GPT-oss-120b with ${inputTokens} input tokens`);
 
     try {
       const result = await model.invoke(messages);
@@ -63,7 +53,7 @@ export class Gpt5MiniLlmService implements IMultimodalLlmProvider {
       const outputTokens = this.tokenCounter.countTokens(responseContent);
 
       this.logger.debug(
-        `GPT-5-mini responded with ${outputTokens} output tokens`,
+        `GPT-oss-120b responded with ${outputTokens} output tokens`,
       );
 
       return {
@@ -75,7 +65,7 @@ export class Gpt5MiniLlmService implements IMultimodalLlmProvider {
       };
     } catch (error) {
       this.logger.error(
-        `GPT-5-mini API error: ${
+        `GPT-oss-120b API error: ${
           error instanceof Error ? error.message : "Unknown error"
         }`,
       );
@@ -83,9 +73,6 @@ export class Gpt5MiniLlmService implements IMultimodalLlmProvider {
     }
   }
 
-  /**
-   * Send a request with image content to GPT-5-mini
-   */
   async invokeWithImage(
     textContent: string,
     imageData: string,
