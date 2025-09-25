@@ -1,15 +1,15 @@
-import { Injectable, Inject } from "@nestjs/common";
 import { HumanMessage } from "@langchain/core/messages";
 import { ChatOpenAI } from "@langchain/openai";
+import { Inject, Injectable } from "@nestjs/common";
+import { WINSTON_MODULE_PROVIDER } from "nest-winston";
+import { Logger } from "winston";
+import { TOKEN_COUNTER } from "../../llm.constants";
 import {
   IMultimodalLlmProvider,
   LlmRequestOptions,
   LlmResponse,
 } from "../interfaces/llm-provider.interface";
 import { ITokenCounter } from "../interfaces/token-counter.interface";
-import { TOKEN_COUNTER } from "../../llm.constants";
-import { WINSTON_MODULE_PROVIDER } from "nest-winston";
-import { Logger } from "winston";
 
 @Injectable()
 export class GptOss120bLlmService implements IMultimodalLlmProvider {
@@ -48,8 +48,13 @@ export class GptOss120bLlmService implements IMultimodalLlmProvider {
     this.logger.debug(`Invoking GPT-oss-120b with ${inputTokens} input tokens`);
 
     try {
+      console.log(
+        `Invoking GPT-oss-120b with ${JSON.stringify(messages)} message`,
+      );
       const result = await model.invoke(messages);
+      console.log(`GPT-oss-120b response: ${JSON.stringify(result, null, 2)}`);
       const responseContent = result.content.toString();
+      console.log(`GPT-oss-120b response content: ${responseContent}`);
       const outputTokens = this.tokenCounter.countTokens(responseContent);
 
       this.logger.debug(

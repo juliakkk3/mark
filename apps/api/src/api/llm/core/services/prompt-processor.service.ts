@@ -41,6 +41,10 @@ export class PromptProcessorService implements IPromptProcessor {
         featureKey,
         fallbackModel,
       );
+      console.log(
+        `Processing prompt for feature ${featureKey} with model ${llm.key}`,
+      );
+
       return await this._processPromptWithProvider(
         prompt,
         assignmentId,
@@ -68,6 +72,7 @@ export class PromptProcessorService implements IPromptProcessor {
   ): Promise<string> {
     try {
       const llm = this.router.get(llmKey ?? "gpt-4o");
+
       return await this._processPromptWithProvider(
         prompt,
         assignmentId,
