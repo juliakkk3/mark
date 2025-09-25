@@ -34,7 +34,6 @@ export class Gpt5LlmService implements IMultimodalLlmProvider {
    */
   private createChatModel(options?: LlmRequestOptions): ChatOpenAI {
     return new ChatOpenAI({
-      temperature: options?.temperature ?? 0.5,
       modelName: options?.modelName ?? Gpt5LlmService.DEFAULT_MODEL,
       maxCompletionTokens: options?.maxTokens,
     });
