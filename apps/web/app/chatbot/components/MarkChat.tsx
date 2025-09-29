@@ -2157,7 +2157,7 @@ Please help me with this.`;
           formData.append(
             "assignmentId",
             reportData.assignmentId?.toString() ??
-              learnerContext?.assignmentId.toString() ??
+              learnerContext?.assignmentId?.toString() ??
               authorContext?.activeAssignmentId?.toString() ??
               "0",
           );
