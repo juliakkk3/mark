@@ -1,5 +1,5 @@
+import { WatsonxLLM } from "@langchain/community/llms/ibm";
 import { HumanMessage } from "@langchain/core/messages";
-import { ChatOpenAI } from "@langchain/openai";
 import { Inject, Injectable } from "@nestjs/common";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Logger } from "winston";
@@ -14,8 +14,8 @@ import { ITokenCounter } from "../interfaces/token-counter.interface";
 @Injectable()
 export class GptOss120bLlmService implements IMultimodalLlmProvider {
   private readonly logger: Logger;
-  static readonly DEFAULT_MODEL = "gpt-oss-120b";
-  readonly key = "gpt-oss-120b"; // This will be the model key in the database
+  static readonly DEFAULT_MODEL = "openai/gpt-oss-120b";
+  readonly key = "gpt-oss-120b";
 
   constructor(
     @Inject(TOKEN_COUNTER) private readonly tokenCounter: ITokenCounter,
@@ -24,11 +24,16 @@ export class GptOss120bLlmService implements IMultimodalLlmProvider {
     this.logger = parentLogger.child({ context: GptOss120bLlmService.name });
   }
 
-  private createChatModel(options?: LlmRequestOptions): ChatOpenAI {
-    return new ChatOpenAI({
+  private createChatModel(options?: LlmRequestOptions): WatsonxLLM {
+    return new WatsonxLLM({
+      version: "2024-05-31",
+      serviceUrl: "https://us-south.ml.cloud.ibm.com",
+      projectId: process.env.WATSONX_PROJECT_ID_LLAMA || "",
+      watsonxAIAuthType: "iam",
+      watsonxAIApikey: process.env.WATSONX_AI_API_KEY_LLAMA || "", // pragma: allowlist secret
+      model: options?.modelName ?? GptOss120bLlmService.DEFAULT_MODEL,
       temperature: options?.temperature ?? 0.5,
-      modelName: options?.modelName ?? GptOss120bLlmService.DEFAULT_MODEL,
-      maxCompletionTokens: options?.maxTokens,
+      maxNewTokens: options?.maxTokens ?? 1000,
     });
   }
 
@@ -45,20 +50,20 @@ export class GptOss120bLlmService implements IMultimodalLlmProvider {
       .join("\n");
     const inputTokens = this.tokenCounter.countTokens(inputText);
 
-    this.logger.debug(`Invoking GPT-oss-120b with ${inputTokens} input tokens`);
+    this.logger.debug(`Invoking WatsonX LLM with ${inputTokens} input tokens`);
 
     try {
-      console.log(
-        `Invoking GPT-oss-120b with ${JSON.stringify(messages)} message`,
-      );
-      const result = await model.invoke(messages);
-      console.log(`GPT-oss-120b response: ${JSON.stringify(result, null, 2)}`);
-      const responseContent = result.content.toString();
-      console.log(`GPT-oss-120b response content: ${responseContent}`);
+      console.log(`Invoking WatsonX LLM with input: ${inputText}`);
+      const result = await model.invoke(inputText);
+      console.log(`WatsonX LLM response: ${result}`);
+      const rawResponse = typeof result === "string" ? result : String(result);
+
+      // Extract JSON from the response if it contains additional text
+      const responseContent = this.extractJSONFromResponse(rawResponse);
       const outputTokens = this.tokenCounter.countTokens(responseContent);
 
       this.logger.debug(
-        `GPT-oss-120b responded with ${outputTokens} output tokens`,
+        `WatsonX LLM responded with ${outputTokens} output tokens`,
       );
 
       return {
@@ -70,7 +75,7 @@ export class GptOss120bLlmService implements IMultimodalLlmProvider {
       };
     } catch (error) {
       this.logger.error(
-        `GPT-oss-120b API error: ${
+        `WatsonX LLM API error: ${
           error instanceof Error ? error.message : "Unknown error"
         }`,
       );
@@ -83,51 +88,38 @@ export class GptOss120bLlmService implements IMultimodalLlmProvider {
     imageData: string,
     options?: LlmRequestOptions,
   ): Promise<LlmResponse> {
-    const model = this.createChatModel(options);
-
-    const processedImageData = this.normalizeImageData(imageData);
-    const inputTokens = this.tokenCounter.countTokens(textContent);
-
-    // GPT-5-mini has optimized image token usage
-    const estimatedImageTokens = 150;
-
-    this.logger.debug(
-      `Invoking GPT-5-mini with image (${inputTokens} text tokens + ~${estimatedImageTokens} image tokens)`,
+    this.logger.warn(
+      "WatsonX LLM does not support multimodal (text + image) inputs. Processing text only.",
     );
 
-    try {
-      const result = await model.invoke([
-        new HumanMessage({
-          content: [
-            { type: "text", text: textContent },
-            {
-              type: "image_url",
-              image_url: {
-                url: processedImageData,
-                detail: options?.imageDetail || "auto",
-              },
-            },
-          ],
-        }),
-      ]);
+    const inputTokens = this.tokenCounter.countTokens(textContent);
 
-      const responseContent = result.content.toString();
+    this.logger.debug(
+      `Invoking WatsonX LLM with text only (${inputTokens} input tokens) - image data ignored`,
+    );
+
+    const model = this.createChatModel(options);
+
+    try {
+      const result = await model.invoke(textContent);
+      const rawResponse = typeof result === "string" ? result : String(result);
+      const responseContent = this.extractJSONFromResponse(rawResponse);
       const outputTokens = this.tokenCounter.countTokens(responseContent);
 
       this.logger.debug(
-        `GPT-5-mini with image responded with ${outputTokens} output tokens`,
+        `WatsonX LLM responded with ${outputTokens} output tokens`,
       );
 
       return {
         content: responseContent,
         tokenUsage: {
-          input: inputTokens + estimatedImageTokens,
+          input: inputTokens,
           output: outputTokens,
         },
       };
     } catch (error) {
       this.logger.error(
-        `Error processing image with GPT-5-mini: ${
+        `WatsonX LLM API error: ${
           error instanceof Error ? error.message : "Unknown error"
         }`,
       );
@@ -136,7 +128,49 @@ export class GptOss120bLlmService implements IMultimodalLlmProvider {
   }
 
   /**
+   * Extract JSON from WatsonX response that may contain additional text
+   */
+  private extractJSONFromResponse(response: string): string {
+    try {
+      // First, try to parse the response as-is in case it's already clean JSON
+      JSON.parse(response);
+      return response;
+    } catch {
+      // If that fails, try to extract JSON from markdown code blocks
+      const jsonBlockMatch = response.match(/```json\s*([\S\s]*?)\s*```/);
+      if (jsonBlockMatch) {
+        const jsonContent = jsonBlockMatch[1].trim();
+        try {
+          JSON.parse(jsonContent);
+          return jsonContent;
+        } catch {
+          // Fall through to other extraction methods
+        }
+      }
+
+      // Try to find JSON object patterns in the response
+      const jsonObjectMatch = response.match(/{[\S\s]*}/);
+      if (jsonObjectMatch) {
+        const jsonContent = jsonObjectMatch[0];
+        try {
+          JSON.parse(jsonContent);
+          return jsonContent;
+        } catch {
+          // Fall through
+        }
+      }
+
+      // If no valid JSON found, return the original response
+      this.logger.warn(
+        "Could not extract valid JSON from WatsonX response, returning original",
+      );
+      return response;
+    }
+  }
+
+  /**
    * Normalize image data to ensure it has the correct format
+   * Note: WatsonX LLM does not support image inputs, but keeping this method for potential future use
    */
   private normalizeImageData(imageData: string): string {
     if (!imageData) {

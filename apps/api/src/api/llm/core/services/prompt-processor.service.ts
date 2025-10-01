@@ -151,18 +151,21 @@ export class PromptProcessorService implements IPromptProcessor {
       throw formatError;
     }
 
-    const result = await llm.invoke([new HumanMessage(input)]);
-    const response = this.cleanResponse(result.content);
+    try {
+      const result = await llm.invoke([new HumanMessage(input)]);
+      const response = this.cleanResponse(result.content);
+      await this.usageTracker.trackUsage(
+        assignmentId,
+        usageType,
+        result.tokenUsage.input,
+        result.tokenUsage.output,
+        llm.key,
+      );
 
-    await this.usageTracker.trackUsage(
-      assignmentId,
-      usageType,
-      result.tokenUsage.input,
-      result.tokenUsage.output,
-      llm.key,
-    );
-
-    return response;
+      return response;
+    } catch (error) {
+      console.log("The issue is:", error);
+    }
   }
 
   /**
