@@ -749,6 +749,8 @@ function Component() {
     allotedTimeMinutes,
     timeEstimateMinutes,
     numAttempts,
+    attemptsBeforeCoolDown,
+    retakeAttemptCoolDownMinutes,
     passingGrade,
     displayOrder,
     questionDisplay,
@@ -759,6 +761,8 @@ function Component() {
     state.allotedTimeMinutes,
     state.timeEstimateMinutes,
     state.numAttempts,
+    state.attemptsBeforeCoolDown,
+    state.retakeAttemptCoolDownMinutes,
     state.passingGrade,
     state.displayOrder,
     state.questionDisplay,
@@ -858,6 +862,12 @@ function Component() {
       ),
       numAttempts: filteredChanges.some((c) =>
         c.includes("Updated number of attempts"),
+      ),
+      attemptsBeforeCoolDown: filteredChanges.some((c) =>
+        c.includes("Updated number of attempts before cooldown period"),
+      ),
+      retakeAttemptCoolDownMinutes: filteredChanges.some((c) =>
+        c.includes("Updated the cooldown time before retries allowed"),
       ),
       passingGrade: filteredChanges.some((c) =>
         c.includes("Modified passing grade"),
@@ -1119,6 +1129,8 @@ function Component() {
           allotedTimeMinutes,
           timeEstimateMinutes,
           numAttempts,
+          attemptsBeforeCoolDown,
+          retakeAttemptCoolDownMinutes,
           passingGrade,
           displayOrder,
           questionDisplay,
@@ -1648,6 +1660,8 @@ function Component() {
             changes.allotedTime ||
             changes.timeEstimate ||
             changes.numAttempts ||
+            changes.attemptsBeforeCoolDown ||
+            changes.retakeAttemptCoolDownMinutes ||
             changes.passingGrade ||
             changes.displayOrder ||
             changes.questionDisplay ||
@@ -1732,6 +1746,22 @@ function Component() {
                           : originalAssignment.numAttempts
                       }
                       after={numAttempts === -1 ? "Unlimited" : numAttempts}
+                    />
+                  )}
+
+                  {changes.attemptsBeforeCoolDown && (
+                    <ChangeComparison
+                      label="Number of Attempts Before Cooldown Period"
+                      before={originalAssignment.attemptsBeforeCoolDown}
+                      after={attemptsBeforeCoolDown}
+                    />
+                  )}
+
+                  {changes.retakeAttemptCoolDownMinutes && (
+                    <ChangeComparison
+                      label="Number of Minutes Learners Must Wait Between Attempts"
+                      before={originalAssignment.retakeAttemptCoolDownMinutes}
+                      after={retakeAttemptCoolDownMinutes}
                     />
                   )}
 
