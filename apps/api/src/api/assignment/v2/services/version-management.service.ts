@@ -645,7 +645,8 @@ export class VersionManagementService {
             graded: versionToRestore.graded,
             numAttempts: versionToRestore.numAttempts,
             attemptsBeforeCoolDown: versionToRestore.attemptsBeforeCoolDown,
-            retakeAttemptCoolDownMinutes: versionToRestore.retakeAttemptCoolDownMinutes,
+            retakeAttemptCoolDownMinutes:
+              versionToRestore.retakeAttemptCoolDownMinutes,
             allotedTimeMinutes: versionToRestore.allotedTimeMinutes,
             attemptsPerTimeRange: versionToRestore.attemptsPerTimeRange,
             attemptsTimeRangeHours: versionToRestore.attemptsTimeRangeHours,
@@ -1643,7 +1644,8 @@ export class VersionManagementService {
             graded: sourceVersion.graded,
             numAttempts: sourceVersion.numAttempts,
             attemptsBeforeCoolDown: sourceVersion.attemptsBeforeCoolDown,
-            retakeAttemptCoolDownMinutes: sourceVersion.retakeAttemptCoolDownMinutes,
+            retakeAttemptCoolDownMinutes:
+              sourceVersion.retakeAttemptCoolDownMinutes,
             allotedTimeMinutes: sourceVersion.allotedTimeMinutes,
             attemptsPerTimeRange: sourceVersion.attemptsPerTimeRange,
             attemptsTimeRangeHours: sourceVersion.attemptsTimeRangeHours,
@@ -2105,9 +2107,11 @@ export class VersionManagementService {
             numAttempts:
               draftData.assignmentData.numAttempts ?? assignment.numAttempts,
             attemptsBeforeCoolDown:
-              draftData.assignmentData.attemptsBeforeCoolDown ?? assignment.attemptsBeforeCoolDown,
+              draftData.assignmentData.attemptsBeforeCoolDown ??
+              assignment.attemptsBeforeCoolDown,
             retakeAttemptCoolDownMinutes:
-              draftData.assignmentData.retakeAttemptCoolDownMinutes ?? assignment.retakeAttemptCoolDownMinutes,
+              draftData.assignmentData.retakeAttemptCoolDownMinutes ??
+              assignment.retakeAttemptCoolDownMinutes,
             allotedTimeMinutes:
               draftData.assignmentData.allotedTimeMinutes ??
               assignment.allotedTimeMinutes,

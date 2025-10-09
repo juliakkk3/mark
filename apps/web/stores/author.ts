@@ -16,6 +16,7 @@ import { shallow } from "zustand/shallow";
 import { createWithEqualityFn } from "zustand/traditional";
 import { withUpdatedAt } from "./middlewares";
 import { DraftSummary, VersionSummary } from "@/lib/author";
+import { config } from "process";
 const NON_PERSIST_KEYS = new Set<keyof AuthorState | keyof AuthorActions>([
   // version control state
   "versions",
