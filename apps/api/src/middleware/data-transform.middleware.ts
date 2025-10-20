@@ -211,9 +211,24 @@ export class DataTransformMiddleware implements NestMiddleware {
   private decodeValue(value: unknown): unknown {
     if (typeof value !== "string") return value;
 
+    // Handle compressed payloads with the 'comp:' prefix (matches web encoder)
+    if (value.startsWith("comp:")) {
+      try {
+        const base64Data = value.slice(5); // strip 'comp:'
+        const decoded = Buffer.from(base64Data, "base64").toString("utf8");
+        try {
+          return JSON.parse(decoded) as unknown;
+        } catch {
+          return decoded;
+        }
+      } catch {
+        return value;
+      }
+    }
+
+    // Fallback: regular base64 encoded strings
     try {
       const decoded = Buffer.from(value, "base64").toString("utf8");
-
       try {
         return JSON.parse(decoded) as unknown;
       } catch {

@@ -164,9 +164,24 @@ function encodeValue(value: unknown): string {
 function decodeValue(value: unknown): unknown {
   if (!value || typeof value !== "string") return value;
 
+  // Support 'comp:' prefix used by the web encoder for large strings
+  if (value.startsWith("comp:")) {
+    try {
+      const base64Data = value.slice(5);
+      const decoded = Buffer.from(base64Data, "base64").toString("utf8");
+      try {
+        return JSON.parse(decoded);
+      } catch {
+        return decoded;
+      }
+    } catch {
+      return value;
+    }
+  }
+
+  // Regular base64 decode
   try {
     const decoded = Buffer.from(value, "base64").toString("utf8");
-
     try {
       return JSON.parse(decoded);
     } catch {
