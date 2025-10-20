@@ -16,6 +16,7 @@ import { shallow } from "zustand/shallow";
 import { createWithEqualityFn } from "zustand/traditional";
 import { withUpdatedAt } from "./middlewares";
 import { DraftSummary, VersionSummary } from "@/lib/author";
+import { DataTransformer } from "@/app/Helpers/data-transformer";
 import { config } from "process";
 const NON_PERSIST_KEYS = new Set<keyof AuthorState | keyof AuthorActions>([
   // version control state
@@ -237,6 +238,7 @@ export type AuthorActions = {
   deleteVariant: (questionId: number, variantId: number) => void;
   setQuestionOrder: (order: number[]) => void;
   setAuthorStore: (state: Partial<AuthorState>) => void;
+  setDataFromBackend: (data: Partial<AuthorAssignmentState>) => void;
   validate: () => boolean;
   deleteStore: () => void;
   setRole: (role: string) => void;
@@ -823,17 +825,21 @@ export const useAuthorStore = createWithEqualityFn<
         name: "",
         setName: (title) => set({ name: title, hasUnsavedChanges: true }),
         introduction: "",
-        setIntroduction: (introduction) =>
-          set({ introduction, hasUnsavedChanges: true }),
+        setIntroduction: (introduction) => {
+          set({ introduction, hasUnsavedChanges: true });
+        },
         instructions: "",
-        setInstructions: (instructions) =>
-          set({ instructions, hasUnsavedChanges: true }),
+        setInstructions: (instructions) => {
+          set({ instructions, hasUnsavedChanges: true });
+        },
         gradingCriteriaOverview: "",
-        setGradingCriteriaOverview: (gradingCriteriaOverview) =>
-          set({ gradingCriteriaOverview, hasUnsavedChanges: true }),
+        setGradingCriteriaOverview: (gradingCriteriaOverview) => {
+          set({ gradingCriteriaOverview, hasUnsavedChanges: true });
+        },
         questions: [],
-        setQuestions: (questions) =>
-          set({ questions, hasUnsavedChanges: true }),
+        setQuestions: (questions) => {
+          set({ questions, hasUnsavedChanges: true });
+        },
         setEvaluateBodyLanguage: (questionId, bodyLanguageBool) => {
           set((state) => {
             const updatedQuestions = state.questions.map((q) => {
@@ -1674,13 +1680,22 @@ export const useAuthorStore = createWithEqualityFn<
         setUpdatedAt: (updatedAt) => set({ updatedAt }),
         setAuthorStore: (state) => {
           const currentState = get();
+          // Automatically decode any backend data
+          const decodedState = DataTransformer.decodeFromAPI(state);
           set((prev) => ({
             ...prev,
-            ...state,
+            ...decodedState,
             questions: currentState.questions.length
               ? currentState.questions
-              : state.questions || [],
+              : decodedState.questions || [],
           }));
+        },
+        // Centralized method for setting data from backend
+        // All backend data should go through this method or the apiClient
+        // which automatically handles decoding via DataTransformer.decodeFromAPI()
+        setDataFromBackend: (data: Partial<AuthorAssignmentState>) => {
+          const decodedData = DataTransformer.decodeFromAPI(data);
+          set({ ...decodedData, hasUnsavedChanges: true });
         },
         deleteStore: () =>
           set({
@@ -1715,9 +1730,7 @@ export const useAuthorStore = createWithEqualityFn<
             return;
           }
 
-          // Prevent concurrent loadVersions calls
           if (state.isLoadingVersions) {
-            console.log("🔄 LoadVersions already in progress, skipping...");
             return;
           }
 
