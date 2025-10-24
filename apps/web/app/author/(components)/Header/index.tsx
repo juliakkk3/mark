@@ -188,6 +188,20 @@ function AuthorHeader() {
 
   const SyncAssignment = async () => {
     try {
+      const state = useAuthorStore.getState();
+      const checkedOutVersion = state.checkedOutVersion;
+      const versions = state.versions;
+
+      if (checkedOutVersion && versions.length > 0) {
+        const { checkoutVersion } = useAuthorStore.getState();
+        await checkoutVersion(
+          checkedOutVersion.id,
+          checkedOutVersion.versionNumber,
+        );
+        toast.success("Assignment synced with checked out version");
+        return;
+      }
+
       const assignment = await getAssignment(parseInt(assignmentId, 10));
       if (!assignment) {
         toast.error("Failed to fetch the assignment.");
@@ -276,8 +290,36 @@ function AuthorHeader() {
   };
 
   const fetchAssignment = async () => {
-    // For now, just load the regular assignment
-    // TODO: Re-enable draft loading once basic version control is working
+    // Check if there's a checked out version - if so, fetch that version's data
+    // But wait for versions to be loaded first
+    const state = useAuthorStore.getState();
+    const checkedOutVersion = state.checkedOutVersion;
+    const versions = state.versions;
+
+    if (checkedOutVersion && versions.length > 0) {
+      try {
+        const { checkoutVersion } = useAuthorStore.getState();
+        await checkoutVersion(
+          checkedOutVersion.id,
+          checkedOutVersion.versionNumber,
+        );
+        setPageState("success");
+        return;
+      } catch (error) {
+        console.error("Failed to fetch checked out version:", error);
+        setPageState("error");
+        return;
+      }
+    }
+
+    // If checkedOutVersion exists but versions aren't loaded yet, wait
+    if (checkedOutVersion && versions.length === 0) {
+      // Wait a bit for versions to load, then retry
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      return fetchAssignment(); // Retry
+    }
+
+    // Otherwise, load the regular assignment
     const assignment = await getAssignment(parseInt(assignmentId, 10));
     if (assignment) {
       const newAssignment = normalizeAssignment({ ...assignment });

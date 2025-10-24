@@ -271,7 +271,10 @@ export type AuthorActions = {
   setVersions: (versions: VersionSummary[]) => void;
   setCurrentVersion: (version?: VersionSummary) => void;
   setCheckedOutVersion: (version?: VersionSummary) => void;
-  checkoutVersion: (versionId: number) => Promise<boolean>;
+  checkoutVersion: (
+    versionId: number,
+    versionNumber?: string | number,
+  ) => Promise<boolean>;
   setSelectedVersion: (version?: VersionSummary) => void;
   setVersionComparison: (comparison?: VersionComparison) => void;
   setIsLoadingVersions: (loading: boolean) => void;
@@ -1744,14 +1747,25 @@ export const useAuthorStore = createWithEqualityFn<
             const currentVersion = versions.find((v) => v.isActive);
             const currentState = get();
 
-            let checkedOutVersion = currentVersion;
-            if (currentState.checkedOutVersion) {
+            // Preserve the current checkedOutVersion if it exists and is still in the version list
+            // This ensures that when versions are refreshed, we don't lose the user's current checkout
+            let checkedOutVersion = currentState.checkedOutVersion;
+
+            if (checkedOutVersion) {
+              // Find the updated version object from the fresh list
               const existingCheckedOut = versions.find(
-                (v) => v.id === currentState.checkedOutVersion.id,
+                (v) => v.id === checkedOutVersion.id,
               );
               if (existingCheckedOut) {
+                // Use the fresh version object from the API
                 checkedOutVersion = existingCheckedOut;
+              } else {
+                // If the checked out version no longer exists, fall back to current version
+                checkedOutVersion = currentVersion;
               }
+            } else {
+              // If no version is checked out, default to the current active version
+              checkedOutVersion = currentVersion;
             }
 
             set({
@@ -1945,12 +1959,14 @@ export const useAuthorStore = createWithEqualityFn<
             });
         },
 
-        checkoutVersion: async (versionId: number) => {
+        checkoutVersion: async (
+          versionId: number,
+          versionNumber?: string | number,
+        ) => {
           const state = get();
           if (!state.activeAssignmentId) return false;
 
           try {
-            // Find the version to checkout
             const versionToCheckout = state.versions.find(
               (v) => v.id === versionId,
             );
@@ -1959,7 +1975,6 @@ export const useAuthorStore = createWithEqualityFn<
               return false;
             }
 
-            // Get the version data from the backend
             const { getAssignmentVersion } = await import("@/lib/author");
             const versionData = await getAssignmentVersion(
               state.activeAssignmentId,
@@ -1968,7 +1983,6 @@ export const useAuthorStore = createWithEqualityFn<
 
             if (!versionData) return false;
 
-            // Process questions using helper functions
             const rawQuestions = versionData.questionVersions || [];
             const {
               parseJsonField,
@@ -1977,7 +1991,30 @@ export const useAuthorStore = createWithEqualityFn<
               updateConfigStores,
             } = get();
 
-            const processedQuestions = rawQuestions.map(
+            const questionOrderArray: number[] =
+              versionData.questionOrder &&
+              Array.isArray(versionData.questionOrder)
+                ? (versionData.questionOrder
+                    .map((value: unknown) => {
+                      if (typeof value === "number" && Number.isFinite(value)) {
+                        return value;
+                      }
+
+                      if (typeof value === "string") {
+                        const parsed = Number.parseInt(value, 10);
+                        if (!Number.isNaN(parsed)) {
+                          return parsed;
+                        }
+                      }
+
+                      return null;
+                    })
+                    .filter(
+                      (value: number | null): value is number => value !== null,
+                    ) as number[])
+                : [];
+
+            const allProcessedQuestions = rawQuestions.map(
               (questionVersion: any, index: number) =>
                 processQuestionVersion(
                   questionVersion,
@@ -1988,20 +2025,54 @@ export const useAuthorStore = createWithEqualityFn<
                 ),
             );
 
+            let processedQuestions: typeof allProcessedQuestions;
+            if (questionOrderArray.length > 0) {
+              const orderedQuestions = questionOrderArray
+                .map((questionId: number) =>
+                  allProcessedQuestions.find((q: any) => q.id === questionId),
+                )
+                .filter(
+                  (q: any): q is (typeof allProcessedQuestions)[0] =>
+                    q !== undefined,
+                );
+
+              const remainingQuestions = allProcessedQuestions.filter(
+                (q: any) => !questionOrderArray.includes(q.id),
+              );
+
+              processedQuestions = [...orderedQuestions, ...remainingQuestions];
+            } else {
+              processedQuestions = allProcessedQuestions;
+            }
+
+            processedQuestions = processedQuestions.map(
+              (q: any, index: number) => ({
+                ...q,
+                index: index + 1,
+              }),
+            );
+
+            const finalQuestionOrder = processedQuestions.map((q: any) => q.id);
+
             set({
               name: versionData.name,
               introduction: versionData.introduction,
               instructions: versionData.instructions,
               gradingCriteriaOverview: versionData.gradingCriteriaOverview,
               questions: processedQuestions,
-              questionOrder:
-                versionData.questionOrder ||
-                processedQuestions.map((q) => q.id),
+              questionOrder: finalQuestionOrder,
               checkedOutVersion: versionToCheckout,
               hasUnsavedChanges: false,
             });
 
             await updateConfigStores(versionData);
+
+            console.log(
+              "✅ Checked out version:",
+              versionToCheckout.versionNumber,
+              "ID:",
+              versionToCheckout.id,
+            );
 
             return true;
           } catch (error) {
@@ -2027,14 +2098,12 @@ export const useAuthorStore = createWithEqualityFn<
             let newVersion: VersionSummary | undefined;
 
             if (isDraft) {
-              // For draft versions, use the draft endpoint which includes questions data
               const { createDraftVersion } = await import("@/lib/author");
               const { encodeFields } = await import("@/app/Helpers/encoder");
               const { processQuestions } = await import(
                 "@/app/Helpers/processQuestionsBeforePublish"
               );
 
-              // Get config data from stores (same as publishing does)
               const configStore = await import("@/stores/assignmentConfig");
               const feedbackStore = await import(
                 "@/stores/assignmentFeedbackConfig"
@@ -2044,20 +2113,17 @@ export const useAuthorStore = createWithEqualityFn<
               const feedbackData =
                 feedbackStore.useAssignmentFeedbackConfig.getState();
 
-              // Encode fields (same as publishing)
               const encodedFields = encodeFields({
                 introduction: state.introduction,
                 instructions: state.instructions,
                 gradingCriteriaOverview: state.gradingCriteriaOverview,
               });
 
-              // Process questions (same as publishing)
               let processedQuestions = null;
               if (state.questions && state.questions.length > 0) {
                 const clonedQuestions = JSON.parse(
                   JSON.stringify(state.questions),
                 );
-                // Remove ephemeral fields
                 clonedQuestions.forEach((q: any) => {
                   delete q.alreadyInBackend;
                   if (
@@ -2092,7 +2158,7 @@ export const useAuthorStore = createWithEqualityFn<
                   updatedAt: configData.updatedAt,
                   questionOrder: state.questionOrder,
                   timeEstimateMinutes: configData.timeEstimateMinutes,
-                  published: false, // Always false for drafts
+                  published: false,
                   showSubmissionFeedback: feedbackData.showSubmissionFeedback,
                   showQuestions: feedbackData.showQuestions,
                   showQuestionScore: feedbackData.showQuestionScore,
@@ -2120,7 +2186,6 @@ export const useAuthorStore = createWithEqualityFn<
             }
 
             if (newVersion) {
-              // Show toast notification if version was auto-incremented
               if (
                 newVersion.wasAutoIncremented &&
                 newVersion.originalVersionNumber
@@ -2152,17 +2217,30 @@ export const useAuthorStore = createWithEqualityFn<
                 currentVersion: newVersion.isActive
                   ? newVersion
                   : state.currentVersion,
-                // Clear checkedOutVersion so BottomVersionBar shows the latest version
-                // When user creates a new version, they should see that version in the bar
-                checkedOutVersion: newVersion,
-                hasUnsavedChanges: false,
               });
+
+              if (!isDraft) {
+                const checkoutSuccess = await get().checkoutVersion(
+                  newVersion.id,
+                );
+
+                if (checkoutSuccess) {
+                  console.log(
+                    "✅ Successfully checked out to published version",
+                  );
+                } else {
+                  console.warn(
+                    "⚠️ Checkout failed after publishing, setting checkedOutVersion manually",
+                  );
+                  set({ checkedOutVersion: newVersion });
+                }
+              }
             }
 
             return newVersion;
           } catch (error) {
             console.error("Error creating version:", error);
-            throw error; // Re-throw to allow handling in component
+            throw error;
           }
         },
 
@@ -2173,7 +2251,6 @@ export const useAuthorStore = createWithEqualityFn<
           try {
             const { saveDraft: saveDraftAPI } = await import("@/lib/author");
 
-            // Get current settings from the config stores
             const { useAssignmentConfig } = await import(
               "@/stores/assignmentConfig"
             );
@@ -2184,7 +2261,6 @@ export const useAuthorStore = createWithEqualityFn<
             const assignmentConfig = useAssignmentConfig.getState();
             const feedbackConfig = useAssignmentFeedbackConfig.getState();
 
-            // Generate version number for draft (RC format)
             const latestVersion =
               state.versions?.length > 0
                 ? Math.max(
@@ -2197,21 +2273,18 @@ export const useAuthorStore = createWithEqualityFn<
             const nextMajorVersion = Math.floor(latestVersion / 100) + 1;
             const rcVersionNumber = `${nextMajorVersion}.0.0-rc1`;
 
-            // Capture ALL assignment data (same as publishing process)
             const draftData = {
               versionNumber: rcVersionNumber,
               versionDescription:
                 versionDescription ||
                 `Draft saved - ${new Date().toLocaleString()}`,
               assignmentData: {
-                // Core assignment fields
                 name: state.name,
                 introduction: state.introduction,
                 instructions: state.instructions,
                 gradingCriteriaOverview: state.gradingCriteriaOverview,
                 updatedAt: state.updatedAt,
 
-                // Assignment configuration
                 graded: assignmentConfig.graded,
                 numAttempts: assignmentConfig.numAttempts,
                 attemptsBeforeCoolDown: assignmentConfig.attemptsBeforeCoolDown,
@@ -2226,7 +2299,6 @@ export const useAuthorStore = createWithEqualityFn<
                 numberOfQuestionsPerAttempt:
                   assignmentConfig.numberOfQuestionsPerAttempt,
 
-                // Feedback configuration
                 showAssignmentScore: feedbackConfig.showAssignmentScore,
                 showQuestionScore: feedbackConfig.showQuestionScore,
                 showSubmissionFeedback: feedbackConfig.showSubmissionFeedback,
@@ -2243,7 +2315,6 @@ export const useAuthorStore = createWithEqualityFn<
             );
 
             if (newDraft) {
-              // Update versions list to reflect the new draft
               const updatedVersions = [
                 {
                   id: newDraft.id,
@@ -2287,7 +2358,6 @@ export const useAuthorStore = createWithEqualityFn<
             const { restoreAssignmentVersion, getAssignmentVersion } =
               await import("@/lib/author");
 
-            // First restore the version on the backend
             const restoredVersion = await restoreAssignmentVersion(
               state.activeAssignmentId,
               versionId,
@@ -2295,7 +2365,6 @@ export const useAuthorStore = createWithEqualityFn<
             );
 
             if (restoredVersion) {
-              // Now get the full assignment data for the restored version
               const versionData = await getAssignmentVersion(
                 state.activeAssignmentId,
                 createAsNewVersion ? restoredVersion.id : versionId,
@@ -2304,7 +2373,6 @@ export const useAuthorStore = createWithEqualityFn<
               if (versionData && versionData.assignment) {
                 const assignment = versionData.assignment;
 
-                // Parse and process the assignment data similar to the existing fetchAssignment logic
                 const processedQuestions =
                   assignment.questions?.map((question: any, index: number) => {
                     const parsedVariants =
@@ -2314,7 +2382,6 @@ export const useAuthorStore = createWithEqualityFn<
                           typeof variant.choices === "string"
                             ? (() => {
                                 try {
-                                  // Check if it's valid JSON and not "[object Object]"
                                   if (
                                     variant.choices === "[object Object]" ||
                                     (!variant.choices.trim().startsWith("{") &&
@@ -2364,7 +2431,6 @@ export const useAuthorStore = createWithEqualityFn<
                     };
                   }) || [];
 
-                // Update the store with the restored assignment data
                 set({
                   name: assignment.name || state.name,
                   introduction: assignment.introduction || state.introduction,
@@ -2375,10 +2441,9 @@ export const useAuthorStore = createWithEqualityFn<
                   questions: processedQuestions,
                   currentVersion: restoredVersion,
                   hasUnsavedChanges: false,
-                  originalAssignment: assignment, // Update original assignment reference
+                  originalAssignment: assignment,
                 });
 
-                // Also update assignment config stores if they exist
                 if (typeof window !== "undefined") {
                   const { useAssignmentConfig } = await import(
                     "@/stores/assignmentConfig"
@@ -2454,7 +2519,6 @@ export const useAuthorStore = createWithEqualityFn<
                 console.warn("⚠️ No assignment data found in version response");
               }
 
-              // Reload versions list to reflect changes
               await get().loadVersions();
             }
 

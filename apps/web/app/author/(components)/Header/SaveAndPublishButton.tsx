@@ -71,6 +71,22 @@ const SaveAndPublishButton: FC<Props> = ({
     (state) => [state.setAssignmentFeedbackConfigStore],
   );
   const fetchAssignment = async () => {
+    const checkedOutVersion = useAuthorStore.getState().checkedOutVersion;
+
+    if (checkedOutVersion) {
+      try {
+        const { checkoutVersion } = useAuthorStore.getState();
+        await checkoutVersion(
+          checkedOutVersion.id,
+          checkedOutVersion.versionNumber,
+        );
+        return;
+      } catch (error) {
+        console.error("Failed to fetch checked out version:", error);
+        return;
+      }
+    }
+
     const assignment = await getAssignment(activeAssignmentId);
     if (assignment) {
       useAuthorStore.getState().setOriginalAssignment(assignment);
