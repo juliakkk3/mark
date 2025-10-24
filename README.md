@@ -94,6 +94,9 @@ Mark System V2 represents a significant evolution from the original architecture
 ### Contribution Guidelines
 
 Contributions are welcome.
+
+First, pick up an issue from the [board](https://github.com/orgs/ibm-skills-network/projects/9) and assign it to your account ( or request one of the maintainers to assign it to you ) 
+
 Please see [docs/CONTRIBUTING.md](./docs/CONTRIBUTING.md) to get started.
 
 1. Create a feature branch
