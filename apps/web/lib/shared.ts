@@ -81,6 +81,7 @@ export async function generateUploadUrl(
     headers: {
       ...(cookies ? { Cookie: cookies } : {}),
     },
+    transformResponse: false, // Disable transformation caching for file uploads
   })) as UploadResponse;
 }
 

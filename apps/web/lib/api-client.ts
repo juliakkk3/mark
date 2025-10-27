@@ -130,6 +130,7 @@ export class APIClient {
         headers: requestHeaders,
         body: requestBody,
         signal: signal || controller.signal,
+        cache: 'no-store', // Disable caching to prevent stale responses
       });
 
       clearTimeout(timeoutId);
