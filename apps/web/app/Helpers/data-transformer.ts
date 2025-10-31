@@ -462,7 +462,6 @@ function generateCacheKey(
       ? data.substring(0, 50)
       : safeStringify(data).substring(0, 50);
 
-  // Use TextEncoder to handle Unicode characters properly before base64 encoding
   const encoder = new TextEncoder();
   const encoded = encoder.encode(configHash + dataHash);
   const base64 = btoa(String.fromCharCode(...Array.from(encoded)));
@@ -531,6 +530,7 @@ export const DataTransformer = {
         "learnerTextResponse",
         "learnerChoices",
       ],
+
       deep: true,
     };
     const result = smartEncode(data, config || defaultConfig);
@@ -554,6 +554,7 @@ export const DataTransformer = {
         "questions.scoring.rubrics.rubricQuestion",
         "questions.scoring.rubrics.criteria.description",
       ],
+
       deep: true,
     };
     const result = smartDecode(data, config || defaultConfig);
