@@ -260,45 +260,12 @@ const AuthorQuestionsPage: FC<Props> = ({
     if (assignmentId) {
       loadVersions().catch(console.error);
     }
-  }, [assignmentId, loadVersions]);
+  }, [assignmentId]);
 
   useEffect(() => {
-    if (checkedOutVersion && versions.length > 0) {
-      if (assignmentId !== activeAssignmentId) {
-        setActiveAssignmentId(assignmentId);
-      }
-
-      const fetchCheckedOutVersion = async () => {
-        try {
-          const { checkoutVersion } = useAuthorStore.getState();
-          await checkoutVersion(
-            checkedOutVersion.id,
-            checkedOutVersion.versionNumber,
-          );
-        } catch (error) {
-          console.error("Failed to fetch checked out version:", error);
-        }
-      };
-      void fetchCheckedOutVersion();
-      return;
-    }
-
     if (assignmentId !== activeAssignmentId) {
       const fetchAssignment = async () => {
         try {
-          const currentCheckedOutVersion =
-            useAuthorStore.getState().checkedOutVersion;
-
-          if (currentCheckedOutVersion) {
-            const { checkoutVersion } = useAuthorStore.getState();
-            await checkoutVersion(
-              currentCheckedOutVersion.id,
-              currentCheckedOutVersion.versionNumber,
-            );
-            setActiveAssignmentId(assignmentId);
-            return;
-          }
-
           const assignment = await getAssignment(assignmentId);
           if (assignment) {
             setActiveAssignmentId(assignmentId);
@@ -485,8 +452,6 @@ const AuthorQuestionsPage: FC<Props> = ({
     setName,
     setQuestions,
     setFocusedQuestionId,
-    checkedOutVersion,
-    versions,
   ]);
 
   useEffect(() => {
